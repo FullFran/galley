@@ -22,7 +22,31 @@ export interface WorkingState {
   files: string[];
   /** True when GitHub returned an incomplete tree. */
   truncated: boolean;
+  /** Blob SHA (and size, when GitHub sent it) per path at `headSha`. */
+  blobs: Record<string, BlobInfo>;
 }
+
+export interface BlobInfo {
+  sha: string;
+  size?: number;
+}
+
+/** How far the working head is behind the default branch. */
+export interface UpstreamStatus {
+  /** Commit SHA the default branch points at. */
+  defaultHead: string;
+  /** Commits on the default branch that the working head does not have. */
+  behind: number;
+}
+
+/** What bringing the default branch into the working branch did. */
+export type BringInResult =
+  /** Nothing to bring in. */
+  | { kind: 'current' }
+  /** The working head moved (merge commit, fast-forward, or a newer default head before the first save). */
+  | { kind: 'updated'; headSha: string; files: string[]; truncated: boolean; blobs: Record<string, BlobInfo> }
+  /** GitHub could not merge without a person resolving conflicts; nothing changed. */
+  | { kind: 'conflict' };
 
 export interface FileChange {
   path: string;
@@ -44,6 +68,18 @@ export interface RepoGateway {
    * mark is kept as U+FEFF. Throws `NotTextError` for anything that is not UTF-8.
    */
   readFile(repo: Repository, path: string, ref: string): Promise<string>;
+  /** The commit the default branch points at (one cheap call; used for polling). */
+  defaultHead(repo: Repository): Promise<string>;
+  /** How many default-branch commits `headSha` lacks. */
+  upstream(repo: Repository, headSha: string): Promise<UpstreamStatus>;
+  /**
+   * Brings the default branch into the working branch: a fast-forward when it
+   * is only behind, else a merge commit through GitHub's merges API. Never
+   * forces. Before the first save (no branch yet) it only reports the newer
+   * default head. Throws `ConflictError` when the working branch no longer
+   * points at `expectedHeadSha`.
+   */
+  bringInDefault(repo: Repository, expectedHeadSha: string): Promise<BringInResult>;
   /** Reads any file at `ref` as bytes, e.g. a figure for the preview. */
   readBytes(repo: Repository, path: string, ref: string): Promise<Uint8Array>;
   /**

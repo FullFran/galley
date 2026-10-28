@@ -1,0 +1,73 @@
+import type { IndexInput } from './projectIndex';
+
+// A small paper used by the editor tests.
+export const PROJECT: IndexInput = {
+  entry: 'index.qmd',
+  paths: ['index.qmd', 'sections/intro.qmd', 'sections/model.qmd', 'sections/unused.qmd', 'references.bib', 'figures/scheme.png', 'figures/plot.svg', 'notes.md'],
+  files: [
+    {
+      path: 'index.qmd',
+      text: [
+        '---',
+        'title: Paper',
+        '---',
+        '',
+        '{{< include sections/intro.qmd >}}',
+        '',
+        '{{< include sections/model.qmd >}}',
+        '',
+      ].join('\n'),
+    },
+    {
+      path: 'sections/intro.qmd',
+      text: ['# Introduction {#sec-intro}', '', 'As @smith2020 shows, see @fig-scheme.', '', '## Aims {#sec-aims}', ''].join('\n'),
+    },
+    {
+      path: 'sections/model.qmd',
+      text: [
+        '# Model {#sec-model}',
+        '',
+        '![Energy-band scheme.](figures/scheme){#fig-scheme width=80%}',
+        '',
+        '$$E = mc^2$$ {#eq-energy}',
+        '',
+        '```{python}',
+        '#| label: fig-plot',
+        '#| fig-cap: "A generated plot."',
+        'print(1)',
+        '```',
+        '',
+        '| a | b |',
+        '|---|---|',
+        '| 1 | 2 |',
+        '',
+        ': Parameters of the model. {#tbl-params}',
+        '',
+        '```',
+        '# not a heading {#sec-fake}',
+        '```',
+        '',
+        '# References {.unnumbered}',
+      ].join('\n'),
+    },
+    { path: 'sections/unused.qmd', text: '# Spare {#sec-spare}\n' },
+    {
+      path: 'references.bib',
+      text: [
+        '@string{jl = "J. Lum."}',
+        '@article{smith2020,',
+        '  author = {Smith, Anna and Jones, Bo},',
+        '  title = {Glow {TL} curves},',
+        '  journal = jl,',
+        '  year = 2020,',
+        '}',
+        '',
+        '@book{doe1999,',
+        '  author = {Doe, J. and Roe, R. and Poe, P.},',
+        '  title = {Traps},',
+        '  year = {1999},',
+        '}',
+      ].join('\n'),
+    },
+  ],
+};

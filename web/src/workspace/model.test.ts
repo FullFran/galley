@@ -37,6 +37,9 @@ function fakeGateway(save: (changes: FileChange[], message: string, head: string
   const gateway: RepoGateway = {
     listRepositories: () => Promise.resolve([]),
     openRepository: () => Promise.reject(new Error('unused')),
+    defaultHead: () => Promise.reject(new Error('unused')),
+    upstream: () => Promise.reject(new Error('unused')),
+    bringInDefault: () => Promise.reject(new Error('unused')),
     readFile: () => Promise.reject(new Error('unused')),
     readBytes: () => Promise.reject(new Error('unused')),
     save: (_repo, changes, message, head) => {

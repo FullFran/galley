@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { dismissSetup, isSetupDismissed, readContentsTab, readPrefs, writeContentsTab, writePrefs } from './prefs';
+import {
+  dismissSetup,
+  isSetupDismissed,
+  onPrefsChange,
+  readContentsTab,
+  readPrefs,
+  resolveEditorMode,
+  writeContentsTab,
+  writePrefs,
+} from './prefs';
 
 const memory = () => {
   const data = new Map<string, string>();
@@ -71,5 +80,46 @@ describe('preferences', () => {
     expect(readPrefs(store)).toEqual({});
     expect(readPrefs(broken)).toEqual({});
     expect(() => writePrefs({ autoCompile: false }, broken)).not.toThrow();
+  });
+});
+
+describe('editor preferences', () => {
+  it('stores the editor mode and Vim next to the other preferences', () => {
+    const store = memory();
+    writePrefs({ autoCompile: true, editorMode: 'code', vim: true }, store);
+    expect(readPrefs(store)).toEqual({ autoCompile: true, editorMode: 'code', vim: true });
+  });
+
+  it('drops unknown modes and non-boolean Vim values', () => {
+    const store = memory();
+    store.setItem('galley:prefs', '{"editorMode":"emacs","vim":"on"}');
+    expect(readPrefs(store)).toEqual({});
+  });
+
+  it('tells listeners when preferences change in this tab', () => {
+    const store = memory();
+    const seen: unknown[] = [];
+    const stop = onPrefsChange((p) => seen.push(p));
+    writePrefs({ vim: true }, store);
+    stop();
+    writePrefs({ vim: false }, store);
+    expect(seen).toEqual([{ vim: true }]);
+  });
+});
+
+describe('editor mode', () => {
+  it('uses the person’s own choice first', () => {
+    expect(resolveEditorMode('code', 'writing', false)).toBe('code');
+    expect(resolveEditorMode('writing', undefined, true)).toBe('writing');
+  });
+
+  it('then the .galley.yml default', () => {
+    expect(resolveEditorMode(undefined, 'code', false)).toBe('code');
+    expect(resolveEditorMode(undefined, 'writing', true)).toBe('writing');
+  });
+
+  it('else Writing for co-authors and Code for admins', () => {
+    expect(resolveEditorMode(undefined, undefined, false)).toBe('writing');
+    expect(resolveEditorMode(undefined, undefined, true)).toBe('code');
   });
 });

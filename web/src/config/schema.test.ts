@@ -20,6 +20,25 @@ preview:
   auto_compile: true
 `;
 
+describe('parseConfig: editor', () => {
+  it('reads editor.default_mode', () => {
+    expect(parseConfig('version: 1\neditable: []\neditor:\n  default_mode: writing\n').config?.editor).toEqual({ defaultMode: 'writing' });
+    expect(parseConfig('version: 1\neditable: []\n').config?.editor).toBeUndefined();
+  });
+
+  it('ignores an unknown mode with a warning, keeping the rest of the file', () => {
+    const text = 'version: 1\neditable: [index.qmd]\neditor:\n  default_mode: vim\n';
+    expect(errors(text)).toEqual([]);
+    expect(warnings(text)).toEqual(['"editor.default_mode" must be writing or code; it is ignored.']);
+    expect(parseConfig(text).config).toMatchObject({ editable: ['index.qmd'], editor: {} });
+  });
+
+  it('rejects a non-mapping editor and warns about unknown editor keys', () => {
+    expect(errors('version: 1\neditable: []\neditor: code\n')).toEqual(['"editor" must be a mapping.']);
+    expect(warnings('version: 1\neditable: []\neditor:\n  font: big\n')).toEqual(['Unknown setting "editor.font" is ignored.']);
+  });
+});
+
 describe('parseConfig', () => {
   it('reads a complete file', () => {
     const { config, problems } = parseConfig(FULL);
@@ -166,6 +185,14 @@ preview:
     expect(serializeConfig({ version: 1, editable: [], uploads: [], labels: {}, preview: { autoCompile: false } })).toBe(
       'version: 1\neditable: []\npreview:\n  auto_compile: false\n',
     );
+  });
+
+  it('writes and reads editor.default_mode only when it is set', () => {
+    const base: GalleyConfig = { version: 1, editable: [], uploads: [], labels: {}, preview: { autoCompile: false } };
+    const text = serializeConfig({ ...base, editor: { defaultMode: 'code' } });
+    expect(text).toBe('version: 1\neditable: []\npreview:\n  auto_compile: false\neditor:\n  default_mode: code\n');
+    expect(parseConfig(text).config?.editor).toEqual({ defaultMode: 'code' });
+    expect(serializeConfig({ ...base, editor: {} })).not.toContain('editor');
   });
 
   it('quotes text that YAML would read as another type', () => {
