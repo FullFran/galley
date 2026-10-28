@@ -4,7 +4,7 @@ import type { Person, Repository } from '../../domain';
 import { useT } from '../../i18n';
 import { navLabel, visibleNav, type GroupId, type NavId, type NavItem } from '../../shell/nav';
 import { autoOpen, groupKeyAction, isGroupOpen, readGroups, toggleGroup, writeGroups, type SidebarMode } from '../../shell/navGroups';
-import { matchShortcut, typingInField } from '../../shell/shortcuts';
+import { matchShortcut, typingAt } from '../../shell/shortcuts';
 import type { SidebarControl } from '../../shell/useSidebar';
 import { AboutDialog } from './AboutDialog';
 import { AccountMenu } from './AccountMenu';
@@ -122,7 +122,7 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (matchShortcut(e, typingInField(e.target)) !== 'help') return;
+      if (matchShortcut(e, typingAt(e)) !== 'help') return;
       e.preventDefault();
       setShortcuts(true);
     };

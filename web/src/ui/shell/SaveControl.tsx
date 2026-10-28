@@ -1,7 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { useT } from '../../i18n';
-import { matchShortcut, typingInField } from '../../shell/shortcuts';
+import { matchShortcut, typingAt } from '../../shell/shortcuts';
 import { saveStateLabel } from '../../workspace/session';
 import { Icon } from './icons';
 
@@ -39,7 +39,7 @@ export function SaveControl({ dirtyCount, message, placeholder, saving, noteRequ
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (matchShortcut(e, typingInField(e.target)) !== 'save') return;
+      if (matchShortcut(e, typingAt(e)) !== 'save') return;
       // Never the browser's "Save page as".
       e.preventDefault();
       e.stopPropagation();

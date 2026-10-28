@@ -44,6 +44,22 @@ export function matchShortcut(e: KeyLike, typing: boolean): ShortcutAction | und
 
 /** Text fields, where plain keys and Ctrl/Cmd+B belong to the field. */
 export function typingInField(target: EventTarget | null): boolean {
-  if (typeof HTMLElement === 'undefined' || !(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+  const el = target as { tagName?: unknown; isContentEditable?: unknown } | null;
+  if (!el || typeof el.tagName !== 'string') return false;
+  return el.isContentEditable === true || ['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName.toUpperCase());
+}
+
+/**
+ * The element a key event came from. The editor lives in a shadow root, and a
+ * window listener sees its events retargeted to the shadow host (a plain
+ * <div>); the real origin, the editor text or the Vim command line, is the
+ * first entry of the composed path.
+ */
+export function keyOrigin(e: { target: EventTarget | null; composedPath?: () => EventTarget[] }): EventTarget | null {
+  return e.composedPath?.()[0] ?? e.target;
+}
+
+/** Whether a key event was typed into a text field, including inside the editor. */
+export function typingAt(e: { target: EventTarget | null; composedPath?: () => EventTarget[] }): boolean {
+  return typingInField(keyOrigin(e));
 }
