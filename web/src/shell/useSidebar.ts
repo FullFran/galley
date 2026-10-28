@@ -1,6 +1,6 @@
 import type { RefObject } from 'preact';
 import { useEffect, useReducer, useRef } from 'preact/hooks';
-import { matchShortcut, typingInField } from './shortcuts';
+import { matchShortcut, typingAt } from './shortcuts';
 import { initialSidebar, readCollapsed, reduceSidebar, writeCollapsed, type SidebarAction, type SidebarState } from './sidebar';
 
 export interface SidebarControl {
@@ -41,7 +41,7 @@ export function useSidebar(): SidebarControl {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') return dispatch({ type: 'closeDrawer' });
       // Ctrl/Cmd+B means bold in text fields, so the shortcut leaves them alone.
-      if (matchShortcut(e, typingInField(e.target)) !== 'toggleSidebar') return;
+      if (matchShortcut(e, typingAt(e)) !== 'toggleSidebar') return;
       e.preventDefault();
       dispatch({ type: 'toggle' });
     };

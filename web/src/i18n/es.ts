@@ -80,7 +80,7 @@ export const es: Messages = {
     editorModeHint: 'Escritura oculta los colores de código y los números de línea. «Lo que diga el artículo» sigue los ajustes de cada artículo.',
     paperDefault: 'Lo que diga el artículo',
     vim: 'Atajos de Vim',
-    vimHint: 'Solo se cargan si los activas.',
+    vimHint: 'Solo se cargan si los activas. :w abre Guardar para revisión.',
     autoCompile: 'Compilar al escribir por defecto',
     autoCompileHint: 'En los artículos en los que aún no has elegido.',
     appearance: 'Apariencia',
