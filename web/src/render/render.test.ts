@@ -356,3 +356,15 @@ describe('sanitization', () => {
     expect(diagnostics.length).toBe(2);
   });
 });
+
+describe('entry file', () => {
+  it('uses the entry chosen in .galley.yml when it exists', async () => {
+    const project = { ...memoryProject({ 'index.qmd': 'Index text', 'paper.qmd': 'Paper text' }), entry: 'paper.qmd' };
+    expect(text((await render(project)).html)).toContain('Paper text');
+  });
+
+  it('ignores a configured entry that is not in the repository', async () => {
+    const project = { ...memoryProject({ 'index.qmd': 'Index text' }), entry: 'missing.qmd' };
+    expect(text((await render(project)).html)).toContain('Index text');
+  });
+});

@@ -59,14 +59,14 @@ const proposal = (extra: Partial<Proposal> = {}): Proposal => ({
   assignees: [],
   ...extra,
 });
-const push = { canPush: true, mergeMethods: ['squash' as const] };
+const push = { canPush: true, admin: false, mergeMethods: ['squash' as const] };
 
 describe('canMerge', () => {
   it('needs a mergeable open proposal and push access', () => {
     expect(canMerge(proposal(), push)).toBe(true);
     expect(canMerge(proposal({ mergeableState: 'unstable' }), push)).toBe(true);
-    expect(canMerge(proposal(), { canPush: false, mergeMethods: ['squash'] })).toBe(false);
-    expect(canMerge(proposal(), { canPush: true, mergeMethods: [] })).toBe(false);
+    expect(canMerge(proposal(), { canPush: false, admin: false, mergeMethods: ['squash'] })).toBe(false);
+    expect(canMerge(proposal(), { canPush: true, admin: false, mergeMethods: [] })).toBe(false);
     expect(canMerge(proposal({ mergeable: null }), push)).toBe(false);
     expect(canMerge(proposal({ mergeable: false, mergeableState: 'dirty' }), push)).toBe(false);
     expect(canMerge(proposal({ mergeableState: 'blocked' }), push)).toBe(false);

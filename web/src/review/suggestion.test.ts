@@ -120,7 +120,7 @@ describe('applySuggestion', () => {
     requestedReviewers: [],
     assignees: [],
   };
-  const access: RepoAccess = { canPush: true, mergeMethods: [] };
+  const access: RepoAccess = { canPush: true, admin: false, mergeMethods: [] };
   const repo = { id: 1, owner: 'o', name: 'p', fullName: 'o/p', defaultBranch: 'main', private: true };
 
   function deps(text = '# Intro\nFirst half,\nsecond half.\nEnd\n') {

@@ -89,7 +89,7 @@ interface GhReview {
 }
 
 interface GhRepoAccess {
-  permissions?: { push?: boolean };
+  permissions?: { push?: boolean; admin?: boolean };
   allow_merge_commit?: boolean;
   allow_squash_merge?: boolean;
   allow_rebase_merge?: boolean;
@@ -186,7 +186,7 @@ export function createGitHubReviewGateway(options: GitHubReviewGatewayOptions): 
       if (data.allow_merge_commit) mergeMethods.push('merge');
       if (data.allow_squash_merge) mergeMethods.push('squash');
       if (data.allow_rebase_merge) mergeMethods.push('rebase');
-      return { canPush: data.permissions?.push === true, mergeMethods };
+      return { canPush: data.permissions?.push === true, admin: data.permissions?.admin === true, mergeMethods };
     },
 
     async listCandidates(repo) {

@@ -1,22 +1,35 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
-import { AuthRequiredError, type FileChange, type RepoGateway, type Repository, type WorkingState } from '../domain';
+import { AuthRequiredError, type FileChange, type RepoAccess, type RepoGateway, type Repository, type WorkingState } from '../domain';
+import { CONFIG_PATH, visibleFiles, type ProjectConfig } from '../config/project';
 import { applySaved, defaultMessage, describeError, dirtyPaths, runSave, unsavedChanges, type Buffers } from '../workspace/model';
 import { Editor } from '../ui/Editor';
 import { Preview } from './Preview';
 import { FileTree } from '../ui/FileTree';
 import { SaveBar } from '../ui/SaveBar';
 import { StatusBanner, type SaveStatus } from '../ui/StatusBanner';
+import { ViewNotice } from '../ui/config/ViewNotice';
+import type { ConfigSaved } from './ProjectSettings';
+
+// The YAML parser, the wizard and the settings form load on demand.
+type SettingsModule = typeof import('./ProjectSettings');
+const loadSettings = () => import('./ProjectSettings');
 
 export interface WorkspaceProps {
   gateway: RepoGateway;
   repo: Repository;
+  /** What the user may do in the repository; admins get project settings. */
+  access: (repo: Repository) => Promise<RepoAccess>;
   /** Called with the edits that are not saved yet, so they can stay visible. */
   onAuthRequired: (unsaved: FileChange[]) => void;
   onDirtyChange: (dirty: boolean) => void;
 }
 
-export function Workspace({ gateway, repo, onAuthRequired, onDirtyChange }: WorkspaceProps) {
+export function Workspace({ gateway, repo, access, onAuthRequired, onDirtyChange }: WorkspaceProps) {
   const [working, setWorking] = useState<WorkingState>();
+  const [project, setProject] = useState<ProjectConfig>({ kind: 'missing' });
+  const [admin, setAdmin] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState<SettingsModule>();
   const [buffers, setBuffers] = useState<Buffers>({});
   const [openPath, setOpenPath] = useState<string>();
   const [fileError, setFileError] = useState<string>();
@@ -40,6 +53,20 @@ export function Workspace({ gateway, repo, onAuthRequired, onDirtyChange }: Work
     setLoadError(undefined);
     try {
       const state = await gateway.openRepository(repo);
+      // Anything but a confirmed admin sees the co-author view (fail closed).
+      const [config, isAdmin] = await Promise.all([
+        state.files.includes(CONFIG_PATH)
+          ? import('../config/load').then(({ loadProjectConfig }) =>
+              loadProjectConfig(state.files, (path) => gateway.readFile(repo, path, state.headSha)),
+            )
+          : Promise.resolve<ProjectConfig>({ kind: 'missing' }),
+        access(repo).then(
+          (a) => a.admin,
+          () => false,
+        ),
+      ]);
+      setProject(config);
+      setAdmin(isAdmin);
       setBuffers({});
       setOpenPath(undefined);
       setWorking(state);
@@ -48,7 +75,7 @@ export function Workspace({ gateway, repo, onAuthRequired, onDirtyChange }: Work
       fail(err, setLoadError);
       return false;
     }
-  }, [gateway, repo, fail]);
+  }, [gateway, repo, access, fail]);
 
   useEffect(() => {
     void load();
@@ -67,8 +94,11 @@ export function Workspace({ gateway, repo, onAuthRequired, onDirtyChange }: Work
     return () => window.removeEventListener('beforeunload', warn);
   }, [hasDirty]);
 
+  const visible = working ? visibleFiles(working.files, project, admin) : [];
+
   const openFile = async (path: string) => {
     setFileError(undefined);
+    if (!visible.includes(path)) return;
     if (buffers[path] || !working) {
       setOpenPath(path);
       return;
@@ -105,6 +135,32 @@ export function Workspace({ gateway, repo, onAuthRequired, onDirtyChange }: Work
     }
   };
 
+  const configSaved = (saved: ConfigSaved) => {
+    setProject(saved.project);
+    setWorking(
+      (w) =>
+        w && {
+          ...w,
+          headSha: saved.headSha,
+          branchExists: true,
+          files: w.files.includes(CONFIG_PATH) ? w.files : [...w.files, CONFIG_PATH].sort(),
+        },
+    );
+    setBuffers((b) => applySaved(b, [{ path: CONFIG_PATH, content: saved.content }]));
+    setSettingsOpen(false);
+    setStatus({ kind: 'saved', pullRequestUrl: saved.pullRequestUrl });
+  };
+
+  const openSettings = () => {
+    setSettingsOpen(true);
+    if (!settings) {
+      loadSettings().then(setSettings, (err: unknown) => {
+        setSettingsOpen(false);
+        fail(err, setFileError);
+      });
+    }
+  };
+
   const reload = async () => {
     if (status.kind !== 'conflict') return;
     const copies = status.copies;
@@ -129,8 +185,16 @@ export function Workspace({ gateway, repo, onAuthRequired, onDirtyChange }: Work
   return (
     <main class="workspace" data-view={view}>
       <aside>
+        <ViewNotice
+          admin={admin}
+          state={project.kind}
+          repoName={repo.fullName}
+          visibleCount={visibleFiles(working.files, project, false).length}
+          problems={project.kind === 'missing' ? [] : project.problems}
+          onSettings={openSettings}
+        />
         {working.truncated && <p class="muted">Some files are not listed because the repository is very large.</p>}
-        <FileTree paths={working.files} openPath={openPath} dirty={new Set(dirty)} onOpen={(p) => void openFile(p)} />
+        <FileTree paths={visible} openPath={openPath} dirty={new Set(dirty)} onOpen={(p) => void openFile(p)} />
       </aside>
       <section class="editor-pane">
         <button type="button" class="view-toggle" onClick={() => setView('preview')}>
@@ -150,7 +214,19 @@ export function Workspace({ gateway, repo, onAuthRequired, onDirtyChange }: Work
           onMessage={setMessage}
           onSave={() => void save()}
         />
-        {openPath && open ? (
+        {settingsOpen && admin && settings ? (
+          <settings.ProjectSettings
+            gateway={gateway}
+            repo={repo}
+            working={working}
+            project={project}
+            onSaved={configSaved}
+            onCancel={() => setSettingsOpen(false)}
+            onAuthRequired={() => onAuthRequired(unsavedChanges(buffersRef.current))}
+          />
+        ) : settingsOpen && admin ? (
+          <p class="muted">Loading project settings…</p>
+        ) : openPath && open ? (
           <Editor
             key={openPath}
             path={openPath}
@@ -165,7 +241,15 @@ export function Workspace({ gateway, repo, onAuthRequired, onDirtyChange }: Work
         <button type="button" class="view-toggle" onClick={() => setView('edit')}>
           Show editor
         </button>
-        <Preview gateway={gateway} repo={repo} headSha={working.headSha} files={working.files} buffers={buffers} />
+        <Preview
+          gateway={gateway}
+          repo={repo}
+          headSha={working.headSha}
+          files={working.files}
+          buffers={buffers}
+          entry={project.kind === 'valid' ? project.config.entry : undefined}
+          autoCompileDefault={project.kind === 'valid' && project.config.preview.autoCompile}
+        />
       </section>
     </main>
   );

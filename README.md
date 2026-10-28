@@ -133,6 +133,13 @@ no longer usable (sign in again). Transient failures (database, GitHub outage,
 timeout) answer 503; the client should retry. A refresh that GitHub has
 already rotated is saved even if the browser aborts the request.
 
+## Project configuration
+
+A paper repository can hold a `.galley.yml` that chooses which files
+co-authors edit in galley, the upload folders, friendly file names and the
+preview default. Repository admins set it up from galley. See
+[docs/galley-yml.md](docs/galley-yml.md).
+
 ## Deployment
 
 See [docs/deploy.md](docs/deploy.md) for the GitHub App, DNS, Pages and VPS

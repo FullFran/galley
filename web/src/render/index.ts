@@ -15,6 +15,8 @@ import { MAX_ASSETS, MAX_HTML_LENGTH } from '../preview/protocol';
 export interface ProjectSource {
   /** Repository file paths; used to find the entry file and figure extensions. */
   files: readonly string[];
+  /** Entry document chosen in `.galley.yml`; used when it is one of `files`. */
+  entry?: string;
   /** The current text of a file: the unsaved buffer if there is one, else the repository content. */
   readText(path: string): Promise<string>;
   readBytes(path: string): Promise<Uint8Array>;
@@ -328,7 +330,8 @@ export async function render(project: ProjectSource): Promise<RenderResult> {
 async function renderProject(project: ProjectSource, diagnostics: Diagnostic[]): Promise<RenderResult> {
   const configPath = ['_quarto.yml', '_quarto.yaml'].find((p) => project.files.includes(p));
   const config = configPath ? parseYaml(await project.readText(configPath), configPath, diagnostics) : {};
-  const entry = findEntry(project.files, config);
+  const chosen = project.entry && /\.(qmd|md)$/.test(project.entry) && project.files.includes(project.entry) ? project.entry : undefined;
+  const entry = chosen ?? findEntry(project.files, config);
   if (!entry) {
     diagnostics.push({ severity: 'info', message: 'Nothing to preview: add an index.qmd or list the entry file in _quarto.yml.' });
     return { html: '', assets: [], diagnostics };

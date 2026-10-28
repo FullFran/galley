@@ -49,7 +49,7 @@ type Notice = { kind: 'ok' | 'error'; text: string };
 /** A comment kept for the review, with the head its line numbers refer to. */
 type Queued = NewComment & { headSha: string };
 
-const NO_ACCESS: RepoAccess = { canPush: false, mergeMethods: [] };
+const NO_ACCESS: RepoAccess = { canPush: false, admin: false, mergeMethods: [] };
 // The preview of a proposal is read-only: no open buffers.
 const NO_BUFFERS: Buffers = {};
 

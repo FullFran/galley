@@ -122,16 +122,16 @@ describe('MergeBox', () => {
   const props = { proposal, method: 'squash' as const, busy: false, onMethod: noop, onMerge: noop };
 
   it('shows the merge button only when GitHub allows it and the user can push', () => {
-    const allowed = render(<MergeBox {...props} access={{ canPush: true, mergeMethods: ['squash', 'merge'] }} />);
+    const allowed = render(<MergeBox {...props} access={{ canPush: true, admin: false, mergeMethods: ['squash', 'merge'] }} />);
     expect(allowed).toContain('>Merge</button>');
     expect(allowed).toContain('Combine into one change');
 
-    const readOnly = render(<MergeBox {...props} access={{ canPush: false, mergeMethods: ['squash'] }} />);
+    const readOnly = render(<MergeBox {...props} access={{ canPush: false, admin: false, mergeMethods: ['squash'] }} />);
     expect(readOnly).not.toContain('>Merge</button>');
     expect(readOnly).toContain('Only people who can change this repository can merge');
 
     const conflicted = render(
-      <MergeBox {...props} proposal={{ ...proposal, mergeable: false, mergeableState: 'dirty' }} access={{ canPush: true, mergeMethods: ['squash'] }} />,
+      <MergeBox {...props} proposal={{ ...proposal, mergeable: false, mergeableState: 'dirty' }} access={{ canPush: true, admin: false, mergeMethods: ['squash'] }} />,
     );
     expect(conflicted).not.toContain('>Merge</button>');
     expect(conflicted).toContain('conflicts');

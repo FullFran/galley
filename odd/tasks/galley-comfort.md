@@ -15,6 +15,55 @@ them on GitHub.
 
 ## Scope (ordered)
 
+Inserted before C4 (Fran, 2026-10-28): CX "Overleaf experience", driven by a
+`.galley.yml` file in the paper repository (decision A: config lives in the
+repo, versioned, GitHub stays the source of truth; galley lets only repo admins
+edit it, but anyone with write access could still change it on GitHub).
+- CX1 Project config: `.galley.yml` schema (editable paths/globs, upload
+  folders with accepted types and size limits, friendly file labels, entry
+  file, preview defaults), strict validation, safe YAML load; "Set up galley"
+  wizard for repo admins when the file is missing (prefilled from
+  `_quarto.yml`, includes and a `figures/` folder) that proposes the file as a
+  PR; admin-only settings screen; non-admins only see editable files; preview
+  "Recompile" button (Overleaf-style, Ctrl+Enter) with an auto-compile toggle.
+- CX2 Writing feel and uploads: user-selectable editor modes (Fran,
+  2026-10-28): "Writing" (soft wrap, comfortable font, no code colouring or
+  line-number gutter) and "Code" (the current CodeMirror look with line
+  numbers and highlighting); per-user choice remembered, default from
+  `.galley.yml`; paper outline sidebar (sections,
+  jump to heading) instead of a folder tree, friendly file names, figure
+  upload into configured folders as part of the proposal (image preview, size
+  check).
+- CX2 also gets autocomplete, moved up from C7 (Fran, 2026-10-28): on `@`,
+  bib keys (author, year, title) and crossref labels (`@fig-`, `@tbl-`,
+  `@eq-`, `@sec-` with number and caption) from all `.qmd`; path completion in
+  `{{< include >}}` and `![](…)`; inline warnings for unknown citation keys and
+  dangling crossrefs; reuse the C2 BibTeX parser and label collection.
+- CX4 References manager (Fran, 2026-10-28): `references.bib` is editable (the
+  setup wizard includes it by default) both as text and through an interactive
+  editor: list and search entries, add from a DOI (Crossref) or a form, edit
+  fields, delete with a warning when the key is cited, duplicate-key checks;
+  writes BibTeX that leaves untouched entries byte-for-byte as they were.
+- CX-UI App shell redesign (Fran, 2026-10-28), after CX1 and before CX2:
+  follow Álvaro's hagalink design rules (hagalink-ops skills, puertanueva
+  shell); collapsible sidebar (Paper outline/files, Proposals, Settings for
+  admins, Help with the guided tour); fix the usability audit findings; a
+  professional, scientific-looking sign-in/landing screen; visible author
+  credit ("Built by Francisco Olmedo", links to https://www.fullfran.com and
+  the GitHub repo) in the landing footer, the sidebar footer and an About
+  dialog, so galley can serve as a portfolio piece.
+- CX3 Guided tour (Fran, 2026-10-28): an interactive onboarding guide modelled
+  on hagalink/puertanueva `src/dominios/recorrido/` (PR #555, driver.js,
+  author alvaroofernaandez): targets marked with `data-tour` attributes,
+  guides as plain data (centred welcome step + anchored steps), lazy
+  `import('driver.js')` with its CSS bundled as a file, steps skipped when the
+  target never appears, Esc/X/overlay = skip, last step = done; seen/skipped
+  stored per user (proposed: galley backend user record, mirrored in
+  sessionStorage, best effort); replay from a header "?" help button (full
+  tour + "guide for this screen"); progress via CSSOM or `<progress>`, never an
+  inline `style` attribute (strict CSP); text escaped; reduced motion; 44 px
+  touch targets.
+
 1. C1 Polish: http-origin notice, editor heading style, confirmed deploy values
    in `docs/deploy.md`, MVP task document closed.
 2. C2 Preview: client-side Quarto-to-HTML render behind `render(project) -> html`
@@ -68,7 +117,10 @@ them on GitHub.
 - [x] C2 Preview (`feat/comfort-preview`). Route: delegated. Merged (PR #7,
   `06f1b0c`) and deployed.
 - [x] C3 Review (`feat/comfort-review`). Route: delegated (2+ non-trivial
-  files). Implemented and checked; pending commit, PR and merge.
+  files). Merged (PR #8, `e34cbcc`) and deployed; the live bundle contains
+  the review UI.
+- [ ] CX1 Project config (`feat/comfort-config`). Route: delegated (2+
+  non-trivial files). Implemented and checked; pending commit, PR and merge.
 - [ ] C4 Drafts.
 - [ ] C5 Changed since last visit.
 - [ ] C6 Admin panel.
@@ -144,6 +196,49 @@ them on GitHub.
     suggestion posted on `c2` without the stale comment, LEFT and file
     threads shown.
 
+- C3 merged: PR #8 (`e34cbcc`), deployed; the live bundle contains the
+  review UI.
+- CX1 implemented (delegated writer):
+  - Schema and docs in `docs/galley-yml.md` (linked from README):
+    `version: 1`, `title`, `entry`, `editable` (required), `uploads`
+    (`folder`, `accept`, `max_size_mb`), `labels`, `preview.auto_compile`.
+    Parsed with js-yaml's core schema, `maxAliases: 0`, `maxDepth: 20`,
+    64 KB cap; unknown keys warn, any error invalidates the file and galley
+    falls back to safe defaults.
+  - Own glob matcher in `web/src/config/glob.ts` (no new dependency):
+    segment-wise `*`, `?`, whole-segment `**`, memoized (polynomial, no
+    regex from input); wildcards never match dotted names. Validation refuses
+    leading `/` or `~`, drive letters, `..`, `.`, empty segments, backslashes,
+    brackets, braces and `!`.
+  - Visibility (`web/src/config/project.ts`): admins see all files; others
+    see `editable` matches, never `.galley.yml` or `.github/`; without a valid
+    file, co-authors see `.qmd/.md/.bib` outside hidden folders (keeps galley
+    usable before setup without exposing config or scripts). Admin comes from
+    `permissions.admin` on `GET /repos/{owner}/{repo}` (`RepoAccess.admin`);
+    a failed access call is treated as non-admin.
+  - Wizard (`web/src/config/wizard.ts`) and settings form
+    (`containers/ProjectSettings.tsx`, `ui/config/`): prefill from
+    `_quarto.yml`, `{{< include >}}` reachability, bibliography, `figures/`
+    and first headings; the form validates the exact serialized file and
+    saves it as a normal galley save (commit on `galley/<login>` + PR).
+  - Preview: `.galley.yml` `entry` reaches the renderer (`ProjectSource.entry`,
+    worker message); Recompile button, Ctrl/Cmd+Enter (window capture
+    listener, before CodeMirror's Mod-Enter), auto-compile toggle with a
+    per-repository localStorage choice (guarded); `web/src/compile/`.
+  - YAML parser, wizard and settings load on demand: main 149.5 kB gzip
+    (146.1 before); `schema` chunk 18.6 kB gzip.
+  - Checks: tests written first (RED: 6 new test files failing on missing
+    modules), then GREEN. `npm ci --ignore-scripts` (0 vulnerabilities), lint,
+    typecheck, test (273 passed, 31 files), build. Headless Chromium against
+    the production build with mocked GitHub: admin wizard saved
+    `.galley.yml` with the expected content in the `git/trees` request
+    (commit and PR titled "Set up galley (.galley.yml)"); co-author tree
+    limited to editable files (`.galley.yml` listed in `editable` still
+    hidden); no render on edit with auto-compile off, render on Ctrl+Enter
+    (no blank line inserted) and on the button, auto-compile renders and is
+    remembered; missing and invalid configs show the notices and errors as
+    text; no horizontal overflow at 390 px.
+
 ## Next step
 
-Review, commit and open the C3 pull request; then C4 Drafts.
+Review, commit and open the CX1 pull request; then CX-UI.

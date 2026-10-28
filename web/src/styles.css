@@ -547,3 +547,144 @@ button.link {
     grid-template-columns: 1fr;
   }
 }
+
+/* Preview compile controls (Overleaf-style Recompile). */
+.compile-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.compile-auto {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.compile-state {
+  font-size: 0.85rem;
+}
+
+/* Project configuration (.galley.yml): notices, setup wizard and settings. */
+.view-notice {
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.view-notice p {
+  margin: 0 0 0.4rem;
+}
+
+.config-problems {
+  margin: 0.25rem 0 0.5rem;
+  padding-left: 1.25rem;
+  overflow-wrap: anywhere;
+}
+
+.config-problems .problem-warning {
+  color: var(--muted);
+}
+
+.config-form {
+  overflow: auto;
+}
+
+.config-form h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.2rem;
+}
+
+.config-form fieldset {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem 0.75rem;
+  min-width: 0;
+}
+
+.config-form legend {
+  font-weight: 600;
+  padding: 0 0.25rem;
+}
+
+.config-form fieldset > label,
+.config-label {
+  display: block;
+  margin: 0.4rem 0;
+  overflow-wrap: anywhere;
+}
+
+.config-form fieldset > label input[type='text'],
+.config-form select,
+.config-label input {
+  display: block;
+  width: 100%;
+  max-width: 32rem;
+  box-sizing: border-box;
+}
+
+.config-files,
+.config-visible {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+
+.config-add {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.config-add input {
+  flex: 1;
+  min-width: 0;
+}
+
+.config-upload {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.config-upload input {
+  display: block;
+  max-width: 12rem;
+}
+
+.config-yaml {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.5rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.config-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.compile-auto input,
+.config-form input[type='checkbox'] {
+  width: auto;
+  margin: 0 0.35rem 0 0;
+  vertical-align: middle;
+}
+
+.compile-auto {
+  white-space: nowrap;
+}
+
+.config-form select {
+  font: inherit;
+  padding: 0.3rem;
+}

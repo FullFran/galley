@@ -34,6 +34,7 @@ scope.onmessage = (event) => {
   }
   const project: ProjectSource = {
     files: msg.files,
+    entry: typeof msg.entry === 'string' ? msg.entry : undefined,
     readText: async (path) => {
       const v = await read(msg.id, path, false);
       if (typeof v !== 'string') throw new Error(`${path} is not text`);
