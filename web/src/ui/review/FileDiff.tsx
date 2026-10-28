@@ -40,6 +40,8 @@ export interface FileDiffProps {
   /** GitHub's resolution state per thread, by the REST id of its first comment. */
   threadStates?: Record<number, ReviewThreadState>;
   onResolveThread?: (state: ReviewThreadState, resolve: boolean) => void;
+  /** No comment buttons on the lines (History compares versions, not proposals). */
+  readOnly?: boolean;
 }
 
 const statusLabel = (status: string, t: Messages): string =>
@@ -80,7 +82,7 @@ export function FileDiff(props: FileDiffProps) {
             const queued = anchor ? pending.filter((c) => c.side === anchor.side && c.line === anchor.line) : [];
             return (
               <div key={i}>
-                <DiffRow line={line} onComment={anchor && (() => props.onStartComment(file.path, anchor.side, anchor.line))} />
+                <DiffRow line={line} readOnly={props.readOnly} onComment={anchor && (() => props.onStartComment(file.path, anchor.side, anchor.line))} />
                 {placed.byLine.get(i)?.map((th) => <ThreadView key={th.root.id} thread={th} {...props} />)}
                 {queued.map((c, j) => (
                   <div key={j} class="comment comment-pending">
@@ -115,7 +117,7 @@ export function hunkLabel(text: string, t: Messages): string {
   return count === 0 ? '' : t.review.lines(from, from + count - 1);
 }
 
-function DiffRow({ line, onComment }: { line: DiffLine; onComment?: () => void }) {
+function DiffRow({ line, onComment, readOnly }: { line: DiffLine; onComment?: () => void; readOnly?: boolean }) {
   const t = useT();
   if (line.kind === 'hunk' || line.kind === 'meta') {
     return (
@@ -130,9 +132,13 @@ function DiffRow({ line, onComment }: { line: DiffLine; onComment?: () => void }
   const mark = line.kind === 'add' ? '+' : line.kind === 'del' ? '−' : ' ';
   return (
     <div class={`diff-row diff-${line.kind}`} role="row">
-      <button type="button" class="diff-comment" aria-label={label} onClick={onComment}>
-        +
-      </button>
+      {readOnly ? (
+        <span class="diff-comment" aria-hidden="true" />
+      ) : (
+        <button type="button" class="diff-comment" aria-label={label} onClick={onComment}>
+          +
+        </button>
+      )}
       <span class="diff-no">{oldNo}</span>
       <span class="diff-no">{newNo}</span>
       <code>

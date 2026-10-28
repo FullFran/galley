@@ -62,6 +62,9 @@ import type { DraftsGateway } from '../drafts/http';
 import type { ChatGateway } from '../chat/http';
 import { useDrafts } from './useDrafts';
 import { useChat } from './Chat';
+import type { HistoryGateway } from '../github/history';
+import { prepareRestore, type RestoreChange } from '../history/restore';
+import { LastVisitBannerView, useLastVisit, useRestore } from './useHistory';
 
 // The YAML parser, the wizard and the settings form load on demand.
 type SettingsModule = typeof import('./ProjectSettings');
@@ -69,6 +72,9 @@ const loadSettings = () => import('./ProjectSettings');
 // The admin panel (C6) is its own chunk, loaded when an admin opens one of its tabs.
 type PanelsModule = typeof import('../ui/admin/AdminPanels');
 const loadPanels = () => import('../ui/admin/AdminPanels');
+// The History screen loads on demand too.
+type HistoryModule = typeof import('./History');
+const loadHistory = () => import('./History');
 
 export interface WorkspaceProps {
   gateway: RepoGateway;
@@ -77,7 +83,7 @@ export interface WorkspaceProps {
   access: (repo: Repository) => Promise<RepoAccess>;
   shell: ShellContext;
   /** Where the URL points inside this repository: a file, or an admin tab. */
-  route: Extract<RepoRoute, { name: 'workspace' | 'admin' }>;
+  route: Extract<RepoRoute, { name: 'workspace' | 'admin' | 'history' }>;
   /** Moves to another route (App keeps the URL and the unsaved-changes guard). */
   onRoute: (route: RepoRoute) => void;
   /** Called with the edits that are not saved yet, so they can stay visible. */
@@ -93,12 +99,14 @@ export interface WorkspaceProps {
   drafts?: DraftsGateway;
   /** galley's chat API; without it the chat is not offered. */
   chat?: ChatGateway;
+  /** Versions, labels and comparisons; without it History is not offered. */
+  history?: HistoryGateway;
 }
 
 type Heading = Extract<OutlineItem, { kind: 'heading' }>;
 const NO_FILES: string[] = [];
 
-export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuthRequired, onDirtyChange, onSaved, comments: commentsGateway, drafts: draftsGateway, chat: chatGateway, shares }: WorkspaceProps) {
+export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuthRequired, onDirtyChange, onSaved, comments: commentsGateway, drafts: draftsGateway, chat: chatGateway, shares, history }: WorkspaceProps) {
   const t = useT();
   // Callbacks read the catalog through a ref: a language switch must not
   // re-create `load` (that would reload the repository and drop edits).
@@ -124,6 +132,11 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   const [recompileSeq, setRecompileSeq] = useState(0);
   const [noteRequest, setNoteRequest] = useState(0);
   const adminTab: AdminTabId | undefined = route.name === 'admin' ? route.tab : undefined;
+  const historyRoute = route.name === 'history' ? route : undefined;
+  const [historyModule, setHistoryModule] = useState<HistoryModule>();
+  // Files restored from History, waiting for the next save.
+  const restored = useRestore();
+  const lastVisit = useLastVisit(history, gateway, repo, shell.user?.login);
   const routePath = route.name === 'workspace' ? route.path : undefined;
   const routePathRef = useRef(routePath);
   routePathRef.current = routePath;
@@ -229,7 +242,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
     insert: (text, at) => setInsertReq((r) => ({ text, at, block: true, seq: (r?.seq ?? 0) + 1 })),
     canInsert: !adminTab && openPath !== undefined && /\.(qmd|md|markdown)$/i.test(openPath) && !buffers[openPath]?.merge,
   });
-  const hasDirty = dirty.length > 0 || authoring.uploads.length > 0;
+  const hasDirty = dirty.length > 0 || authoring.uploads.length > 0 || restored.pending.length > 0;
   useEffect(() => onDirtyChange(hasDirty), [hasDirty, onDirtyChange]);
   useEffect(() => {
     if (!hasDirty) return;
@@ -241,7 +254,9 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
     return () => window.removeEventListener('beforeunload', warn);
   }, [hasDirty]);
 
-  const visible = working ? filesInView([...working.files, ...authoring.created], project, admin, viewAs) : [];
+  const visible = working
+    ? filesInView([...new Set([...working.files, ...authoring.created, ...restored.created])], project, admin, viewAs).filter((p) => !restored.deleted.includes(p))
+    : [];
   const changeViewAs = (mode: ViewAs) => {
     setViewAs(mode);
     writeViewAs(repo.fullName, mode);
@@ -477,9 +492,9 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
     if (!working || !hasDirty || status.kind === 'saving') return;
     setStatus({ kind: 'saving' });
     const extra = authoring.extra();
-    const note = message.trim() || authoring.defaultMessage || defaultMessage(dirty, t);
+    const note = message.trim() || authoring.defaultMessage || restored.message || defaultMessage(dirty, t);
     // The default branch comes in first; the save lands on top of it.
-    const outcome = await saveWithUpstream(gateway, repo, buffers, note, working.headSha, t, extra.changes);
+    const outcome = await saveWithUpstream(gateway, repo, buffers, note, working.headSha, t, [...extra.changes, ...restored.pending]);
     // Whatever happened to the commit, a merge that landed is the new head.
     if ('upstream' in outcome && outcome.upstream) moveToUpstream(outcome.upstream);
     switch (outcome.kind) {
@@ -494,7 +509,8 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
         setStatus({ kind: 'error', message: t.upstream.saveUnresolved(outcome.paths.join(', ')) });
         break;
       case 'saved': {
-        const savedPaths = new Set(outcome.saved.map((c) => c.path));
+        const savedPaths = new Set(outcome.saved.filter((c) => !c.delete).map((c) => c.path));
+        const deletedPaths = new Set(outcome.saved.filter((c) => c.delete).map((c) => c.path));
         // Saved files have new blobs; the index reads them by commit until the next tree listing.
         setWorking(
           (w) =>
@@ -503,12 +519,13 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
               headSha: outcome.headSha,
               branchExists: true,
               // New sections and uploads are now in the repository.
-              files: [...new Set([...w.files, ...savedPaths])].sort(),
-              blobs: Object.fromEntries(Object.entries(w.blobs).filter(([p]) => !savedPaths.has(p))),
+              files: [...new Set([...w.files, ...savedPaths])].filter((p) => !deletedPaths.has(p)).sort(),
+              blobs: Object.fromEntries(Object.entries(w.blobs).filter(([p]) => !savedPaths.has(p) && !deletedPaths.has(p))),
             },
         );
         setBuffers((b) => applySaved(b, outcome.saved));
         authoring.committed(extra.ids);
+        restored.committed();
         setMessage('');
         setStatus({ kind: 'saved', pullRequestUrl: outcome.pullRequestUrl });
         onSaved?.();
@@ -589,6 +606,38 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
 
   const openSettings = () => onRoute({ name: 'admin', ...base, tab: 'settings' });
 
+  useEffect(() => {
+    if (!historyRoute || historyModule) return;
+    loadHistory().then(setHistoryModule, (err: unknown) => fail(err, setFileError));
+  }, [historyRoute !== undefined, historyModule, fail]);
+
+  /** Restored files become unsaved changes (never a commit); then back to the editor. */
+  const restoreFromHistory = async (changes: RestoreChange[], when: string) => {
+    if (!working) return;
+    const head = working.headSha;
+    const prepared = await prepareRestore(changes, buffersRef.current, working.files, (path) =>
+      gateway.readFile(repo, path, head).catch(() => ''),
+    );
+    const result = restored.apply(buffersRef.current, prepared, working.files, t.history.restoreMessage(when));
+    setBuffers(result.buffers);
+    const open = openPathRef.current;
+    const firstText = prepared.find((c) => c.kind === 'text')?.path;
+    const target = open && result.buffers[open] ? open : firstText;
+    if (target === open) setEditorRev((n) => n + 1);
+    else setOpenPath(target);
+    setNotice(t.history.restored(changes.length, when));
+    onRoute({ name: 'workspace', ...base, path: target });
+  };
+  const toLastVisit = () => {
+    const b = lastVisit.banner;
+    if (b) onRoute({ name: 'history', ...base, compare: { base: b.since, head: b.head, since: true } });
+  };
+  const markSeen = (head: string) => {
+    lastVisit.markSeen(head);
+    setNotice(t.history.since.marked);
+    if (historyRoute?.compare?.since) onRoute({ name: 'history', ...base });
+  };
+
   const reload = async () => {
     if (status.kind !== 'conflict') return;
     const copies = status.copies;
@@ -598,16 +647,17 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   // Contents and Admin live on this screen; Proposals is App's.
   const navigate = (id: NavId) => {
     if (id === 'admin') return openSettings();
+    if (id === 'history') return onRoute({ name: 'history', ...base });
     if (id === 'comments' && comments.enabled) {
-      if (adminTab) toEditor();
+      if (adminTab || historyRoute) toEditor();
       return comments.toggle();
     }
     if (id === 'chat' && chat.enabled) {
-      if (adminTab) toEditor();
+      if (adminTab || historyRoute) toEditor();
       return chat.toggle();
     }
     if (id === 'contents') {
-      if (adminTab) toEditor();
+      if (adminTab || historyRoute) toEditor();
       return;
     }
     shell.onNavigate(id);
@@ -633,9 +683,11 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   };
   const crumbs: (string | Crumb)[] = [
     repoCrumb,
-    ...(adminTab ? [t.admin.title, t.admin[adminTab]] : openPath ? fileCrumbs(openPath) : []),
+    ...(adminTab ? [t.admin.title, t.admin[adminTab]] : historyRoute ? [t.history.title] : openPath ? fileCrumbs(openPath) : []),
   ];
-  const active: NavId = adminTab ? 'admin' : 'contents';
+  const active: NavId = adminTab ? 'admin' : historyRoute ? 'history' : 'contents';
+  // Admin and History replace the editor: no editor actions in the header.
+  const away = adminTab !== undefined || historyRoute !== undefined;
 
   if (loadError) {
     return (
@@ -700,10 +752,14 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
     setEditorRev((n) => n + 1);
     announce(t.resolve.applied(path));
   };
+  const lastVisitBanner = lastVisit.banner && !historyRoute?.compare?.since && (
+    <LastVisitBannerView banner={lastVisit.banner} onSee={toLastVisit} onSeen={() => lastVisit.banner && markSeen(lastVisit.banner.head)} />
+  );
   const banner =
-    upstreamBanner || coauthorView || (project.kind !== 'valid' && !setupDismissed && adminTab !== 'settings') ? (
+    upstreamBanner || lastVisitBanner || coauthorView || (project.kind !== 'valid' && !setupDismissed && adminTab !== 'settings') ? (
       <>
         {upstreamBanner}
+        {lastVisitBanner}
         {coauthorView && (
           <div class="line-banner line-banner-info" role="status">
             <Icon name="eye" class="line-banner-icon" />
@@ -735,17 +791,17 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
       shell={screenShell}
       active={active}
       crumbs={crumbs}
-      mainClass={adminTab ? undefined : 'workspace-main'}
+      mainClass={away ? undefined : 'workspace-main'}
       banner={banner}
       actions={
         <>
-          {!adminTab && <EditorModeSwitch mode={mode} onMode={changeMode} />}
-          {!adminTab && <ViewSwitch view={view} onView={setView} />}
-          {!adminTab && comments.toggleButton}
+          {!away && <EditorModeSwitch mode={mode} onMode={changeMode} />}
+          {!away && <ViewSwitch view={view} onView={setView} />}
+          {!away && comments.toggleButton}
           <SaveControl
-            dirtyCount={dirty.length + authoring.uploads.length}
+            dirtyCount={dirty.length + authoring.uploads.length + restored.pending.length}
             message={message}
-            placeholder={hasDirty ? (authoring.defaultMessage ?? defaultMessage(dirty, t)) : t.save.describe}
+            placeholder={hasDirty ? (authoring.defaultMessage ?? restored.message ?? defaultMessage(dirty, t)) : t.save.describe}
             pending={authoring.pending}
             saving={status.kind === 'saving'}
             noteRequest={noteRequest}
@@ -755,7 +811,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
             more={
               <MoreMenu
                 items={[
-                  ...(adminTab
+                  ...(away
                     ? []
                     : [
                         { label: t.shell.recompile, kbd: 'Ctrl+Enter', onSelect: () => setRecompileSeq((n) => n + 1) },
@@ -868,6 +924,25 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
             )
           }
         />
+      ) : historyRoute ? (
+        history && historyModule ? (
+          <historyModule.History
+            gateway={gateway}
+            history={history}
+            repo={repo}
+            access={access}
+            workingHead={working.headSha}
+            dirty={dirty}
+            entry={entry}
+            compare={historyRoute.compare}
+            onRoute={onRoute}
+            onRestore={restoreFromHistory}
+            onSeen={markSeen}
+            onAuthRequired={() => onAuthRequired(unsavedChanges(buffersRef.current))}
+          />
+        ) : (
+          <Skeleton lines={8} label={t.history.loading} />
+        )
       ) : (
         <div class="workspace" data-view={view} data-comments={comments.panel || chat.panel ? 'open' : undefined}>
           <section class="editor-pane" aria-label={t.workspace.editorRegion} data-tour="editor">

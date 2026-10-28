@@ -17,6 +17,7 @@ import type { NavId } from './shell/nav';
 import { formatRoute, parseRoute, rememberRoute, repoRoute, takeRememberedRoute, type RepoRoute, type Route } from './shell/route';
 import { useSidebar } from './shell/useSidebar';
 import type { CiGateway } from './github/ci';
+import type { HistoryGateway } from './github/history';
 import type { ShellContext } from './ui/shell/AppShell';
 import { CurrentLanguageSwitch } from './ui/shell/LanguageSwitch';
 import { Skeleton } from './ui/shell/Skeleton';
@@ -39,13 +40,15 @@ export interface AppProps {
   ci?: CiGateway;
   /** Owner's draft sharing with the repository's admins. */
   shares?: DraftSharesGateway;
+  /** Versions of the default branch, labels and comparisons (History). */
+  history?: HistoryGateway;
 }
 
 type View =
   | { name: 'loading' }
   | { name: 'signedOut'; loginFailed: boolean; notice?: string; httpsUrl?: string; unsaved?: FileChange[] }
   | { name: 'repos' }
-  | { name: 'workspace'; repo: Repository; route: Extract<RepoRoute, { name: 'workspace' | 'admin' }> }
+  | { name: 'workspace'; repo: Repository; route: Extract<RepoRoute, { name: 'workspace' | 'admin' | 'history' }> }
   | { name: 'proposals'; repo: Repository; number?: number; author?: string };
 
 const sameRepo = (r: Repository, route: RepoRoute) => r.fullName.toLowerCase() === `${route.owner}/${route.repo}`.toLowerCase();
@@ -55,7 +58,7 @@ const sameRepo = (r: Repository, route: RepoRoute) => r.fullName.toLowerCase() =
  * link or the back button lands where the person was. Leaving the workspace
  * with unsaved edits asks first, also on back and forward.
  */
-export function App({ session, gateway, reviews, comments, drafts, chat, ci, shares }: AppProps) {
+export function App({ session, gateway, reviews, comments, drafts, chat, ci, shares, history }: AppProps) {
   // Stable callbacks read the catalog through a ref, so a language switch does
   // not re-run the screens' effects (the workspace would reload and lose edits).
   const tRef = useTRef();
@@ -126,7 +129,7 @@ export function App({ session, gateway, reviews, comments, drafts, chat, ci, sha
   const leavesEdits = (route: Route) => {
     const current = viewRef.current;
     if (current.name !== 'workspace' || !dirty.current) return false;
-    return !((route.name === 'workspace' || route.name === 'admin') && sameRepo(current.repo, route));
+    return !((route.name === 'workspace' || route.name === 'admin' || route.name === 'history') && sameRepo(current.repo, route));
   };
   const canLeave = () => !dirty.current || window.confirm(tRef.current.app.leavePrompt);
 
@@ -259,6 +262,7 @@ export function App({ session, gateway, reviews, comments, drafts, chat, ci, sha
     const base = repoRoute(repo.fullName);
     if (id === 'proposals') go({ name: 'proposals', ...base });
     else if (id === 'admin') go({ name: 'admin', ...base, tab: DEFAULT_ADMIN_TAB });
+    else if (id === 'history') go({ name: 'history', ...base });
     else if (id === 'comments') {
       requestCommentsPanel();
       go({ name: 'workspace', ...base });
@@ -369,6 +373,7 @@ export function App({ session, gateway, reviews, comments, drafts, chat, ci, sha
         drafts={drafts}
         chat={chat}
         shares={shares}
+        history={history}
       />
     </>
   );

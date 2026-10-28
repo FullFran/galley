@@ -53,6 +53,8 @@ export interface FileChange {
   /** UTF-8 text, or base64 bytes when `encoding` is `base64` (an uploaded file). */
   content: string;
   encoding?: 'base64';
+  /** Removes the file in the saved commit (`content` is ignored), e.g. when restoring a version. */
+  delete?: true;
 }
 
 export interface SaveResult {

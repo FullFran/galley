@@ -3,6 +3,7 @@ import { App } from './App';
 import { createSession } from './auth/session';
 import { createGitHubCiGateway } from './github/ci';
 import { createGitHubGateway } from './github/gateway';
+import { createGitHubHistoryGateway } from './github/history';
 import { createGitHubReviewGateway } from './github/review';
 import { createHttpCommentsGateway } from './comments/http';
 import { createHttpDraftSharesGateway } from './admin/api';
@@ -22,10 +23,11 @@ const comments = createHttpCommentsGateway();
 const drafts = createHttpDraftsGateway();
 const chat = createHttpChatGateway();
 const ci = createGitHubCiGateway({ tokens: session });
+const history = createGitHubHistoryGateway({ tokens: session });
 const shares = createHttpDraftSharesGateway();
 render(
   <LocaleProvider>
-    <App session={session} gateway={gateway} reviews={reviews} comments={comments} drafts={drafts} chat={chat} ci={ci} shares={shares} />
+    <App session={session} gateway={gateway} reviews={reviews} comments={comments} drafts={drafts} chat={chat} ci={ci} shares={shares} history={history} />
   </LocaleProvider>,
   root,
 );

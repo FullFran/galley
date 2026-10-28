@@ -831,6 +831,64 @@ running chip is asked again every 20 s, only while the page is visible.
 The port is `CiGateway` in `web/src/github/ci.ts`; status mapping, run and
 artifact choice and unzipping are plain functions in `web/src/ci/`.
 
+## History
+
+**History** (sidebar, Review group; `#/r/{o}/{r}/history`, a lazy chunk) lists
+the versions of the paper: the commits of the default branch, newest first,
+30 at a time (`GET /repos/{o}/{r}/commits?sha={default}&page=N`; "Show older
+versions" follows GitHub's `Link: rel="next"`). Each row shows the first line
+of the message, the author (GitHub login, else the git name), a relative date
+and the short SHA. Merged proposals read "Proposal #N merged · title" (merge
+commits `Merge pull request #N from …` with the title on a later line, and
+squash merges `Title (#N)`). Labels are git tags (`GET /tags`) shown on the
+version they point at.
+
+Selecting a version offers:
+
+- "Compare with current" or with any other loaded version: `GET
+  /compare/{older}...{newer}` (`#/r/{o}/{r}/history/compare/{base}...{head}`),
+  shown with the review diff view (read-only, no comment buttons). GitHub
+  lists at most 300 changed files; the screen says when the list is cut.
+- "Preview this version": the same sandboxed preview, rendered from that SHA
+  (tree and files read at the commit, nothing editable).
+- "Download as zip": a link to `https://github.com/{o}/{r}/archive/{sha}.zip`
+  in a new tab. galley does not fetch the zip itself: `GET
+  /repos/{o}/{r}/zipball/{ref}` answers 302 to `codeload.github.com`, which
+  sends `Access-Control-Allow-Origin: https://render.githubusercontent.com`
+  (checked 2026-10-28), so a browser fetch from galley fails CORS (headless
+  Chromium: "Failed to fetch"). The new tab uses the person's own github.com
+  sign in (needed for private repositories), and the CSP stays unchanged.
+- "Add label" (users with push access): a lightweight tag, `POST /git/refs`
+  with `{ ref: "refs/tags/<name>", sha }`; the × on a label asks first and
+  sends `DELETE /git/refs/tags/<name>`. Both need Contents: write, like
+  saving. Names follow git's ref rules (no spaces, `..`, `~^:?*[\`, control
+  characters, leading `-` or `/`, trailing `/`, `.` or `.lock`, `@{`, empty
+  path parts), at most 100 characters, and must not exist yet; invalid names
+  are refused before anything is sent.
+- "Restore this file" (in a comparison) and "Restore whole paper to this
+  version": never a commit. The version's files become unsaved changes in the
+  person's own copy (text in the editor buffers, other files as pending
+  uploads, files the version did not have as pending deletions), with the
+  suggested note "Restore files from the version of {date}". Saving for review
+  then works like any edit, so the change reaches the default branch only
+  through a proposal. Deletions are tree entries with `sha: null` in the same
+  single commit (skipped for files the branch does not have). The whole-paper
+  plan compares the blob SHAs of both trees, and also resets unsaved edits.
+
+**What changed since your last visit**: galley remembers, per GitHub login and
+repository, the default-branch head the person last marked as seen
+(`localStorage` key `galley:last-seen`, at most 200 entries, guarded). The
+first visit only remembers the head. When it has moved, a slim banner says
+"N changes since your last visit" (commits from `GET /compare/{seen}...{head}`)
+with "See what changed" (`#/r/{o}/{r}/history/since/{seen}...{head}`, the
+readable diff grouped by file, no restore buttons) and "Mark as seen". A
+remembered SHA GitHub no longer knows (history rewritten) is replaced
+silently.
+
+The port is `HistoryGateway` in `web/src/github/history.ts`; version and
+label mapping, label name rules, the restore plan and the last-visit store are
+plain functions in `web/src/history/`.
+
 ## Comments in the editor and the preview
 
 Comments anywhere (not only on changed lines), stored by the galley backend

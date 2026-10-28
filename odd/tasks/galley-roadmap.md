@@ -42,7 +42,13 @@ proposals and review. No real-time co-editing of the same file.
    Done in `feat/comments-ui`: `data-src="path:line"` tags, double-click in
    the preview jumps to the source, "Show in preview" (Ctrl/Cmd+Alt+P).
 6. **History**: versions = commits on main, labels = tags, compare with the
-   existing diff view, restore = a proposal (PR), zip download.
+   existing diff view, restore = a proposal (PR), zip download. Implemented in
+   `feat/history` (with C5): History screen in the Review group (lazy chunk),
+   merged proposals named, lightweight-tag labels (Contents: write), compare
+   with the read-only diff view, read-only preview at a SHA, restore of one
+   file or the whole paper as unsaved changes (deletions as `sha: null` tree
+   entries) saved for review like any edit; zip as a github.com link in a new
+   tab because codeload.github.com does not allow galley's origin (CORS).
 7. **Download the CI-compiled PDF** from galley (needs Actions/Checks read on the
    app; the org must approve the new permission). Done in C8 (`feat/ci-pdf`):
    CI chips per proposal, "Download PDF of this proposal" and "Download latest

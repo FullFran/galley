@@ -171,7 +171,9 @@ edit it, but anyone with write access could still change it on GitHub).
   save, "Keep drafts on the server" preference, header "Draft saved".
   Route: delegated (2+ non-trivial files). Implemented and checked; pending
   review, commit and PR.
-- [ ] C5 Changed since last visit.
+- [x] C5 Changed since last visit (`feat/history`, with roadmap item 6).
+  Route: delegated (2+ non-trivial files). Assessed tier and review outcome:
+  pending (not committed by the writer).
 - [ ] C6 Admin panel. Server side: Admin API (`feat/admin-api`, PR #21).
   - [x] C6-UI (`feat/admin-ui`): Admin tabs People, Access, Shared drafts,
     Activity log (lazy chunk `ui/admin/AdminPanels`), revoke sessions with
@@ -610,6 +612,26 @@ edit it, but anyone with write access could still change it on GitHub).
     build. Headless check (`pw/ci-check.mjs`, `shots-ci/`): 15 checks, 0
     failed, no CSP violations, no page errors.
   - Bundle: main 118.2 → 121.7 kB gzip (+3.4); fflate chunk 2.7 kB gzip.
+
+- C5 + roadmap 6 implemented (delegated writer, `feat/history` on
+  `49c5005`): History screen (`#/r/{o}/{r}/history`, lazy chunk) with versions
+  of the default branch (merged proposals named), tag labels (add/remove via
+  `git/refs`, names validated first), compare via `compare/{a}...{b}` in the
+  read-only diff view, preview at a SHA, zip as a github.com archive link
+  (codeload sends `Access-Control-Allow-Origin:
+  https://render.githubusercontent.com`, so a browser fetch fails; no CSP
+  change), restore of a file or the whole paper as unsaved changes in the
+  user's buffers (pending deletions are `sha: null` tree entries in the same
+  commit). Last visit: head per login + repository in `localStorage`, banner
+  "N changes since your last visit", "See what changed", "Mark as seen".
+  - Tests first (RED: modules missing, history routes and nav entry absent,
+    deletion test sending content), then GREEN: commit and tag mapping, label
+    rules and requests, compare mapping, restore plan and buffers (deletions),
+    last-visit store and banner. Lint, typecheck, 77 files / 767 tests, build.
+    Headless check (`pw/history-check.mjs`, `shots-history/`): 27 checks, 0
+    failed, no CSP violations, no page errors.
+  - Bundle: initial JS 120.1 -> 125.3 kB gzip (+5.2, mostly en + es copy and
+    the shared-chunk split); History chunk 2.9 kB gzip.
 
 ## Next step
 
