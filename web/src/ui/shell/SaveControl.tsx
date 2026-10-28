@@ -18,6 +18,8 @@ export interface SaveControlProps {
   onSave: () => void;
   /** New sections and uploads in this save, in plain words; uploads can be removed. */
   pending?: { key: string; text: string; onRemove?: () => void }[];
+  /** The unsaved files are kept as a draft (this browser or the server). */
+  draftSaved?: boolean;
 }
 
 /**
@@ -25,7 +27,7 @@ export interface SaveControlProps {
  * tooltip) and a split "Save for review" button whose caret opens the
  * optional note. Ctrl/Cmd+S opens the note too, so Enter saves.
  */
-export function SaveControl({ dirtyCount, message, placeholder, saving, noteRequest, more, onMessage, onSave, pending = [] }: SaveControlProps) {
+export function SaveControl({ dirtyCount, message, placeholder, saving, noteRequest, more, onMessage, onSave, pending = [], draftSaved = false }: SaveControlProps) {
   const t = useT();
   const m = t.save;
   const [noteOpen, setNoteOpen] = useState(false);
@@ -73,6 +75,7 @@ export function SaveControl({ dirtyCount, message, placeholder, saving, noteRequ
   }, [noteOpen]);
 
   const disabled = dirtyCount === 0 || saving;
+  const drafted = draftSaved && dirtyCount > 0 && !saving;
   const submit = (e: Event) => {
     e.preventDefault();
     setNoteOpen(false);
@@ -84,11 +87,11 @@ export function SaveControl({ dirtyCount, message, placeholder, saving, noteRequ
       <span
         class={dirtyCount > 0 ? 'save-state save-state-dirty' : 'save-state'}
         role="status"
-        title={saveStateLabel(dirtyCount, saving, t)}
+        title={drafted ? t.drafts.state(m.unsaved(dirtyCount)) : saveStateLabel(dirtyCount, saving, t)}
       >
         {dirtyCount > 0 && !saving && <span class="save-dot" aria-hidden="true" />}
-        {saving ? m.saving : dirtyCount > 0 ? m.unsavedShort(dirtyCount) : m.allSavedShort}
-        <span class="visually-hidden">{` (${saveStateLabel(dirtyCount, saving, t)})`}</span>
+        {saving ? m.saving : drafted ? t.drafts.state(m.unsavedShort(dirtyCount)) : dirtyCount > 0 ? m.unsavedShort(dirtyCount) : m.allSavedShort}
+        <span class="visually-hidden">{` (${drafted ? t.drafts.state(m.unsaved(dirtyCount)) : saveStateLabel(dirtyCount, saving, t)})`}</span>
       </span>
       {more}
       <form class="save-form split-button" onSubmit={submit}>

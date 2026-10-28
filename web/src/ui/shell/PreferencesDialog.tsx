@@ -82,6 +82,17 @@ export function PreferencesDialog({ open, theme, onTheme, onClose }: Preferences
           <span>{m.vim}</span>
         </label>
         <p class="muted prefs-hint">{m.vimHint}</p>
+        <label class="switch-row" title={m.serverDraftsHint}>
+          <input
+            type="checkbox"
+            role="switch"
+            class="switch"
+            checked={prefs.serverDrafts !== false}
+            onChange={(e) => update({ serverDrafts: e.currentTarget.checked })}
+          />
+          <span>{m.serverDrafts}</span>
+        </label>
+        <p class="muted prefs-hint">{m.serverDraftsHint}</p>
       </section>
       <section class="prefs-section" aria-labelledby="prefs-appearance">
         <h3 id="prefs-appearance">{m.appearance}</h3>
