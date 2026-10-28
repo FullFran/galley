@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <title>galley preview</title>
+  </head>
+  <body>
+    <!--
+      Loaded only inside <iframe sandbox="allow-scripts"> (opaque origin). The
+      production build adds a CSP meta that blocks every network request.
+    -->
+    <main id="page" class="page" aria-live="off"></main>
+    <script type="module" src="/src/preview/frame.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,5 @@
+# Introduction {#sec-intro}
+
+The model of @benavente2024 is reused here [@randall1945; @chen1997].
+The scheme is shown in @fig-scheme and the parameters in @tbl-params. <!-- src: internal note -->
+Rates follow Eq. ([-@eq-rate]), derived in [-@sec-app-inversion].

@@ -1,0 +1,16 @@
+# Model {#sec-model}
+
+## Band model {#sec-band}
+
+![Energy-band scheme with traps $i = 1, \ldots, 5$.](figures/fig1_scheme){#fig-scheme width=100%}
+
+$$p_i = s_i \exp\left(-\frac{E_i}{k_B T}\right)$$ {#eq-rate}
+
+| Block | Count |
+|---|---|
+| Peak temperatures $T_{m,i}$ | 5 |
+| Concentrations | 5 |
+
+: Free parameters. {#tbl-params}
+
+See @sec-band and @eq-rate.

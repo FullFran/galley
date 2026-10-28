@@ -42,6 +42,8 @@ export interface RepoGateway {
    * mark is kept as U+FEFF. Throws `NotTextError` for anything that is not UTF-8.
    */
   readFile(repo: Repository, path: string, ref: string): Promise<string>;
+  /** Reads any file at `ref` as bytes, e.g. a figure for the preview. */
+  readBytes(repo: Repository, path: string, ref: string): Promise<Uint8Array>;
   /**
    * Saves all changes as one commit whose parent is `expectedHeadSha`, moves the
    * working branch fast-forward only, and opens or reuses its pull request.

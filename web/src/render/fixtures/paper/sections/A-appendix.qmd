@@ -1,0 +1,9 @@
+```{=latex}
+\appendix
+```
+
+# Derivations {#sec-appendix}
+
+## Inversion of the closure {#sec-app-inversion}
+
+The root is unique when $E_{MN} \ge k_B T_m$.

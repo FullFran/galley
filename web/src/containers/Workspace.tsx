@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
 import { AuthRequiredError, type FileChange, type RepoGateway, type Repository, type WorkingState } from '../domain';
 import { applySaved, defaultMessage, describeError, dirtyPaths, runSave, unsavedChanges, type Buffers } from '../workspace/model';
 import { Editor } from '../ui/Editor';
+import { Preview } from './Preview';
 import { FileTree } from '../ui/FileTree';
 import { SaveBar } from '../ui/SaveBar';
 import { StatusBanner, type SaveStatus } from '../ui/StatusBanner';
@@ -22,6 +23,8 @@ export function Workspace({ gateway, repo, onAuthRequired, onDirtyChange }: Work
   const [loadError, setLoadError] = useState<string>();
   const [message, setMessage] = useState('');
   const [status, setStatus] = useState<SaveStatus>({ kind: 'idle' });
+  // On narrow screens the editor and the preview share one column.
+  const [view, setView] = useState<'edit' | 'preview'>('edit');
   const buffersRef = useRef(buffers);
   buffersRef.current = buffers;
 
@@ -124,12 +127,15 @@ export function Workspace({ gateway, repo, onAuthRequired, onDirtyChange }: Work
 
   const open = openPath ? buffers[openPath] : undefined;
   return (
-    <main class="workspace">
+    <main class="workspace" data-view={view}>
       <aside>
         {working.truncated && <p class="muted">Some files are not listed because the repository is very large.</p>}
         <FileTree paths={working.files} openPath={openPath} dirty={new Set(dirty)} onOpen={(p) => void openFile(p)} />
       </aside>
       <section class="editor-pane">
+        <button type="button" class="view-toggle" onClick={() => setView('preview')}>
+          Show preview
+        </button>
         <StatusBanner status={status} onReload={() => void reload()} onDismiss={() => setStatus({ kind: 'idle' })} />
         {fileError && (
           <p class="banner banner-error" role="alert">
@@ -154,6 +160,12 @@ export function Workspace({ gateway, repo, onAuthRequired, onDirtyChange }: Work
         ) : (
           <p class="muted">Choose a file to edit.</p>
         )}
+      </section>
+      <section class="preview-pane" aria-label="Preview">
+        <button type="button" class="view-toggle" onClick={() => setView('edit')}>
+          Show editor
+        </button>
+        <Preview gateway={gateway} repo={repo} headSha={working.headSha} files={working.files} buffers={buffers} />
       </section>
     </main>
   );

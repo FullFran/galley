@@ -65,7 +65,8 @@ them on GitHub.
 ## Tasks
 
 - [x] C1 Polish (`feat/comfort-polish`). Route: delegated (2+ files).
-- [ ] C2 Preview.
+- [x] C2 Preview (`feat/comfort-preview`). Route: delegated. Merge on hold
+  until Fran decides the citeproc-js licence question (CPAL-1.0/AGPL).
 - [ ] C3 Review.
 - [ ] C4 Drafts.
 - [ ] C5 Changed since last visit.
@@ -78,6 +79,20 @@ them on GitHub.
 - 2026-10-28: plan agreed with Fran. Engram mirror pending (memory hook refuses
   writes in this session).
 
+- C1 merged: PR #6 (`96cec89`).
+- C2 implemented (delegated writer): renderer in `web/src/render/` behind
+  `render(project)`, running in a module Web Worker with a 5 s compute budget;
+  separate sandboxed `preview.html` (no `allow-same-origin`, own CSP); citeproc-js
+  with vendored Elsevier Harvard CSL; self-hosted CMU Serif; no Paged.js (size
+  and injected `<style>`). Independent read-only review: no confidentiality or
+  integrity blockers; fixed quadratic comment/shortcode scans (16 s → <200 ms on
+  400 KB), include fan-out caps (500 includes, 8 MB), dev-server `null`-origin
+  CORS restricted to preview paths, one `ready` per frame load, asset caps.
+  Checks: `npm ci --ignore-scripts` (0 vulns), lint, typecheck, test (139
+  passed), build, headless Chromium check (no CSP violations; `parent.document`
+  throws); parent spot check test + typecheck: pass. Sizes: main 136.9 kB gzip,
+  render worker 245 kB gzip. Real paper rendered with no diagnostics.
+
 ## Next step
 
-C1.
+Fran's citeproc-js licence decision, then merge C2 and start C3.

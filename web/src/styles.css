@@ -208,6 +208,83 @@ textarea {
   display: flex;
 }
 
+.preview-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0.75rem 0.75rem 0.75rem 0;
+}
+
+.preview {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.preview-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 24rem;
+  height: calc(100vh - 7.5rem);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #e6e6e6;
+}
+
+.preview-status {
+  font-size: 0.85rem;
+  margin-top: 0.35rem;
+}
+
+.preview-notes summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.preview-notes ul {
+  margin: 0.25rem 0 0;
+  padding-left: 1.25rem;
+}
+
+.preview-notes .note-warning,
+.preview-notes .note-error {
+  color: var(--fg);
+}
+
+.preview-notes .note-info {
+  color: var(--muted);
+}
+
+.view-toggle {
+  display: none;
+  align-self: flex-end;
+  margin-bottom: 0.5rem;
+}
+
+/* Wide screens: files | editor | preview. */
+@media (min-width: 72rem) {
+  .workspace {
+    grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+/* Narrower screens: one of editor or preview at a time. */
+@media (max-width: 71.99rem) {
+  .view-toggle {
+    display: inline-block;
+  }
+
+  .preview-pane {
+    padding: 0.75rem;
+  }
+
+  .workspace[data-view='edit'] .preview-pane,
+  .workspace[data-view='preview'] .editor-pane {
+    display: none;
+  }
+}
+
 @media (max-width: 40rem) {
   .workspace {
     grid-template-columns: 1fr;

@@ -4,6 +4,7 @@ import { SignedOut } from './SignedOut';
 import { RepoList } from './RepoList';
 import { StatusBanner } from './StatusBanner';
 import { FileTree } from './FileTree';
+import { PreviewFrame } from './PreviewFrame';
 
 const noop = () => undefined;
 
@@ -100,5 +101,26 @@ describe('FileTree', () => {
     expect(html).toContain('aria-current="true"');
     expect(html).toContain('(edited)');
     expect(html).toMatch(/<button[^>]*disabled[^>]*>plot\.png/);
+  });
+});
+
+describe('PreviewFrame', () => {
+  it('isolates the preview in a sandbox without same-origin access', () => {
+    const html = render(<PreviewFrame seq={1} html="" assets={[]} diagnostics={[]} />);
+    expect(html).toMatch(/<iframe[^>]* sandbox="allow-scripts"/);
+    expect(html).not.toContain('allow-same-origin');
+    expect(html).toContain('src="/preview.html"');
+    expect(html).not.toContain('preview note');
+  });
+
+  it('lists render diagnostics unobtrusively', () => {
+    const diagnostics = [
+      { severity: 'warning' as const, message: 'Image not found: figures/a' },
+      { severity: 'info' as const, message: 'Code cells are not run.' },
+    ];
+    const html = render(<PreviewFrame seq={1} html="" assets={[]} diagnostics={diagnostics} />);
+    expect(html).toContain('<details class="preview-notes">');
+    expect(html).toContain('2 preview notes (1 to check)');
+    expect(html).toContain('Image not found: figures/a');
   });
 });

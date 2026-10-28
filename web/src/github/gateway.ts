@@ -108,6 +108,20 @@ export function createGitHubGateway(options: GitHubGatewayOptions): RepoGateway 
     return undefined;
   };
 
+  /** Base64 content of a file up to 1 MB (GitHub's limit for inline content). */
+  const contents = async (repo: Repository, path: string, ref: string): Promise<string> => {
+    const encodedPath = path.split('/').map(seg).join('/');
+    const { data } = await gh.request<{ type?: string; encoding?: string; content?: string }>(
+      `${base(repo)}/contents/${encodedPath}?ref=${seg(ref)}`,
+      { repositoryId: repo.id },
+    );
+    if (data.type !== 'file') throw new NotFoundError(`${path} is not a file`);
+    if (data.encoding !== 'base64' || data.content === undefined) {
+      throw new GatewayError(`${path} is too large to open`);
+    }
+    return data.content;
+  };
+
   return {
     async listRepositories() {
       const installations = await gh.paginate(
@@ -140,16 +154,11 @@ export function createGitHubGateway(options: GitHubGatewayOptions): RepoGateway 
     },
 
     async readFile(repo, path, ref) {
-      const encodedPath = path.split('/').map(seg).join('/');
-      const { data } = await gh.request<{ type?: string; encoding?: string; content?: string }>(
-        `${base(repo)}/contents/${encodedPath}?ref=${seg(ref)}`,
-        { repositoryId: repo.id },
-      );
-      if (data.type !== 'file') throw new NotFoundError(`${path} is not a file`);
-      if (data.encoding !== 'base64' || data.content === undefined) {
-        throw new GatewayError(`${path} is too large to open`);
-      }
-      return decodeBase64Utf8(data.content);
+      return decodeBase64Utf8(await contents(repo, path, ref));
+    },
+
+    async readBytes(repo, path, ref) {
+      return decodeBase64(await contents(repo, path, ref));
     },
 
     async save(repo, changes, message, expectedHeadSha): Promise<SaveResult> {
@@ -244,14 +253,18 @@ function toTreeEntry(change: FileChange, mode = '100644') {
   return { path: change.path, mode, type: 'blob', content: change.content };
 }
 
+/** Decodes GitHub's base64, which has line breaks, into bytes. */
+export function decodeBase64(content: string): Uint8Array {
+  return Uint8Array.from(atob(content.replace(/\s/g, '')), (c) => c.charCodeAt(0));
+}
+
 /**
  * Decodes GitHub's base64 (with line breaks) into UTF-8 text. Invalid UTF-8 is
  * rejected instead of replaced, so saving can never corrupt the file. A BOM is
  * kept as U+FEFF; inline tree content is sent as UTF-8, so it is written back.
  */
 export function decodeBase64Utf8(content: string): string {
-  const binary = atob(content.replace(/\s/g, ''));
-  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  const bytes = decodeBase64(content);
   try {
     return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes);
   } catch {
