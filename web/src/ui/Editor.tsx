@@ -1,0 +1,71 @@
+import { useEffect, useRef } from 'preact/hooks';
+import { EditorState, type Extension } from '@codemirror/state';
+import { EditorView, drawSelection, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view';
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
+import { LanguageSupport, defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { markdownKeymap, markdownLanguage } from '@codemirror/lang-markdown';
+import { yaml } from '@codemirror/lang-yaml';
+
+export interface EditorProps {
+  path: string;
+  /** Initial text; later changes are ignored, so render with `key={path}`. */
+  doc: string;
+  onChange: (text: string) => void;
+}
+
+function language(path: string): Extension {
+  // markdownLanguage instead of markdown(): the latter bundles HTML, CSS and
+  // JavaScript parsers for embedded HTML, which triples the bundle size.
+  if (/\.(qmd|md|markdown)$/i.test(path)) return [new LanguageSupport(markdownLanguage), keymap.of(markdownKeymap)];
+  if (/\.ya?ml$/i.test(path)) return yaml();
+  return [];
+}
+
+// CodeMirror injects its styles at runtime through style-mod. In a document,
+// style-mod uses a <style> element, which the production CSP (`style-src
+// 'self'`) blocks. Inside a shadow root it uses a constructed stylesheet
+// (adoptedStyleSheets) instead, which CSP does not restrict. So the editor
+// lives in a shadow root, and its own styling goes through EditorView.theme.
+const theme = EditorView.theme({
+  '&': { flex: '1 1 auto', minWidth: '0', fontSize: '0.95rem' },
+  '.cm-scroller': { fontFamily: 'ui-monospace, monospace', lineHeight: '1.5' },
+  '.cm-content': { padding: '0.5rem 0' },
+});
+
+/** CodeMirror 6 editor. Owns the EditorView for its lifetime. */
+export function Editor({ path, doc, onChange }: EditorProps) {
+  const host = useRef<HTMLDivElement>(null);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    if (!host.current) return;
+    const root = host.current.shadowRoot ?? host.current.attachShadow({ mode: 'open' });
+    const view = new EditorView({
+      root,
+      parent: root,
+      state: EditorState.create({
+        doc,
+        extensions: [
+          theme,
+          lineNumbers(),
+          history(),
+          drawSelection(),
+          highlightActiveLine(),
+          EditorView.lineWrapping,
+          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+          keymap.of([...defaultKeymap, ...historyKeymap]),
+          language(path),
+          EditorView.contentAttributes.of({ 'aria-label': `Contents of ${path}` }),
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+          }),
+        ],
+      }),
+    });
+    return () => view.destroy();
+    // The view is created once per mount; the parent remounts it per file.
+  }, []);
+
+  return <div class="editor" ref={host} />;
+}

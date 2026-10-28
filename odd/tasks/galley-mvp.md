@@ -65,7 +65,7 @@ CI status in-app.
 - [x] T3 `RepoGateway` port + GitHub adapter: list accessible repos, read tree and
   file, save (blobs, tree, commit, fast-forward ref update on a `galley/*` branch,
   open or update PR). Tests against a fake gateway/HTTP.
-- [ ] T4 UI: login, repo picker, file tree, CodeMirror 6 editor, save button with
+- [x] T4 UI: login, repo picker, file tree, CodeMirror 6 editor, save button with
   PR link and conflict message.
 - [ ] T5 Deploy: Pages workflow with CNAME, Traefik/compose for the API, docs for
   the manual steps (create GitHub App, Cloudflare DNS records, verify
@@ -110,6 +110,18 @@ CI status in-app.
   unscoped tokens triggers a server refresh each time); file modes read from a
   possibly truncated recursive tree; PATCH-422 fallback in catch-up untested.
 
+- T3 committed: `2570a1f` on `feat/mvp-gateway`.
+- 2026-10-28 T4 implemented on `feat/mvp-ui` (delegated writer). Assessed as
+  medium (UI over the reviewed gateway); writer self-verification plus a
+  headless Chromium run of the production build. CSP finding: style-mod injects
+  a `<style>` element in documents (blocked by `style-src 'self'`), so the
+  editor mounts in a shadow root where it uses adoptedStyleSheets; zero CSP
+  violations after the fix. `markdownLanguage` instead of `markdown()` (bundle
+  557 kB → 398 kB, 133 kB gzip). Checks: `npm ci --ignore-scripts` (0 vulns),
+  lint, typecheck, test (57 passed), build: pass; RED observed; parent spot
+  check typecheck + test: pass; phone-width screenshot reviewed.
+  Cosmetic follow-up: markdown headings render underlined in the editor.
+
 ## Next step
 
-T4 on `feat/mvp-ui`, stacked on `feat/mvp-gateway`.
+T5 on `feat/mvp-deploy`, stacked on `feat/mvp-ui`.
