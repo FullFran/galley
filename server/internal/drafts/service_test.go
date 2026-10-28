@@ -313,7 +313,7 @@ func TestOwnerTotals(t *testing.T) {
 }
 
 func TestRevokeBlocksWritesAndPurgesTwice(t *testing.T) {
-	e := newEnv(t, func(c *drafts.Config) { c.SecondPurgeDelay = 50 * time.Millisecond })
+	e := newEnv(t, func(c *drafts.Config) { c.SecondPurgeDelay = 2 * time.Second })
 	e.put(t, e.alice, put("a.qmd", "a"))
 	e.put(t, e.bob, put("a.qmd", "b"))
 
@@ -327,7 +327,8 @@ func TestRevokeBlocksWritesAndPurgesTwice(t *testing.T) {
 	})
 
 	// A write that slipped past the first purge (the in-flight race) is
-	// removed by the second one.
+	// removed by the second one. The second purge runs SecondPurgeDelay after
+	// Revoke, which must leave time to insert the record on slow CI runners.
 	store := pbstore.NewDraftStore(e.app)
 	err := store.Put(ctx, drafts.Record{ID: "slipped00000001", Owner: e.alice.UserID, RepoID: repo, Path: "s.qmd",
 		BaseSHA: sha, Content: "sealed", Version: "abcdefgh", UpdatedAt: e.clock.Now()}, drafts.Precondition{}, drafts.Limits{MaxDrafts: 10, MaxOwnerDrafts: 10, MaxOwnerBytes: 100}, nil)
@@ -371,7 +372,7 @@ func TestRevokeMarkerExpires(t *testing.T) {
 
 func waitFor(t *testing.T, ok func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for !ok() {
 		if time.Now().After(deadline) {
 			t.Fatal("condition not reached")

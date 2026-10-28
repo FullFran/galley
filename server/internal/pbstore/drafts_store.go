@@ -180,14 +180,35 @@ func (s *DraftStore) DeleteIdle(_ context.Context, before time.Time) (int, error
 	return s.deleteWhere(dbx.NewExp("updated_at < {:before}", dbx.Params{"before": dt.String()}))
 }
 
-// deleteWhere deletes in one statement: drafts have no dependent records and
-// no hooks, so going through the record API one by one buys nothing.
+// deleteWhere bulk-deletes drafts with raw SQL, which skips PocketBase's
+// relation cascade, so in the same transaction it first deletes the share
+// grants (galley_draft_shares) of those drafts, their only dependents.
 func (s *DraftStore) deleteWhere(where dbx.Expression) (int, error) {
-	res, err := s.app.NonconcurrentDB().Delete(DraftsCollection, where).Execute()
-	if err != nil {
-		return 0, err
-	}
-	n, err := res.RowsAffected()
+	var n int64
+	err := s.app.RunInTransaction(func(tx core.App) error {
+		var ids []string
+		if err := tx.DB().Select("id").From(DraftsCollection).Where(where).Column(&ids); err != nil {
+			return err
+		}
+		const batch = 500 // well under SQLite's bound-parameter limit
+		for len(ids) > 0 {
+			chunk := ids[:min(batch, len(ids))]
+			ids = ids[len(chunk):]
+			in := make([]any, len(chunk))
+			for i, id := range chunk {
+				in[i] = id
+			}
+			if _, err := tx.DB().Delete(DraftSharesCollection, dbx.In("draft", in...)).Execute(); err != nil {
+				return err
+			}
+		}
+		res, err := tx.DB().Delete(DraftsCollection, where).Execute()
+		if err != nil {
+			return err
+		}
+		n, err = res.RowsAffected()
+		return err
+	})
 	return int(n), err
 }
 

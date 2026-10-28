@@ -292,3 +292,49 @@ func TestCachedAccessCoalescesConcurrentMisses(t *testing.T) {
 		t.Errorf("mints, lists = %d, %d; want 1, 1", m, l)
 	}
 }
+
+func TestCachedAccessFreshPermissionBypassesAndRefreshesTheCache(t *testing.T) {
+	clock := newClock()
+	gh := newGitHub(clock)
+	gh.repos[7] = comments.RepoPermission{FullName: "o/r", Pull: true, Push: true, Admin: true}
+	a := newAccess(gh, clock)
+	if p, err := a.Permission(ctx, "u1", 7); err != nil || !p.Admin {
+		t.Fatalf("cached = %+v, %v", p, err)
+	}
+	// Demoted on GitHub: the cache still says admin, a fresh check does not.
+	gh.mu.Lock()
+	gh.repos[7] = comments.RepoPermission{FullName: "o/r", Pull: true}
+	gh.mu.Unlock()
+	if p, _ := a.Permission(ctx, "u1", 7); !p.Admin {
+		t.Fatal("cache already refreshed")
+	}
+	p, err := a.FreshPermission(ctx, "u1", 7)
+	if err != nil || p.Admin || !p.Pull {
+		t.Fatalf("fresh = %+v, %v", p, err)
+	}
+	if _, l := gh.counts(); l != 2 {
+		t.Errorf("lists = %d, want 2", l)
+	}
+	// The fresh result replaced the cached list.
+	if p, _ := a.Permission(ctx, "u1", 7); p.Admin {
+		t.Error("cache not refreshed by the fresh check")
+	}
+	if _, l := gh.counts(); l != 2 {
+		t.Errorf("lists after = %d, want 2", l)
+	}
+}
+
+func TestCachedAccessFreshPermissionIsRateLimited(t *testing.T) {
+	clock := newClock()
+	gh := newGitHub(clock)
+	gh.repos[7] = comments.RepoPermission{Pull: true}
+	a := newAccess(gh, clock, func(c *comments.AccessConfig) {
+		c.MissLimiter = comments.NewRateLimiter(1, time.Hour, clock)
+	})
+	if _, err := a.FreshPermission(ctx, "u1", 7); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.FreshPermission(ctx, "u1", 7); !errors.Is(err, comments.ErrRateLimited) {
+		t.Errorf("second fresh check = %v, want rate limited", err)
+	}
+}
