@@ -1,7 +1,63 @@
 # Comments anywhere: design (proposed)
 
-Status: proposed on 2026-10-28, not built. See `odd/tasks/galley-roadmap.md`
-item 2.
+Status: proposed on 2026-10-28. See `odd/tasks/galley-roadmap.md` item 2.
+
+## Implementation status
+
+Backend phase 1 and the resolve/reopen part of phase 2 are built (server
+only; the API is documented in the README, "Comments API"):
+
+- `server/internal/comments`: domain, use cases and ports (`RepoAccess`,
+  `Store`, `Sealer`, `Clock`, `Reanchorer`), input validation, a per-user
+  write token bucket and `CachedAccess`: per user, the repositories of the
+  user's app installations (5-minute cache, misses limited to 20 at once and
+  one every 3 s, idle users evicted first) and the user's own unscoped access
+  token (minted by `auth.Service.UserAccessToken`, reused until 5 minutes
+  before expiry, replaced by tokens the browser obtains through
+  `auth.Config.OnTokenIssued`), so permission checks rotate the refresh token
+  at most once per token lifetime. Revocation drops the user's entry;
+  installation, membership and repository webhooks drop every list.
+- `server/internal/pbstore`: migration for `galley_threads`,
+  `galley_comments` and `galley_thread_reads` (nil API rules, hidden sealed
+  fields, cascade from thread to comments and read markers; author relations
+  do not cascade) and `CommentStore`.
+- `server/internal/github`: installed-repositories adapter
+  (`GET /user/installations`, `GET /user/installations/{id}/repositories`,
+  paginated, capped at 5,000 repositories).
+- `server/internal/httpapi`: routes under `/api/galley/repos`,
+  `/api/galley/threads` and `/api/galley/comments` (paths differ from the
+  sketch below: they share the `/api/galley/` prefix of the auth routes).
+
+Decisions taken while building:
+
+- Key: comments are sealed with a key derived from `GALLEY_TOKEN_KEY` by
+  HKDF-SHA256 (purpose `galley-data-at-rest-v1`), not with the token key
+  itself and not with a new variable. Derivation keeps refresh tokens and
+  comments cryptographically separate without a deployment change; the cost
+  is that rotating `GALLEY_TOKEN_KEY` also makes comments unreadable, so a
+  rotation needs a re-seal migration (or a dedicated `GALLEY_DATA_KEY` later).
+- AAD binds thread quotes to thread id, field, `repo_id` and `path`
+  (`galley/v2/thread/<id>/<field>/<repo_id>/<path>`) and comment bodies and
+  suggestions to comment id, field and thread id
+  (`galley/v2/comment/<id>/<field>/<thread>`), so a value copied to another
+  record, or a record moved to another repository, file or thread, no longer
+  opens; ids are generated before sealing. Changing a thread's repository or
+  path therefore requires re-sealing its quotes.
+- Access requires the repository to be in one of the user's galley app
+  installations, not only `pull` (Fran's requirement): a public repository
+  without the app answers 404.
+- Unread counts use a per-thread comment sequence number (`seq`, with the
+  thread's `comment_seq` stored in the read marker), not timestamps.
+- Paths reject Unicode format characters (Cf); every text field rejects NUL
+  and the bidi controls U+202A–U+202E and U+2066–U+2069.
+- Re-anchoring is not built: the anchor and the current position are stored
+  and returned as stored (`anchor_state` = `exact`). `comments.Reanchorer` is
+  the seam; the `at` query parameter already reaches it.
+- Repositories the user cannot see and threads in them answer 404, not 403.
+- Deleting the last comment deletes the thread.
+- Not built yet: suggestions accept/apply, PR export, preview selection UI,
+  Bearer tokens for CLI/MCP, AI authors (`author_kind`, `ai_client` and
+  `ai_model` are stored but always `human` for now).
 
 ## Decision: store comments in the galley backend
 
@@ -48,10 +104,12 @@ All collections have nil API rules; access goes through Go routes.
 ## Authorization
 
 Read and comment need `pull` on the repository; resolve and reopen need `push`
-(write access), whoever wrote the thread (Fran, 2026-10-28). Checked server-side with the user's own token
-(`GET /repos/{o}/{r}` → `permissions`), cached about 5 minutes per user and
-repo, dropped on revocation or installation webhooks. No installation token and
-no extra private key on the server.
+(write access), whoever wrote the thread (Fran, 2026-10-28), and the
+repository must be one where the galley app is installed. Checked server-side
+with the user's own token (the repositories of `GET /user/installations`, each
+with its `permissions`), cached about 5 minutes per user, dropped on
+revocation or installation webhooks. No installation token and no extra
+private key on the server.
 
 ## API (shared by the web UI, a CLI/skill and an MCP server)
 

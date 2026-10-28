@@ -42,6 +42,17 @@ type fakeAuth struct {
 	loggedOut   []string
 	revoked     []int64
 	issueCalls  int
+	authErr     error
+}
+
+func (f *fakeAuth) Authenticate(_ context.Context, sessionToken string) (auth.User, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.gotSession = sessionToken
+	if f.authErr != nil {
+		return auth.User{}, f.authErr
+	}
+	return auth.User{ID: "u1", GitHubID: 42, Login: "octo"}, nil
 }
 
 func (f *fakeAuth) StartLogin() (auth.Login, error) {

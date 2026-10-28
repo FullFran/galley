@@ -6,6 +6,7 @@ package secret
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hkdf"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
@@ -77,6 +78,16 @@ func (s *Sealer) Open(sealed string, aad []byte) ([]byte, error) {
 		return nil, ErrOpen
 	}
 	return plaintext, nil
+}
+
+// DeriveKey derives a KeySize-byte subkey for one purpose from a master key
+// with HKDF-SHA256. Different purposes give independent keys, so a value
+// sealed for one purpose can never be opened as another.
+func DeriveKey(master []byte, purpose string) ([]byte, error) {
+	if len(master) != KeySize {
+		return nil, fmt.Errorf("secret: key is %d bytes, want %d", len(master), KeySize)
+	}
+	return hkdf.Key(sha256.New, master, nil, purpose, KeySize)
 }
 
 // RandomToken returns 32 random bytes encoded as base64url without padding.

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -19,6 +20,99 @@ type harness struct {
 	store    *memStore
 	sealer   *secret.Sealer
 	now      time.Time
+
+	mu           sync.Mutex
+	revokedUsers []string // OnRevoke calls
+}
+
+func (h *harness) revocations() []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]string(nil), h.revokedUsers...)
+}
+
+func TestAuthenticate(t *testing.T) {
+	h := newHarness(t)
+	token := h.login(t)
+	u, err := h.svc.Authenticate(context.Background(), token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Login != "octo" || u.GitHubID != 42 || u.ID == "" {
+		t.Errorf("user = %+v", u)
+	}
+	if h.provider.rotations != 1 {
+		t.Error("Authenticate must not refresh the GitHub token")
+	}
+	for _, bad := range []string{"", "nope"} {
+		if _, err := h.svc.Authenticate(context.Background(), bad); !errors.Is(err, auth.ErrUnauthenticated) {
+			t.Errorf("Authenticate(%q) err = %v", bad, err)
+		}
+	}
+	h.now = h.now.Add(31 * 24 * time.Hour)
+	if _, err := h.svc.Authenticate(context.Background(), token); !errors.Is(err, auth.ErrUnauthenticated) {
+		t.Errorf("expired session err = %v", err)
+	}
+}
+
+func TestUserAccessToken(t *testing.T) {
+	h := newHarness(t)
+	h.login(t)
+	user := h.store.users[42]
+	got, err := h.svc.UserAccessToken(context.Background(), user.ID, 0)
+	if err != nil || got.Token != "ghu_2" {
+		t.Fatalf("token = %+v, %v", got, err)
+	}
+	plain, _ := h.sealer.Open(h.store.tokens[user.ID].Ciphertext, []byte(user.ID))
+	if string(plain) != "ghr_2" {
+		t.Errorf("rotated refresh token not persisted: %q", plain)
+	}
+
+	h.provider.validRefresh = "revoked-elsewhere"
+	if _, err := h.svc.UserAccessToken(context.Background(), user.ID, 0); !errors.Is(err, auth.ErrUnauthenticated) {
+		t.Fatalf("rejected refresh err = %v", err)
+	}
+	if got := h.revocations(); len(got) != 1 || got[0] != user.ID {
+		t.Errorf("OnRevoke calls = %v, want [%s]", got, user.ID)
+	}
+	if _, err := h.svc.UserAccessToken(context.Background(), "unknown", 0); !errors.Is(err, auth.ErrUnauthenticated) {
+		t.Errorf("unknown user err = %v", err)
+	}
+}
+
+func TestTokenIssuedIsReported(t *testing.T) {
+	h := newHarness(t)
+	var got []string
+	h.svc, _ = auth.NewService(auth.Config{
+		Provider: h.provider, Users: h.store, Sessions: h.store, Sealer: h.sealer,
+		SessionTTL: time.Hour, LoginTTL: time.Minute, Now: func() time.Time { return h.now },
+		OnTokenIssued: func(userID string, tok auth.AccessToken, repoID int64) {
+			got = append(got, userID+"|"+tok.Token+"|"+strconv.FormatInt(repoID, 10))
+		},
+	})
+	token := h.login(t)
+	uid := h.store.users[42].ID
+	if _, err := h.svc.IssueToken(context.Background(), token, 7); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.svc.UserAccessToken(context.Background(), uid, 0); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{uid + "|ghu_2|7", uid + "|ghu_3|0"}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("OnTokenIssued calls = %v, want %v", got, want)
+	}
+}
+
+func TestRevokeNotifies(t *testing.T) {
+	h := newHarness(t)
+	h.login(t)
+	if err := h.svc.Revoke(context.Background(), 42); err != nil {
+		t.Fatal(err)
+	}
+	if got := h.revocations(); len(got) != 1 || got[0] != h.store.users[42].ID {
+		t.Errorf("OnRevoke calls = %v", got)
+	}
 }
 
 func newHarness(t *testing.T) *harness {
@@ -39,6 +133,11 @@ func newHarness(t *testing.T) *harness {
 		SessionTTL: 30 * 24 * time.Hour,
 		LoginTTL:   10 * time.Minute,
 		Now:        clock,
+		OnRevoke: func(userID string) {
+			h.mu.Lock()
+			h.revokedUsers = append(h.revokedUsers, userID)
+			h.mu.Unlock()
+		},
 	})
 	if err != nil {
 		t.Fatal(err)

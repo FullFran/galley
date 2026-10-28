@@ -71,7 +71,7 @@ PocketBase stores its data in `server/pb_data/`, which is not committed.
 | --- | --- |
 | `GALLEY_GITHUB_CLIENT_ID` | GitHub App client ID. |
 | `GALLEY_GITHUB_CLIENT_SECRET` | GitHub App client secret. |
-| `GALLEY_TOKEN_KEY` | 32 random bytes, standard base64 (`openssl rand -base64 32`). Encrypts stored refresh tokens (AES-256-GCM). Keep it outside `pb_data`. |
+| `GALLEY_TOKEN_KEY` | 32 random bytes, standard base64 (`openssl rand -base64 32`). Encrypts stored refresh tokens (AES-256-GCM); a separate key derived from it with HKDF-SHA256 (purpose `galley-data-at-rest-v1`) encrypts comments. Keep it outside `pb_data` and back it up: changing it signs everyone out and makes every stored comment unreadable. |
 | `GALLEY_WEBHOOK_SECRET` | Webhook secret of the GitHub App. |
 | `GALLEY_FRONTEND_ORIGIN` | Exact frontend origin, for example `https://galley.fullfran.com`. |
 | `GALLEY_PUBLIC_URL` | Public API base URL, for example `https://galley-api.fullfran.com`. |
@@ -79,8 +79,9 @@ PocketBase stores its data in `server/pb_data/`, which is not committed.
 Both URLs must use `https`, except loopback hosts (`localhost`, `127.0.0.1`)
 for local development. The GitHub App's callback URL is
 `$GALLEY_PUBLIC_URL/api/galley/auth/callback`, and its webhook URL is
-`$GALLEY_PUBLIC_URL/api/galley/auth/webhook` (subscribe to nothing extra:
-`github_app_authorization` is always delivered). User access tokens must
+`$GALLEY_PUBLIC_URL/api/galley/auth/webhook` (`github_app_authorization` is
+always delivered; membership and repository events are optional and only make
+comment permission changes visible before the 5-minute cache expires). User access tokens must
 expire (the GitHub App default).
 
 Always start the server with `--origins` set to the frontend origin; without
@@ -132,6 +133,76 @@ the admin UI is reached over an SSH tunnel (see [docs/deploy.md](docs/deploy.md)
 no longer usable (sign in again). Transient failures (database, GitHub outage,
 timeout) answer 503; the client should retry. A refresh that GitHub has
 already rotated is saved even if the browser aborts the request.
+
+### Comments API
+
+Line-anchored comment threads stored in galley (design:
+[docs/comments-design.md](docs/comments-design.md)). `repo_id` is GitHub's
+numeric repository id; thread and comment ids are 15 characters `[a-z0-9]`.
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/galley/repos/{repo_id}/threads?path=&status=&at=` | Threads (with comments) ordered by path and line, at most 200; `truncated` says when there were more. `status` is `open` or `resolved`; `at` is the head commit being viewed (re-anchoring seam, phase 2). |
+| `POST /api/galley/repos/{repo_id}/threads` | Starts a thread. Body: `path`, `commit_sha`, `start_line`, `end_line`, optional `start_column`/`end_column`, `quote` (`exact`, `prefix`, `suffix`), `origin` (`source` or `preview`), `body`, optional `suggestion`. Returns 201 and the thread. |
+| `GET /api/galley/repos/{repo_id}/unread` | `{"repo_id", "threads", "comments", "by_thread": {id: n}}`: comments by others added after the user's read marker (markers store the thread's comment sequence number, not a timestamp). |
+| `GET /api/galley/threads/{id}` | One thread with its comments. |
+| `POST /api/galley/threads/{id}/comments` | Reply: `{"body", "suggestion"?}`. Returns 201 and the comment. |
+| `POST /api/galley/threads/{id}/resolve`, `.../reopen` | Changes the status; 409 when it already has it. |
+| `POST /api/galley/threads/{id}/read` | Marks the thread read now. Returns 204. |
+| `PATCH /api/galley/comments/{id}` | Edits your own comment: `{"body", "suggestion"?}` (omit `suggestion` to remove it). |
+| `DELETE /api/galley/comments/{id}` | Deletes your own comment, and the thread when it was the last one. Returns 204. |
+
+Every route requires `Origin` equal to `GALLEY_FRONTEND_ORIGIN` and the
+session cookie; `POST`, `PATCH` and `DELETE` also require `X-Galley-CSRF: 1`.
+CORS allows only the frontend origin, with credentials, for `GET`, `POST`,
+`PATCH` and `DELETE`. Responses are `Cache-Control: no-store`.
+
+Only repositories where the galley app is installed can be commented on. The
+server lists the repositories of the user's installations, with the user's
+permission on each (`GET /user/installations` and
+`GET /user/installations/{id}/repositories`, paginated, capped at 5,000
+repositories), using the user's own token. That token is minted on the server
+from the stored refresh token, never reaches the browser, and is reused until
+5 minutes before it expires; tokens the browser obtains from `POST token`
+(without `repository_id`) replace it, so the two sides do not keep rotating
+the refresh token. The list is cached for 5 minutes per user; cache misses are
+limited to 20 at once and one more every 3 seconds per user (429). Reading and
+commenting need `pull`; resolving and reopening need `push` (write), whoever
+started the thread; comments can only be edited or deleted by their author.
+Repositories outside the installations (public ones included) and threads in
+them answer 404. A user's entry (list and token) is dropped when their
+authorization is revoked; every list is dropped on the webhook events
+`installation`, `installation_repositories`, `member`, `membership`,
+`organization`, `team` and `repository` (subscribe the GitHub App to the ones
+available to it).
+
+Limits: `path` is repository-relative, at most 512 bytes, with no `.`/`..` or
+empty segments, no leading slash, backslash or control characters;
+no Unicode format characters (category Cf, which includes bidi controls);
+`commit_sha` is a full 40- or 64-character lowercase hex id; no text field may
+contain NUL or the bidi controls U+202A–U+202E and U+2066–U+2069; lines are 1 to
+1,000,000 with `end_line >= start_line`; `body` (non-blank) and `suggestion`
+at most 20 KB each; `quote.exact` at most 20 KB and `prefix`/`suffix` 1 KB.
+Request bodies are at most 128 KB and must not contain unknown fields. Each
+user may make 30 writes at once and one more every 2 seconds (in memory, on
+top of PocketBase's per-IP limiter); reads and read markers are not limited.
+
+Errors are generic `{"error": "<status text>"}` bodies: 400 malformed JSON,
+401 no valid session (sign in again), 403 wrong origin, missing CSRF header,
+not the author or no `push`, 404 unknown or invisible, 409 status conflict,
+413 body too large, 422 invalid input (the body also names the `field`), 429
+too many writes, 503 GitHub or database unavailable (retry).
+
+Comment bodies, suggestions and the quote fields are sealed with AES-256-GCM
+under the derived data key. The associated data binds thread quotes to the
+thread id, field, `repo_id` and `path`, and comment bodies and suggestions to
+the comment id, field and thread id, so a value copied to another record or
+a record moved to another repository, file or thread does not open (the API
+then answers a generic 500). They are
+stored in the hidden fields of `galley_threads` and `galley_comments`
+(`galley_thread_reads` holds read markers); all three collections have
+superuser-only API rules, and comment text, quotes and tokens are never
+logged.
 
 ## Project configuration
 

@@ -58,6 +58,15 @@ func (s *Store) UserByGitHubID(_ context.Context, githubID int64) (auth.User, er
 	return toUser(rec), nil
 }
 
+// UserByID implements auth.UserTokenStore.
+func (s *Store) UserByID(_ context.Context, id string) (auth.User, error) {
+	rec, err := s.app.FindRecordById(UsersCollection, id)
+	if err != nil {
+		return auth.User{}, notFound(err)
+	}
+	return toUser(rec), nil
+}
+
 // SaveRefreshToken implements auth.UserTokenStore.
 func (s *Store) SaveRefreshToken(_ context.Context, userID string, t auth.StoredToken) error {
 	rec, err := s.app.FindFirstRecordByData(TokensCollection, "user", userID)
