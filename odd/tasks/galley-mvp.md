@@ -62,7 +62,7 @@ CI status in-app.
   mutex, Origin + header check, optional `repository_id`), `/auth/logout`,
   `github_app_authorization` revocation webhook. Tests first against a fake
   GitHub token endpoint. Open question: does `repository_id` survive refresh.
-- [ ] T3 `RepoGateway` port + GitHub adapter: list accessible repos, read tree and
+- [x] T3 `RepoGateway` port + GitHub adapter: list accessible repos, read tree and
   file, save (blobs, tree, commit, fast-forward ref update on a `galley/*` branch,
   open or update PR). Tests against a fake gateway/HTTP.
 - [ ] T4 UI: login, repo picker, file tree, CodeMirror 6 editor, save button with
@@ -94,6 +94,22 @@ CI status in-app.
   Open: whether `repository_id` survives refresh (not in GitHub refresh docs;
   sent as a hint; needs a live app). `/_/` restriction deferred to T5 (Traefik).
 
+- T2 committed: `f55e543` on `feat/mvp-auth`.
+- 2026-10-28 T3 implemented on `feat/mvp-gateway` (delegated writer). Handled
+  as high risk (token handling, writes to user repos; RDD off). One pre-review
+  correction (fast-forward stale working branch, keep file modes, track
+  `.env.example`), then an independent read-only verifier: no blockers, four
+  should-fix items corrected in one scoped pass: a landed save no longer fails
+  when the PR step fails; strict UTF-8 decode (`NotTextError`) with BOM kept;
+  token cache generation counter so logout/invalidate cannot be undone by an
+  in-flight fetch; squash-merged working branch (paper repo allows squash and
+  `delete_branch_on_merge` is false) is deleted and recreated from the default
+  head. Checks: `npm run lint`, `typecheck`, `test` (33 passed), `build`: pass;
+  RED observed; parent spot check lint + test: pass.
+  Known nits left: token cache holds one token (switching repo-scoped and
+  unscoped tokens triggers a server refresh each time); file modes read from a
+  possibly truncated recursive tree; PATCH-422 fallback in catch-up untested.
+
 ## Next step
 
-T3 on `feat/mvp-gateway`, stacked on `feat/mvp-auth`.
+T4 on `feat/mvp-ui`, stacked on `feat/mvp-gateway`.
