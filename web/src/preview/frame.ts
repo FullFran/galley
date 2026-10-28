@@ -55,6 +55,29 @@ function show(html: string, assets: { id: string; type: string; bytes: Uint8Arra
   }
   for (const url of urls) URL.revokeObjectURL(url);
   urls = [...next.values()];
+  fitEquations();
+  // KaTeX fonts load lazily; widths measured before they arrive are too small.
+  void document.fonts.ready.then(fitEquations);
+}
+
+// A display formula wider than the text block is scaled down to fit, never
+// below MIN_EQ_SCALE (past that it scrolls instead). LaTeX lets such a line run
+// slightly into the margin; scaling keeps it readable without overlapping the
+// equation number. Done through the CSSOM, which the frame CSP allows.
+const MIN_EQ_SCALE = 0.75;
+function fitEquations() {
+  if (!page) return;
+  for (const el of page.querySelectorAll<HTMLElement>('.equation .katex-display')) {
+    el.style.fontSize = '';
+    // Some spacing does not scale with the font, so refine a few times.
+    let scale = 1;
+    for (let i = 0; i < 4 && el.clientWidth > 0 && scale > MIN_EQ_SCALE; i++) {
+      const overflow = el.scrollWidth / el.clientWidth;
+      if (overflow <= 1.001) break;
+      scale = Math.max(MIN_EQ_SCALE, (scale / overflow) * 0.995);
+      el.style.fontSize = `${scale.toFixed(3)}em`;
+    }
+  }
 }
 
 window.addEventListener('message', (event) => {
@@ -84,6 +107,7 @@ const SHEET_PX = (210 / 25.4) * 96 + 24;
 const fitWidth = () => {
   const width = window.innerWidth;
   document.body.style.zoom = width > 480 && width < SHEET_PX ? String(width / SHEET_PX) : '';
+  fitEquations();
 };
 window.addEventListener('resize', fitWidth);
 fitWidth();
