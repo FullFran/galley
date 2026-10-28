@@ -67,7 +67,11 @@ export async function createCommit(
   }
   const tree = await gh.request<{ sha: string }>(`${base}/git/trees`, {
     ...opts,
-    body: { base_tree: parent.data.tree.sha, tree: changes.map((c) => toTreeEntry(c, modes.get(c.path), blobs.get(c.path))) },
+    body: {
+      base_tree: parent.data.tree.sha,
+      // A deletion of a file the parent does not have would be refused; there is nothing to delete.
+      tree: changes.filter((c) => !c.delete || modes.has(c.path)).map((c) => toTreeEntry(c, modes.get(c.path), blobs.get(c.path))),
+    },
   });
   const commit = await gh.request<{ sha: string }>(`${base}/git/commits`, {
     ...opts,
@@ -87,7 +91,8 @@ export async function fastForward(gh: GitHubClient, repo: Repository, branch: st
   return res.status !== 422;
 }
 
-/** Existing files keep their mode (for example 100755); new files get 100644. */
+/** Existing files keep their mode (for example 100755); new files get 100644. `sha: null` deletes. */
 function toTreeEntry(change: FileChange, mode = '100644', sha?: string) {
+  if (change.delete) return { path: change.path, mode, type: 'blob', sha: null };
   return sha === undefined ? { path: change.path, mode, type: 'blob', content: change.content } : { path: change.path, mode, type: 'blob', sha };
 }

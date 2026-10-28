@@ -276,6 +276,39 @@ describe('GitHub gateway', () => {
     expect(requests.find((r) => r.method === 'PATCH')?.body).toEqual({ sha: 'c2', force: false });
   });
 
+  it('saves pending deletions as tree entries with sha null, skipping files the branch does not have', async () => {
+    const { gw, requests } = gateway([
+      on('GET', `${R}/git/ref/heads/galley/ana`, () => json({ object: { sha: 'm1' } })),
+      on('GET', `${R}/git/commits/m1`, () => json({ sha: 'm1', tree: { sha: 'tree-m1' } })),
+      on('GET', `${R}/git/trees/tree-m1?recursive=1`, () =>
+        json({ truncated: false, tree: [{ path: 'old.qmd', type: 'blob', mode: '100755', sha: 'b1' }] }),
+      ),
+      on('POST', `${R}/git/trees`, () => json({ sha: 'tree-new' }, 201)),
+      on('POST', `${R}/git/commits`, () => json({ sha: 'c2' }, 201)),
+      on('PATCH', `${R}/git/refs/heads/galley/ana`, () => json({ object: { sha: 'c2' } })),
+      on('GET', `${R}/pulls?state=open&head=octo%3Agalley%2Fana&per_page=1`, () => json([{ html_url: 'u' }])),
+    ]);
+
+    await gw.save(
+      repo,
+      [
+        { path: 'index.qmd', content: 'restored' },
+        { path: 'old.qmd', content: '', delete: true },
+        { path: 'never.qmd', content: '', delete: true },
+      ],
+      'Restore a version',
+      'm1',
+    );
+
+    expect(requests.find((r) => r.url === `${R}/git/trees`)?.body).toEqual({
+      base_tree: 'tree-m1',
+      tree: [
+        { path: 'index.qmd', mode: '100644', type: 'blob', content: 'restored' },
+        { path: 'old.qmd', mode: '100755', type: 'blob', sha: null },
+      ],
+    });
+  });
+
   it('fast-forwards an existing branch with force false and reuses its open pull request', async () => {
     const { gw, requests } = gateway([
       on('GET', `${R}/git/ref/heads/galley/ana`, () => json({ object: { sha: 'b1' } })),
