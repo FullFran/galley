@@ -27,6 +27,8 @@ export interface ShellContext {
   proposals?: { count: number; mine: number };
   /** Unread comments in the open repository (workspace only). */
   comments?: { unread: number };
+  /** Unread chat messages in the open repository (workspace only). */
+  chat?: { unread: number };
   sidebar: SidebarControl;
   onNavigate: (id: NavId) => void;
   /** The repository switcher (the repository list). */
@@ -160,12 +162,16 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
   };
 
   const unreadComments = shell.comments?.unread ?? 0;
+  const unreadChat = shell.chat?.unread ?? 0;
+  const badge = (item: NavItem) => (item.id === 'comments' ? unreadComments : item.id === 'chat' ? unreadChat : 0);
   const itemLabel = (item: NavItem) =>
     item.id === 'proposals' && shell.proposals
       ? t.nav.proposalsCount(shell.proposals.count)
       : item.id === 'comments' && unreadComments > 0
         ? t.comments.unreadNav(unreadComments)
-        : navLabel(item.id, t);
+        : item.id === 'chat' && unreadChat > 0
+          ? t.chat.unreadNav(unreadChat)
+          : navLabel(item.id, t);
 
   return (
     <UiContext.Provider value={{ openShortcuts: () => setShortcuts(true), downloadLatestPdf }}>
@@ -270,9 +276,9 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
                               {proposalsMeta()}
                             </span>
                           )}
-                          {item.id === 'comments' && unreadComments > 0 && (
+                          {badge(item) > 0 && (
                             <span class="nav-meta nav-badge" aria-hidden="true">
-                              {unreadComments}
+                              {badge(item)}
                             </span>
                           )}
                         </button>

@@ -851,6 +851,65 @@ typed errors for 401/403/404/409/413/422/429/5xx). The anchor at creation uses
 the editor's current text, so with unsaved edits above the selection the lines
 can differ from the head commit until the server re-anchors (phase 2).
 
+## Drafts in the editor
+
+Unsaved edits survive a closed tab, a crash or a change of device (see
+"Drafts API"):
+
+- **In this browser**: about one second after typing stops, every edited file
+  is kept in IndexedDB (`galley-drafts`, per user, repository and path, with
+  the commit its text started from). IndexedDB errors are swallowed; in a
+  private window drafts last for the visit only. The header then reads
+  "Draft saved · 2 unsaved files".
+- **On reopening** the repository, the drafts come back into the editor with a
+  short "Restored your unsaved changes from <time>" notice and an Undo that
+  discards them. When the file changed in the repository since the draft's
+  text started, the draft is merged with the current text by the same
+  three-way merge as "Bring them in" (base = the file at the draft's commit,
+  read by SHA); same-line changes open the usual conflict choice view. A draft
+  never silently replaces repository changes, and a buffer already edited in
+  the tab is never overwritten.
+- **On the server** (Preferences → Editor → "Keep drafts on the server", on by
+  default): about five seconds after the local write, only when the text
+  changed, the draft is sent with `If-Match` of the version last seen (a first
+  copy is a create). A 409 means another device wrote a newer draft: galley
+  shows "A newer draft of <file> from <device> (<time>) exists · Use it / Keep
+  mine" and pauses the server copy of that file until you choose; "Keep mine"
+  replaces it against the version shown. Opening a repository on another
+  device offers that device's missing server drafts (file, device and age) to
+  restore. The device is a coarse label such as "Firefox on Linux". Turning
+  the preference off keeps drafts in this browser only and deletes this
+  repository's server copies.
+- **After "Save for review"**, the saved files' drafts are deleted, locally and
+  on the server (per path); files edited again during the save keep theirs.
+
+Code: `web/src/drafts/` (`store.ts` port with IndexedDB and in-memory
+adapters, `http.ts` gateway, `sync.ts` debounce and conflict handling,
+`restore.ts`) and `web/src/containers/useDrafts.tsx`. Local drafts stay in the
+browser until saved or discarded, also after signing out.
+
+## Chat
+
+Review → Chat in the sidebar (with the unread count) opens the paper's chat in
+the right-hand panel; only one of comments and chat is open at a time. It
+shows the history oldest first ("Show earlier messages" pages back with
+`before_seq`), each message as plain text with its author and time, your own
+ones subtly framed. Enter sends, Shift+Enter starts a new line; the composer
+refuses blank text, more than 4 KB of UTF-8 and NUL or bidi controls before
+asking the server. An open panel in a visible tab marks messages read.
+
+Live messages arrive over `EventSource` (`withCredentials: true`) at
+`/api/galley/repos/{repo_id}/chat/stream?last_event_id=<newest seq held>`,
+opened after the history loads. Any error or `event: close` closes the
+connection and reopens it after an exponential backoff (1 s doubling to 60 s,
+reset after a good connection) from the newest message held; `event: resync`
+reloads the history. A tab hidden for two minutes closes the stream and
+reopens it when shown again; leaving the repository or signing out closes it.
+The API origin is already in the CSP `connect-src`, which covers EventSource.
+The panel's code and styles load on first open (`web/src/ui/chat/`); the
+gateway, stream and unread badge are in `web/src/chat/` and
+`web/src/containers/Chat.tsx`.
+
 ## Licence
 
 MIT. See [LICENSE](LICENSE).

@@ -52,6 +52,9 @@ proposals and review. No real-time co-editing of the same file.
 10. **Vim mode** toggle (CodeMirror keymap).
 11. **Chat per paper** on PocketBase realtime (persistent history, private,
     encrypted at rest like drafts, unread counts), not P2P.
+    Server API done (Go SSE stream instead of PocketBase realtime); UI done in
+    `feat/drafts-chat-ui`: Review → Chat with unread badge, lazy panel,
+    paginated history, composer (4 KB), EventSource with backoff and resync.
 12. Also from the research: "accept all suggestions", find and replace across
     files, print-to-PDF from the preview as an unofficial copy.
 
