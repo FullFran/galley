@@ -6,7 +6,9 @@ import { markdownKeymap } from '@codemirror/lang-markdown';
 import { yaml } from '@codemirror/lang-yaml';
 import { markdownSupport } from './editorStyle';
 import { loadVim, modeExtension } from './editorModes';
+import { vimSave } from './vimCommands';
 import type { AssistOptions } from './editorAssist';
+import { commentsExtension, setCommentMarks, type CommentHandlers, type CommentMark } from './editorComments';
 
 type AssistModule = typeof import('./editorAssist');
 let assistChunk: Promise<AssistModule> | undefined;
@@ -32,10 +34,23 @@ export interface EditorProps {
   /** Vim key bindings; the Vim package loads only when this is true. */
   vim?: boolean;
   onVimFailed?: () => void;
+  /** Vim `:w`, `:wq` and `:x`: open Save for review. */
+  onSave?: () => void;
   /** Autocomplete, warnings and go to definition. */
   assist?: Omit<AssistOptions, 'path'>;
   /** Changes when the project index is rebuilt, so warnings are checked again. */
   indexVersion?: number;
+  /** Comment actions and the lines that have open threads. */
+  comments?: CommentHandlers & { marks: CommentMark[] };
+  /** A change applied as an ordinary edit (undoable); `seq` changes for every edit. */
+  applyEdit?: { from: number; to: number; insert: string; seq: number };
+  /** Files dropped onto the text, with the document position of the drop. */
+  onDropFiles?: (files: File[], pos: number) => void;
+  /**
+   * Inserts `text` at `at` (or the cursor); `seq` changes for every insertion.
+   * `block` puts it in a paragraph of its own (a figure).
+   */
+  insert?: { text: string; at?: number; block?: boolean; seq: number };
 }
 
 function language(path: string): Extension {
@@ -81,7 +96,19 @@ const theme = EditorView.theme({
 });
 
 /** CodeMirror 6 editor. Owns the EditorView for its lifetime. */
-export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim = false, onVimFailed, assist, indexVersion }: EditorProps) {
+export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim = false, onVimFailed, onSave, assist, indexVersion, onDropFiles, insert, comments, applyEdit }: EditorProps) {
+  const commentsRef = useRef(comments);
+  commentsRef.current = comments;
+  const commenting = useRef(new Compartment());
+  const commentExtension = (m: EditorMode): Extension =>
+    commentsRef.current
+      ? commentsExtension(m, {
+          onComment: (...a) => commentsRef.current?.onComment(...a),
+          onOpenThread: (id) => commentsRef.current?.onOpenThread(id),
+          onShowInPreview: (line) => commentsRef.current?.onShowInPreview(line),
+          labels: () => commentsRef.current?.labels() ?? { comment: '', showInPreview: '', thread: '' },
+        })
+      : [];
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView>(undefined);
   const onChangeRef = useRef(onChange);
@@ -90,6 +117,10 @@ export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim 
   assistRef.current = assist;
   const onVimFailedRef = useRef(onVimFailed);
   onVimFailedRef.current = onVimFailed;
+  const onDropRef = useRef(onDropFiles);
+  onDropRef.current = onDropFiles;
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
   // The accessible name, the mode and Vim change without recreating the view.
   const labelling = useRef(new Compartment());
   const looks = useRef(new Compartment());
@@ -109,17 +140,31 @@ export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim 
         extensions: [
           // Vim first, so its keys win over the default keymap.
           keys.current.of([]),
+          vimSave.of(() => onSaveRef.current?.()),
           theme,
           looks.current.of(modeExtension(mode)),
           history(),
           drawSelection(),
           EditorView.lineWrapping,
           helpers.current.of([]),
+          commenting.current.of(commentExtension(mode)),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           language(path),
           labelling.current.of(named(label)),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+          }),
+          // Dropped files (figures) go to the parent with the drop position;
+          // dropped text keeps CodeMirror's own handling.
+          EditorView.domEventHandlers({
+            drop(event, view) {
+              const files = [...(event.dataTransfer?.files ?? [])];
+              if (files.length === 0 || !onDropRef.current) return false;
+              event.preventDefault();
+              const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head;
+              onDropRef.current(files, pos);
+              return true;
+            },
           }),
         ],
       }),
@@ -157,8 +202,24 @@ export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim 
   }, [label]);
 
   useEffect(() => {
-    viewRef.current?.dispatch({ effects: looks.current.reconfigure(modeExtension(mode)) });
+    viewRef.current?.dispatch({
+      effects: [looks.current.reconfigure(modeExtension(mode)), commenting.current.reconfigure(commentExtension(mode))],
+    });
   }, [mode]);
+
+  const marks = comments?.marks;
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: setCommentMarks.of(marks ?? []) });
+  }, [marks]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !applyEdit) return;
+    const length = view.state.doc.length;
+    if (applyEdit.from < 0 || applyEdit.to > length || applyEdit.to < applyEdit.from) return;
+    view.dispatch({ changes: { from: applyEdit.from, to: applyEdit.to, insert: applyEdit.insert }, userEvent: 'input.suggestion' });
+    view.focus();
+  }, [applyEdit?.seq]);
 
   useEffect(() => {
     if (!vim) {
@@ -188,6 +249,28 @@ export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim 
     view.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 16 }) });
     view.focus();
   }, [jumpTo?.seq]);
+
+  // An insertion made before this editor mounted (another file) is not repeated here.
+  const insertedSeq = useRef(insert?.seq);
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !insert || insert.seq === insertedSeq.current) return;
+    insertedSeq.current = insert.seq;
+    const doc = view.state.doc;
+    const at = Math.min(Math.max(0, insert.at ?? view.state.selection.main.head), doc.length);
+    let text = insert.text;
+    let caret = text.length;
+    if (insert.block) {
+      const before = doc.sliceString(Math.max(0, at - 2), at);
+      const after = doc.sliceString(at, at + 2);
+      const lead = at === 0 || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+      const tail = at === doc.length ? '\n' : after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+      text = `${lead}${text}${tail}`;
+      caret = text.length;
+    }
+    view.dispatch({ changes: { from: at, insert: text }, selection: { anchor: at + caret }, scrollIntoView: true });
+    view.focus();
+  }, [insert?.seq]);
 
   return <div class="editor" ref={host} data-mode={mode} />;
 }

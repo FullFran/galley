@@ -373,3 +373,11 @@ code {
   border: 0;
   border-top: 0.4pt solid var(--rule);
 }
+
+/* A block galley asked to reveal ("Show in preview"). */
+.galley-flash {
+  outline: 2px solid #d4a017;
+  outline-offset: 2px;
+  background-color: rgba(255, 214, 10, 0.18);
+  transition: background-color 0.4s;
+}

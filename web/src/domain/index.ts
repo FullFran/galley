@@ -16,6 +16,7 @@ export type {
   ReviewGateway,
   ReviewState,
   ReviewSubmission,
+  ReviewThreadState,
 } from './review';
 export type { RejectedAction } from './errors';
 export {

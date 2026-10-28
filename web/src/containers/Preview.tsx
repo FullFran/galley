@@ -7,7 +7,7 @@ import { readAutoCompile, writeAutoCompile } from '../compile/preference';
 import { describeError, textsEdited, type Buffers } from '../workspace/model';
 import { useT } from '../i18n';
 import { CompileBar } from '../ui/CompileBar';
-import { PreviewFrame } from '../ui/PreviewFrame';
+import { PreviewFrame, type PreviewFrameProps } from '../ui/PreviewFrame';
 
 export interface PreviewProps {
   gateway: RepoGateway;
@@ -24,6 +24,10 @@ export interface PreviewProps {
   scrollTo?: { id?: string; text: string; seq: number };
   /** Bumped by "Recompile now" in the header ⋯ menu. */
   recompileSeq?: number;
+  /** Selections and double-clicks in the preview, and blocks to reveal (source tags). */
+  onSelection?: PreviewFrameProps['onSelection'];
+  onJump?: PreviewFrameProps['onJump'];
+  reveal?: PreviewFrameProps['reveal'];
 }
 
 const DEBOUNCE_MS = 300;
@@ -36,7 +40,7 @@ const DEBOUNCE_MS = 300;
  * stays out of the initial bundle, and a document that takes too long to
  * render cannot freeze the editor.
  */
-export function Preview({ gateway, repo, headSha, files, buffers, entry, autoCompileDefault = false, scrollTo, recompileSeq }: PreviewProps) {
+export function Preview({ gateway, repo, headSha, files, buffers, entry, autoCompileDefault = false, scrollTo, recompileSeq, ...frameLinks }: PreviewProps) {
   const [result, setResult] = useState<RenderResult & { seq: number }>();
   const t = useT();
   // Kept as data, so the text follows a language switch.
@@ -158,6 +162,7 @@ export function Preview({ gateway, repo, headSha, files, buffers, entry, autoCom
               : t.preview.unavailable(describeError(status.error, t))
         }
         scrollTo={scrollTo}
+        {...frameLinks}
       />
     </>
   );

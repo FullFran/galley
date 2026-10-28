@@ -4,6 +4,7 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { tags } from '@lezer/highlight';
 import type { EditorMode } from '../shell/prefs';
 import { highlightStyle } from './editorStyle';
+import { defineSaveCommands } from './vimCommands';
 
 // The two editor looks. Code: monospace, line numbers, full syntax colours.
 // Writing: a proportional paper font at 16px with 1.7 line height, lines of
@@ -75,7 +76,13 @@ let vimModule: Promise<typeof import('@replit/codemirror-vim')> | undefined;
  * chunk), so people who never turn Vim on never download it.
  */
 export function loadVim(): Promise<Extension> {
-  vimModule ??= import('@replit/codemirror-vim');
-  vimModule.catch(() => (vimModule = undefined));
+  if (!vimModule) {
+    vimModule = import('@replit/codemirror-vim').then((m) => {
+      // `:w`, `:wq` and `:x` open Save for review (Vim is a global singleton).
+      defineSaveCommands(m.Vim);
+      return m;
+    });
+    vimModule.catch(() => (vimModule = undefined));
+  }
   return vimModule.then((m) => m.vim());
 }

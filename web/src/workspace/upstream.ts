@@ -1,4 +1,4 @@
-import { AuthRequiredError, ConflictError, type BlobInfo, type RepoGateway, type Repository, type UpstreamStatus } from '../domain';
+import { AuthRequiredError, ConflictError, type BlobInfo, type FileChange, type RepoGateway, type Repository, type UpstreamStatus } from '../domain';
 import { en, type Messages } from '../i18n/en';
 import { describeError, runSave, unsavedChanges, type Buffers, type SaveOutcome } from './model';
 import { merge3 } from './merge3';
@@ -216,7 +216,8 @@ export type SyncedSaveOutcome =
 
 /**
  * Every save first brings the default branch in, merges its changes into
- * edited files, then commits on top of the result. Open conflicts, a merge
+ * edited files, then commits on top of the result; `extra` (uploaded files)
+ * joins the same commit. Open conflicts, a merge
  * conflict on GitHub, or lines changed on both sides stop the save.
  */
 export async function saveWithUpstream(
@@ -226,6 +227,7 @@ export async function saveWithUpstream(
   message: string,
   headSha: string,
   t: Messages = en,
+  extra: FileChange[] = [],
 ): Promise<SyncedSaveOutcome> {
   const unresolved = unresolvedPaths(buffers);
   if (unresolved.length) return { kind: 'unresolved', paths: unresolved };
@@ -238,11 +240,11 @@ export async function saveWithUpstream(
     return { kind: 'error', message: describeError(err, t) };
   }
   if (brought.kind === 'conflict') return { kind: 'upstream-conflict' };
-  if (brought.kind === 'current') return runSave(gateway, repo, buffers, message, headSha, t);
+  if (brought.kind === 'current') return runSave(gateway, repo, buffers, message, headSha, t, extra);
   const { upstream } = brought;
   const rebased = rebase(buffers, upstream.bases, buffers);
   if (rebased.conflicted.length > 0) return { kind: 'upstream-conflicted', upstream, paths: rebased.conflicted };
-  const outcome = await runSave(gateway, repo, rebased.buffers, message, upstream.headSha, t);
+  const outcome = await runSave(gateway, repo, rebased.buffers, message, upstream.headSha, t, extra);
   return { ...outcome, upstream, merged: rebased.merged };
 }
 

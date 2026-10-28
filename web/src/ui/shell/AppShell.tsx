@@ -4,7 +4,7 @@ import type { Person, Repository } from '../../domain';
 import { useT } from '../../i18n';
 import { navLabel, visibleNav, type GroupId, type NavId, type NavItem } from '../../shell/nav';
 import { autoOpen, groupKeyAction, isGroupOpen, readGroups, toggleGroup, writeGroups, type SidebarMode } from '../../shell/navGroups';
-import { matchShortcut, typingInField } from '../../shell/shortcuts';
+import { matchShortcut, typingAt } from '../../shell/shortcuts';
 import type { SidebarControl } from '../../shell/useSidebar';
 import { AboutDialog } from './AboutDialog';
 import { AccountMenu } from './AccountMenu';
@@ -23,6 +23,8 @@ export interface ShellContext {
   user?: Person;
   /** Open proposals of the repository, and how many are the user's own. */
   proposals?: { count: number; mine: number };
+  /** Unread comments in the open repository (workspace only). */
+  comments?: { unread: number };
   sidebar: SidebarControl;
   onNavigate: (id: NavId) => void;
   /** The repository switcher (the repository list). */
@@ -122,7 +124,7 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (matchShortcut(e, typingInField(e.target)) !== 'help') return;
+      if (matchShortcut(e, typingAt(e)) !== 'help') return;
       e.preventDefault();
       setShortcuts(true);
     };
@@ -148,8 +150,13 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
     return mine > 0 ? `${count} · ${t.nav.mine(mine)}` : `${count}`;
   };
 
+  const unreadComments = shell.comments?.unread ?? 0;
   const itemLabel = (item: NavItem) =>
-    item.id === 'proposals' && shell.proposals ? t.nav.proposalsCount(shell.proposals.count) : navLabel(item.id, t);
+    item.id === 'proposals' && shell.proposals
+      ? t.nav.proposalsCount(shell.proposals.count)
+      : item.id === 'comments' && unreadComments > 0
+        ? t.comments.unreadNav(unreadComments)
+        : navLabel(item.id, t);
 
   return (
     <UiContext.Provider value={{ openShortcuts: () => setShortcuts(true) }}>
@@ -252,6 +259,11 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
                           {item.id === 'proposals' && proposalsMeta() && (
                             <span class="nav-meta" aria-hidden="true">
                               {proposalsMeta()}
+                            </span>
+                          )}
+                          {item.id === 'comments' && unreadComments > 0 && (
+                            <span class="nav-meta nav-badge" aria-hidden="true">
+                              {unreadComments}
                             </span>
                           )}
                         </button>

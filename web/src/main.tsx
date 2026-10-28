@@ -3,6 +3,7 @@ import { App } from './App';
 import { createSession } from './auth/session';
 import { createGitHubGateway } from './github/gateway';
 import { createGitHubReviewGateway } from './github/review';
+import { createHttpCommentsGateway } from './comments/http';
 import { LocaleProvider } from './i18n/LocaleProvider';
 import './styles.css';
 
@@ -13,9 +14,10 @@ if (!root) {
 const session = createSession();
 const gateway = createGitHubGateway({ tokens: session });
 const reviews = createGitHubReviewGateway({ tokens: session });
+const comments = createHttpCommentsGateway();
 render(
   <LocaleProvider>
-    <App session={session} gateway={gateway} reviews={reviews} />
+    <App session={session} gateway={gateway} reviews={reviews} comments={comments} />
   </LocaleProvider>,
   root,
 );

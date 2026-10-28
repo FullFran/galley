@@ -153,7 +153,15 @@ edit it, but anyone with write access could still change it on GitHub).
     `editor.default_mode`, lazy Vim (roadmap 10), autocomplete, inline
     warnings and go to definition; credit reads "FullFran". Implemented and
     checked; pending review, commit and PR.
-  - [ ] CX2b: paper outline polish, figure upload, New section (roadmap 13).
+  - [x] CX2b (`feat/cx2-structure`): figure upload into `uploads` folders
+    (Files, drop on folders and on the editor, preview, Replace / Keep both,
+    Insert figure, binary blobs in the single save), New section / New
+    subsection from the Outline (roadmap 13, `structure: admin|write`),
+    friendly names with path tooltips. Implemented and checked; pending
+    review, commit and PR.
+- [ ] CX-C Comments UI phase 1, review thread resolve, click-to-jump
+  (`feat/comments-ui`; roadmap 2, 3, 5). Route: delegated (2+ non-trivial
+  files). Implemented and checked; pending review, commit and PR.
 - [ ] CX3 Guided tour.
 - [ ] CX4 References manager.
 - [ ] C4 Drafts.
@@ -511,6 +519,59 @@ edit it, but anyone with write access could still change it on GitHub).
     clean merge (both changes kept, notice); 0 failed, no CSP violations.
   - Bundle: main 269 → 278 kB (gzip 92.5 → 95.4); lazy chunks unchanged.
 
+- 2026-10-28, CX-C comments UI (`feat/comments-ui`):
+  - `CommentsGateway` port + HTTP adapter (cookie credentials, CSRF header,
+    typed 401/403/404/409/413/422/429/5xx errors, field-by-field response
+    checks); anchors with 32-character quote context; renderer `data-src`
+    tags through includes and front matter; validated frame `selection`,
+    `jump` and `reveal` messages; threads panel; suggestions applied to the
+    buffer only; GraphQL resolve/unresolve of review threads.
+  - RED observed (missing modules / functions) for the adapter, anchors,
+    preview mapping, suggestions, source tags, frame messages, panel gating
+    and GraphQL; GREEN: 60 files, 593 tests.
+  - Headless (`pw/comments-check.mjs`, `shots-comments/`): 43 checks, 0
+    failed, no CSP violations (the API and GraphQL are already in
+    `connect-src`).
+- 2026-10-28, CX2b (`feat/cx2-structure`). Route: delegated writer (2+
+  non-trivial files: gateway, upstream save, workspace, outline, files,
+  dialogs, catalogs).
+  - Uploads: `web/src/uploads/upload.ts` (name cleaning, type/size check before
+    reading, signature check after reading, Keep both `-2`, figure markdown);
+    the gateway save creates `POST /git/blobs` (base64) for binary changes and
+    puts them with the text in one tree and one commit, fast-forward only,
+    after the usual merge-before-save; `FileChange` gained `encoding:
+    'base64'`. Pending uploads count as unsaved, show under "In this save"
+    with Remove, and the preview reads them before they are saved. App CSP
+    `img-src` gained `blob:` for the preview `<img>`.
+  - New section: `web/src/structure/` (slug, include list and convention,
+    plan with blocking problems and warnings, permission) and
+    `web/src/config/configEdit.ts` (comment-keeping `labels`/`editable`
+    edits, verified by re-parsing, else a full rewrite). Numbered includes:
+    a new file between `02-` and `03-` becomes `02a-` (never renumber; the
+    include list is the order; the folder still lists in paper order), the
+    next number at the end, the one before the first at the start. Without
+    includes: `sections/_slug.qmd`. Sections and subsections are buffers in
+    the next save; the default commit message is the plain summary.
+    `structure: admin|write` in the schema, settings form and docs.
+  - Friendly names: Outline rows and the main file carry the path as
+    tooltip; Files already did.
+  - Tests first: RED observed for 5 tests (gateway blobs, two upstream
+    uploads tests, two schema `structure` tests) and missing-module failures
+    for `upload`, `includes`, `convention`, `permission`, `configEdit` and
+    `summary`; then GREEN: 59 files, 582 tests.
+  - Headless Chromium against the production build with mocked APIs
+    (`pw/cx2b-check.mjs`, screenshots in `shots-cx2b/`, light/dark at
+    1440/390): 0 failed checks, no CSP violations, no page errors. Checked:
+    labels and tooltips, Upload to figures/, blob preview, Insert figure with
+    an escaped caption, Keep both, a refused type, drop into the editor at the
+    drop point, the save summary and Remove, uploads counted as unsaved, the
+    save (two base64 blobs, one tree, one commit), a duplicate id blocking,
+    `01a-methods.qmd` proposed after Introduction, and the admin save with
+    exactly the new file, the include and the `.galley.yml` label (comments
+    kept) under the message "New section “Methods” after “Introduction”".
+  - Bundle: main 278.0 → 308.6 kB (gzip 95.4 → 106.9; about half is the new
+    en + es copy); the plan module with js-yaml edits is a lazy 6 kB chunk.
+
 ## Next step
 
-Review, commit and open the CX2a pull request; then CX2b.
+Review, commit and open the CX2b pull request.

@@ -9,19 +9,118 @@ export function splitFrontMatter(text: string): { yaml?: string; body: string } 
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})/;
 
-/** Drops `<!-- ... -->` in one linear pass; an unclosed comment stays as text. */
-function removeComments(text: string): string {
-  let out = '';
-  let pos = 0;
+/** Where a line of an expanded document comes from (1-based line). */
+export interface Origin {
+  path: string;
+  line: number;
+}
+
+/** Text with the origin of each of its lines (`origins.length` is its line count). */
+export interface Mapped {
+  text: string;
+  origins: Origin[];
+}
+
+/** Offsets of each line start. */
+function lineStarts(text: string): number[] {
+  const starts = [0];
+  for (let i = text.indexOf('\n'); i >= 0; i = text.indexOf('\n', i + 1)) starts.push(i + 1);
+  return starts;
+}
+
+function lineAt(starts: number[], offset: number): number {
+  let lo = 0;
+  let hi = starts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if ((starts[mid] ?? 0) <= offset) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}
+
+/** Builds text from slices of mapped sources, keeping each line's origin. */
+class MappedBuilder {
+  text = '';
+  origins: Origin[] = [];
+
+  append(piece: Mapped) {
+    if (piece.text === '') return;
+    const [first, ...rest] = piece.origins;
+    if (this.origins.length === 0 || this.text.endsWith('\n')) {
+      // The current last line is empty: it takes the origin of what starts it.
+      if (this.origins.length > 0) this.origins.pop();
+      if (first) this.origins.push(first);
+    }
+    for (const o of rest) this.origins.push(o);
+    this.text += piece.text;
+  }
+
+  result(fallback: Origin): Mapped {
+    return { text: this.text, origins: this.origins.length ? this.origins : [fallback] };
+  }
+}
+
+/** A slice of a mapped text, with the origins of the lines it touches. */
+function sliceMapped(source: Mapped, starts: number[], from: number, to: number): Mapped {
+  if (to <= from) return { text: '', origins: [] };
+  return { text: source.text.slice(from, to), origins: source.origins.slice(lineAt(starts, from), lineAt(starts, to) + 1) };
+}
+
+function plainMapped(text: string, path: string, firstLine: number): Mapped {
+  return { text, origins: lineStarts(text).map((_, i) => ({ path, line: firstLine + i })) };
+}
+
+/** Comment ranges `<!-- ... -->` within from..to, in one linear pass; an unclosed comment stays as text. */
+function commentRanges(text: string, from: number, to: number, out: [number, number][]) {
+  let pos = from;
   for (;;) {
     const open = text.indexOf('<!--', pos);
-    if (open < 0) break;
+    if (open < 0 || open >= to) return;
     const close = text.indexOf('-->', open + 4);
-    if (close < 0) break;
-    out += text.slice(pos, open);
+    if (close < 0 || close + 3 > to) return;
+    out.push([open, close + 3]);
     pos = close + 3;
   }
-  return out + text.slice(pos);
+}
+
+/** The kept parts of `text`: everything but HTML comments outside fenced code. */
+function commentFreeSegments(text: string): [number, number][] {
+  const removed: [number, number][] = [];
+  let fence: string | undefined;
+  let proseStart: number | undefined;
+  let pos = 0;
+  for (;;) {
+    const nl = text.indexOf('\n', pos);
+    const end = nl < 0 ? text.length : nl;
+    const line = text.slice(pos, end);
+    const marker = FENCE.exec(line)?.[1];
+    if (fence) {
+      if (marker && marker[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = undefined;
+    } else if (marker) {
+      if (proseStart !== undefined) commentRanges(text, proseStart, Math.max(proseStart, pos - 1), removed);
+      proseStart = undefined;
+      fence = marker;
+    } else proseStart ??= pos;
+    if (nl < 0) break;
+    pos = nl + 1;
+  }
+  if (proseStart !== undefined) commentRanges(text, proseStart, text.length, removed);
+  const kept: [number, number][] = [];
+  let last = 0;
+  for (const [a, b] of removed) {
+    kept.push([last, a]);
+    last = b;
+  }
+  kept.push([last, text.length]);
+  return kept;
+}
+
+function stripCommentsMapped(source: Mapped): Mapped {
+  const starts = lineStarts(source.text);
+  const out = new MappedBuilder();
+  for (const [a, b] of commentFreeSegments(source.text)) out.append(sliceMapped(source, starts, a, b));
+  return out.result(source.origins[0] ?? { path: '', line: 1 });
 }
 
 /**
@@ -29,27 +128,9 @@ function removeComments(text: string): string {
  * (sources, TODOs) and are never part of the output.
  */
 export function stripComments(text: string): string {
-  const lines = text.split('\n');
-  const out: string[] = [];
-  let prose: string[] = [];
-  let fence: string | undefined;
-  const flush = () => {
-    if (prose.length) out.push(removeComments(prose.join('\n')));
-    prose = [];
-  };
-  for (const line of lines) {
-    const marker = FENCE.exec(line)?.[1];
-    if (fence) {
-      out.push(line);
-      if (marker && marker[0] === fence[0] && marker.length >= fence.length && line.trim() === marker) fence = undefined;
-    } else if (marker) {
-      flush();
-      fence = marker;
-      out.push(line);
-    } else prose.push(line);
-  }
-  flush();
-  return out.join('\n');
+  return commentFreeSegments(text)
+    .map(([a, b]) => text.slice(a, b))
+    .join('');
 }
 
 /** Joins and normalizes a repository path; undefined when it leaves the repository. */
@@ -124,32 +205,59 @@ interface Budget {
  * length are capped. Comments are stripped from every file first, so a
  * commented-out include is ignored.
  */
-export async function expandIncludes(
+export async function expandIncludes(text: string, path: string, project: ProjectSource, diagnostics: Diagnostic[]): Promise<string> {
+  return (await expandIncludesMapped(text, path, 1, project, diagnostics)).text;
+}
+
+/**
+ * `expandIncludes` that also says which file and line each output line comes
+ * from (`firstLine`: the line of `text` in `path`, after any front matter).
+ */
+export function expandIncludesMapped(
   text: string,
+  path: string,
+  firstLine: number,
+  project: ProjectSource,
+  diagnostics: Diagnostic[],
+): Promise<Mapped> {
+  return expand(plainMapped(text, path, firstLine), path, project, diagnostics, [path], {
+    includes: 0,
+    length: text.length,
+    reported: new Set(),
+  });
+}
+
+/** The line of `whole` on which `body` (its tail, after the front matter) starts. */
+export const bodyFirstLine = (whole: string, body: string) => lineStarts(whole.slice(0, whole.length - body.length)).length;
+
+async function expand(
+  raw: Mapped,
   path: string,
   project: ProjectSource,
   diagnostics: Diagnostic[],
-  stack: string[] = [path],
-  budget: Budget = { includes: 0, length: text.length, reported: new Set() },
-): Promise<string> {
-  const source = stripComments(text);
+  stack: string[],
+  budget: Budget,
+): Promise<Mapped> {
+  const mapped = stripCommentsMapped(raw);
+  const source = mapped.text;
+  const starts = lineStarts(source);
   const known = new Set(project.files);
   const once = (key: string, message: string) => {
     if (budget.reported.has(key)) return;
     budget.reported.add(key);
     diagnostics.push({ severity: 'warning', path, message });
   };
-  let out = '';
+  const out = new MappedBuilder();
   let last = 0;
   for (const code of shortcodes(source)) {
     if (code.escaped || code.name !== 'include') continue;
-    out += source.slice(last, code.start);
+    out.append(sliceMapped(mapped, starts, last, code.start));
     last = code.end;
-    const raw = code.args.replace(/^["']|["']$/g, '');
-    const candidates = [resolvePath(dirname(path), raw), resolvePath('', raw)];
+    const rawPath = code.args.replace(/^["']|["']$/g, '');
+    const candidates = [resolvePath(dirname(path), rawPath), resolvePath('', rawPath)];
     const target = candidates.find((c) => c !== undefined && known.has(c));
     if (!target) {
-      diagnostics.push({ severity: 'warning', path, message: `Included file not found: ${raw}` });
+      diagnostics.push({ severity: 'warning', path, message: `Included file not found: ${rawPath}` });
       continue;
     }
     if (stack.includes(target)) {
@@ -178,9 +286,11 @@ export async function expandIncludes(
       continue;
     }
     budget.length += body.length;
-    out += await expandIncludes(body, target, project, diagnostics, [...stack, target], budget);
+    const child = plainMapped(body, target, bodyFirstLine(included, body));
+    out.append(await expand(child, target, project, diagnostics, [...stack, target], budget));
   }
-  return out + source.slice(last);
+  out.append(sliceMapped(mapped, starts, last, source.length));
+  return out.result(mapped.origins[0] ?? { path, line: 1 });
 }
 
 /**
@@ -188,14 +298,21 @@ export async function expandIncludes(
  * is Quarto's escape for a literal shortcode.
  */
 export function removeShortcodes(text: string, diagnostics: Diagnostic[]): string {
+  return removeShortcodesMapped(plainMapped(text, '', 1), diagnostics).text;
+}
+
+/** `removeShortcodes` keeping the origin of each line. */
+export function removeShortcodesMapped(source: Mapped, diagnostics: Diagnostic[]): Mapped {
+  const text = source.text;
+  const starts = lineStarts(text);
   const reported = new Set<string>();
-  let out = '';
+  const out = new MappedBuilder();
   let last = 0;
   for (const code of shortcodes(text)) {
-    out += text.slice(last, code.start);
+    out.append(sliceMapped(source, starts, last, code.start));
     last = code.end;
     if (code.escaped) {
-      out += text.slice(code.start + 1, code.end - 1);
+      out.append(sliceMapped(source, starts, code.start + 1, code.end - 1));
       continue;
     }
     if (code.name !== 'pagebreak' && !reported.has(code.name)) {
@@ -203,5 +320,6 @@ export function removeShortcodes(text: string, diagnostics: Diagnostic[]): strin
       diagnostics.push({ severity: 'info', message: `The {{< ${code.name} >}} shortcode is not shown in the preview.` });
     }
   }
-  return out + text.slice(last);
+  out.append(sliceMapped(source, starts, last, text.length));
+  return out.result(source.origins[0] ?? { path: '', line: 1 });
 }

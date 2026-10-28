@@ -118,3 +118,83 @@ export function createReadyGate() {
     },
   };
 }
+
+// Source tags and selection (comments from the preview, click-to-jump). The
+// renderer tags each block with `data-src="path:line"`; the frame reports
+// selections and double-clicks with those tags, and galley asks it to reveal
+// the block of a source line. Paths follow the comment API's rules.
+
+/** Frame to parent: the reader selected text (empty text: the selection was cleared). */
+export const FRAME_SELECTION = 'galley-preview:selection';
+/** Frame to parent: the reader double-clicked a block; jump to its source. */
+export const FRAME_JUMP = 'galley-preview:jump';
+/** Parent to frame: scroll to the block of this source line and flash it. */
+export const PREVIEW_REVEAL = 'galley-preview:reveal';
+
+export const MAX_SELECTION_TEXT = 4000;
+const MAX_PATH = 512;
+const MAX_LINE = 1_000_000;
+// C0 and C1 controls, the backslash, and format characters (bidi controls among them).
+const BAD_PATH_CHAR = /[\p{Cc}\\]|\p{Cf}/u;
+
+export interface SelectionMessage {
+  type: typeof FRAME_SELECTION;
+  text: string;
+  /** Tag of the block where the selection starts, `path:line`; empty when cleared. */
+  src: string;
+  /** `path:line` of the last source line of the block where it ends; empty when cleared. */
+  endSrc: string;
+}
+
+export interface JumpMessage {
+  type: typeof FRAME_JUMP;
+  src: string;
+}
+
+export interface RevealMessage {
+  type: typeof PREVIEW_REVEAL;
+  path: string;
+  line: number;
+}
+
+export function isSafePath(path: string): boolean {
+  if (path.length === 0 || path.length > MAX_PATH || path.startsWith('/') || BAD_PATH_CHAR.test(path)) return false;
+  return path.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..');
+}
+
+const isLine = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n >= 1 && n <= MAX_LINE;
+
+/** Parses a `path:line` source tag. */
+export function parseSrc(value: string): { path: string; line: number } | undefined {
+  const i = value.lastIndexOf(':');
+  if (i <= 0) return undefined;
+  const path = value.slice(0, i);
+  const digits = value.slice(i + 1);
+  if (!/^[1-9]\d{0,6}$/.test(digits)) return undefined;
+  const line = Number(digits);
+  return isSafePath(path) && isLine(line) ? { path, line } : undefined;
+}
+
+export function parseSelectionMessage(data: unknown): SelectionMessage | undefined {
+  if (!isRecord(data) || !hasExactly(data, ['type', 'text', 'src', 'endSrc'])) return undefined;
+  const { type, text, src, endSrc } = data;
+  if (type !== FRAME_SELECTION || typeof text !== 'string' || typeof src !== 'string' || typeof endSrc !== 'string') return undefined;
+  if (text.length > MAX_SELECTION_TEXT) return undefined;
+  if (text === '') return src === '' && endSrc === '' ? { type, text, src, endSrc } : undefined;
+  if (!parseSrc(src) || !parseSrc(endSrc)) return undefined;
+  return { type, text, src, endSrc };
+}
+
+export function parseJumpMessage(data: unknown): JumpMessage | undefined {
+  if (!isRecord(data) || !hasExactly(data, ['type', 'src'])) return undefined;
+  const { type, src } = data;
+  if (type !== FRAME_JUMP || typeof src !== 'string' || !parseSrc(src)) return undefined;
+  return { type, src };
+}
+
+export function parseRevealMessage(data: unknown): RevealMessage | undefined {
+  if (!isRecord(data) || !hasExactly(data, ['type', 'path', 'line'])) return undefined;
+  const { type, path, line } = data;
+  if (type !== PREVIEW_REVEAL || typeof path !== 'string' || !isSafePath(path) || !isLine(line)) return undefined;
+  return { type, path, line };
+}

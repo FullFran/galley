@@ -390,8 +390,8 @@ nothing in them is sealed; the audit `target` is `repo`, `user:<id>`,
 ## Project configuration
 
 A paper repository can hold a `.galley.yml` that chooses which files
-co-authors edit in galley, the upload folders, friendly file names and the
-preview default. Repository admins set it up from galley. See
+co-authors edit in galley, the upload folders, friendly file names, who may
+add sections and the preview default. Repository admins set it up from galley. See
 [docs/galley-yml.md](docs/galley-yml.md).
 
 ## Deployment
@@ -477,6 +477,31 @@ http on `localhost` and `127.0.0.1` keeps working for local development.
   screen readers. The index (BibTeX parser and label scan) is built in a small
   worker (`indexWorker.ts`), refreshed 500 ms after edits stop; autocomplete,
   warnings and go to definition load in their own chunk after the editor.
+- **Figures and sections** (`web/src/uploads/`, `web/src/structure/`,
+  `web/src/containers/useAuthoring.tsx`, dialogs in `web/src/ui/authoring/`):
+  upload folders from `.galley.yml` show "Upload to figures/" in Files and take
+  dropped files; dropping an image onto the editor uploads it to the first
+  upload folder and inserts `![](figures/name.png){#fig-name}` at the drop
+  point. The name, type and `max_size_mb` are checked before the file is read,
+  the bytes are checked against the extension after reading, and the file name
+  is cleaned (base name only, transliterated, `[A-Za-z0-9_-]`). The dialog
+  previews images with an `<img>` from a `blob:` URL (SVG never inline), asks
+  Replace or Keep both (`-2`, `-3`) when the name exists, and then offers
+  Insert figure with a caption. The Outline offers New section after… and New
+  subsection in… on each row (⋯), a + between sections, and New section… at
+  the bottom, unless `.galley.yml` says `structure: admin`. A section is a new
+  file `# Title {#sec-slug}`, an include at the chosen place in the main file
+  and, for admins, a `labels` entry (and an `editable` item when no pattern
+  covers it) written into `.galley.yml` keeping its comments. File names follow
+  the paper's includes (folder, `_` prefix, numbers; `sections/_slug.qmd` when
+  there are none). Numbered files are never renumbered: a new file between
+  `02-` and `03-` gets `02a-`, at the end the next number, at the start the one
+  before the first. Uploads and new sections are pending changes: they count
+  as unsaved, are listed in the save note popover ("In this save"; uploads can
+  be removed there) and become part of the next save's single commit, whose
+  default message is the plain-language summary ("New section “Methods” after
+  “Introduction”"). Friendly names from `labels` show in Files and Outline,
+  with the path as tooltip.
 - **Header**: breadcrumb whose repository segment opens the switcher and whose
   folder segments show the Files tab; save state with a dot (role=status, full
   wording in the tooltip); a ⋯ menu (Recompile now, Keyboard shortcuts) and a
@@ -599,7 +624,9 @@ is no branch yet: it is created from the current default head. The project
 index caches file text by blob SHA, so a new commit re-reads only changed
 files, at most six at a time.
 
-Saved files keep their existing mode; new files are `100644`. A save is one
+Saved files keep their existing mode; new files are `100644`. Uploaded files
+are sent as blobs first (`POST /git/blobs` with `encoding: base64`) and join
+the text changes in the same tree and commit. A save is one
 commit whose parent is the head the user opened, and the branch is moved
 fast-forward only (never forced). If the branch moved in the meantime, the save
 fails with a conflict. After a save, the open pull request from the working
@@ -734,6 +761,54 @@ access and is planned separately (C8).
 The port is `ReviewGateway` in `web/src/domain/review.ts`, implemented in
 `web/src/github/review.ts`; diff parsing, threads, suggestions and reviewer
 states are plain functions in `web/src/review/`.
+
+Conversations can be resolved and reopened ("Resolve conversation"). GitHub
+offers this only in GraphQL: galley reads `pullRequest.reviewThreads` (node
+id, `isResolved`, `viewerCanResolve`, `viewerCanUnresolve`, and the REST id of
+the first comment to match the thread) and calls `resolveReviewThread` /
+`unresolveReviewThread` with `{ threadId }` at `https://api.github.com/graphql`
+(same origin and host check as REST, same user token). The GraphQL reference
+lists no permission for these mutations, so the buttons follow GitHub's own
+`viewerCanResolve` / `viewerCanUnresolve`; the app needs Pull requests read
+(query) and write (mutations). Resolved conversations are folded.
+
+## Comments in the editor and the preview
+
+Comments anywhere (not only on changed lines), stored by the galley backend
+(see "Comments API"):
+
+- **From the editor**: select text (or put the cursor on a line) and use the
+  floating "Comment" button or Ctrl/Cmd+Alt+M. The anchor is the file, the
+  workspace's head commit, the line range (columns when the selection is not
+  whole lines; 1-based, end inclusive, counted in UTF-16 units like the
+  editor) and a quote: the exact text plus up to 32 characters of context on
+  each side. Lines with open threads get a gutter dot in Code mode and a
+  subtle highlight in Writing mode; clicking opens the thread.
+- **From the preview**: the renderer tags block elements with
+  `data-src="path:line"` and `data-src-end="line"` (through includes and
+  front matter). The sandboxed frame reports a selection with a validated
+  `galley-preview:selection` message (exact keys, text at most 4,000
+  characters, safe repository paths); galley finds the text in those source
+  lines (tolerating Markdown marks and line breaks) and opens the composer,
+  falling back to the whole block when it cannot match it.
+- **Click-to-jump**: double-click in the preview moves the editor to the
+  block's source line; "Show in preview" (on a selection, or Ctrl/Cmd+Alt+P)
+  scrolls the preview to the line's block and flashes it.
+- **Comments panel** (the speech-bubble button in the header, or Review →
+  Comments in the sidebar, with the unread count): threads of the open file
+  or the whole paper, resolved ones on request, with quote, author, time,
+  replies, edit and delete of your own comments, and Resolve/Reopen only for
+  people with push access. Opening a thread marks it read. A thread may carry
+  a suggestion (replacement text for its range), shown as a diff; "Apply to my
+  copy" puts it into your editor as an ordinary, undoable edit (never a
+  commit) and resolves the thread only if you have push access.
+
+All comment text, quotes, logins and paths are shown as plain text. The port
+is `CommentsGateway` (`web/src/domain/comments.ts`), implemented over HTTP in
+`web/src/comments/http.ts` (cookie credentials, `X-Galley-CSRF: 1` on writes,
+typed errors for 401/403/404/409/413/422/429/5xx). The anchor at creation uses
+the editor's current text, so with unsaved edits above the selection the lines
+can differ from the head commit until the server re-anchors (phase 2).
 
 ## Licence
 
