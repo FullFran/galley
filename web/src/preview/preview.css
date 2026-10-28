@@ -251,28 +251,50 @@ th {
 
 /* Equations */
 
+/*
+ * The number sits in its own column, as amsmath does: a spacer of the same
+ * width keeps the formula centred, and when formula and number do not fit on
+ * one line the number wraps below, right-aligned, instead of overlapping.
+ */
 .equation {
-  display: block;
-  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   margin: 8pt 0;
-  padding: 0 3em;
-  text-align: center;
   text-indent: 0;
 }
 
+.equation::before {
+  content: '';
+  /* Gives way first when the formula needs the whole line. */
+  flex: 0 1000 2.5em;
+  min-width: 0;
+}
+
 .equation .katex-display {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
   margin: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-align: center;
+}
+
+.equation:not(:has(.eq-number))::before {
+  display: none;
 }
 
 .eq-number {
-  position: absolute;
-  right: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  flex: 0 0 2.5em;
+  margin-left: auto;
+  text-align: right;
+  white-space: nowrap;
 }
 
+/* KaTeX and the body share Computer Modern metrics, so 1em matches LaTeX. */
 .katex {
-  font-size: 1.05em;
+  font-size: 1em;
 }
 
 .math-error {
