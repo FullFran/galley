@@ -17,6 +17,12 @@
     "@codemirror/language": "6.13.1",
     "@codemirror/state": "6.7.6",
     "@codemirror/view": "6.43.15",
+    "citeproc": "2.4.63",
+    "dompurify": "3.4.17",
+    "js-yaml": "5.4.3",
+    "katex": "0.19.0",
+    "markdown-it": "15.0.3",
+    "markdown-it-footnote": "4.0.0",
     "preact": "11.1.0"
   },
   "devDependencies": {

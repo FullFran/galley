@@ -169,6 +169,22 @@ describe('GitHub gateway', () => {
     await expect(gw.readFile(repo, 'docs/señal v1.md', 'b1')).resolves.toBe('# Señal µ\nłódź — 日本\n');
   });
 
+  it('reads a binary file as bytes', async () => {
+    const { gw } = gateway([
+      on('GET', `${R}/contents/figures/a.png?ref=b1`, () => json({ type: 'file', encoding: 'base64', content: 'iVBO\nRw0K' })),
+    ]);
+
+    await expect(gw.readBytes(repo, 'figures/a.png', 'b1')).resolves.toEqual(
+      new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]),
+    );
+  });
+
+  it('refuses binary files that GitHub does not inline', async () => {
+    const { gw } = gateway([on('GET', `${R}/contents/big.png?ref=b1`, () => json({ type: 'file', encoding: 'none', content: '' }))]);
+
+    await expect(gw.readBytes(repo, 'big.png', 'b1')).rejects.toThrow(/too large/);
+  });
+
   it('saves a new branch as one commit, then opens a pull request', async () => {
     const { gw, requests } = gateway([
       on('GET', `${R}/git/ref/heads/galley/ana`, () => json({ message: 'Not Found' }, 404)),

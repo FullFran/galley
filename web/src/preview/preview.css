@@ -1,0 +1,353 @@
+/*
+ * An approximation of the elsarticle preprint (1p, single column) PDF: A4
+ * sheet, 384pt text width, 12pt Computer Modern, LaTeX-like headings,
+ * captions and booktabs tables. Page breaks and float placement are not
+ * simulated; the document is one continuous sheet.
+ */
+
+@font-face {
+  font-family: 'CMU Serif';
+  font-style: normal;
+  font-weight: 400;
+  src: url('./fonts/cmu-serif-500-roman.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'CMU Serif';
+  font-style: italic;
+  font-weight: 400;
+  src: url('./fonts/cmu-serif-500-italic.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'CMU Serif';
+  font-style: normal;
+  font-weight: 700;
+  src: url('./fonts/cmu-serif-700-roman.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'CMU Serif';
+  font-style: italic;
+  font-weight: 700;
+  src: url('./fonts/cmu-serif-700-italic.woff2') format('woff2');
+}
+
+:root {
+  --sheet: 210mm;
+  --text: 384pt;
+  --ink: #111;
+  --link: #1f3fb0;
+  --rule: #111;
+  color: var(--ink);
+  background: #e6e6e6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 1.5rem 0;
+  background: #e6e6e6;
+}
+
+.page {
+  width: var(--sheet);
+  max-width: 100%;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 30mm calc((var(--sheet) - var(--text)) / 2);
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.25);
+  font-family: 'CMU Serif', 'Latin Modern Roman', 'Times New Roman', serif;
+  font-size: 12pt;
+  line-height: 1.2;
+  hyphens: auto;
+  overflow-wrap: break-word;
+}
+
+@media (max-width: 480px) {
+  body {
+    padding: 0;
+  }
+  .page {
+    width: 100%;
+    min-height: 100vh;
+    padding: 1.25rem 1rem 2rem;
+    box-shadow: none;
+  }
+}
+
+p {
+  margin: 0;
+  text-align: justify;
+  text-indent: 1.5em;
+}
+
+/* LaTeX does not indent the first paragraph after a heading or a float. */
+h1 + p,
+h2 + p,
+h3 + p,
+h4 + p,
+h5 + p,
+h6 + p,
+.abstract p:first-of-type,
+.callout p,
+li p,
+blockquote p,
+figcaption,
+caption {
+  text-indent: 0;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+/* Title block */
+
+.title-block {
+  text-align: center;
+  margin-bottom: 24pt;
+}
+
+.title {
+  font-size: 17.28pt;
+  font-weight: 400;
+  line-height: 1.2;
+  margin: 0 0 18pt;
+}
+
+.subtitle {
+  text-indent: 0;
+  text-align: center;
+  margin: -12pt 0 14pt;
+}
+
+.authors {
+  text-align: center;
+  text-indent: 0;
+  margin: 0 0 10pt;
+}
+
+.affiliation {
+  font-size: 10pt;
+  font-style: italic;
+  text-align: center;
+  text-indent: 0;
+}
+
+.frontmatter-box {
+  border-top: 0.4pt solid var(--rule);
+  border-bottom: 0.4pt solid var(--rule);
+  padding: 12pt 0 10pt;
+  margin-bottom: 18pt;
+}
+
+.abstract-title {
+  font-size: 12pt;
+  font-weight: 700;
+  margin: 0 0 6pt;
+}
+
+.keywords {
+  text-indent: 0;
+  margin-top: 10pt;
+}
+
+/* Sections, as elsarticle's \section, \subsection, \subsubsection */
+
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-size: 12pt;
+  line-height: 1.2;
+  text-align: left;
+}
+
+h2 {
+  font-weight: 700;
+  margin: 18pt 0 9pt;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-weight: 400;
+  font-style: italic;
+  margin: 12pt 0 4pt;
+}
+
+.header-section-number::after {
+  content: '.';
+}
+
+.header-section-number {
+  margin-right: 0.5em;
+}
+
+/* Floats and captions */
+
+.figure {
+  margin: 14pt 0;
+  text-align: center;
+}
+
+.figure img {
+  max-width: 100%;
+  height: auto;
+}
+
+figcaption,
+caption {
+  font-size: 10pt;
+  line-height: 1.2;
+  text-align: justify;
+}
+
+/* Short captions are centered, long ones justified, as \@makecaption does. */
+figcaption {
+  display: table;
+  margin: 8pt auto 0;
+}
+
+.missing-image {
+  display: inline-block;
+  padding: 2em 1em;
+  border: 1px dashed #999;
+  color: #666;
+  font-size: 10pt;
+}
+
+table {
+  margin: 14pt auto;
+  border-collapse: collapse;
+  border-top: 0.08em solid var(--rule);
+  border-bottom: 0.08em solid var(--rule);
+  font-size: 12pt;
+}
+
+caption {
+  caption-side: top;
+  padding-bottom: 6pt;
+}
+
+thead th {
+  border-bottom: 0.05em solid var(--rule);
+}
+
+th,
+td {
+  padding: 0.15em 0.6em;
+  vertical-align: top;
+}
+
+th {
+  font-weight: 400;
+}
+
+/* Equations */
+
+.equation {
+  display: block;
+  position: relative;
+  margin: 8pt 0;
+  padding: 0 3em;
+  text-align: center;
+  text-indent: 0;
+}
+
+.equation .katex-display {
+  margin: 0;
+}
+
+.eq-number {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.katex {
+  font-size: 1.05em;
+}
+
+.math-error {
+  color: #a40000;
+  font-family: ui-monospace, monospace;
+  font-size: 10pt;
+}
+
+.unresolved {
+  color: #a40000;
+}
+
+/* Lists, quotes, code, callouts */
+
+ul,
+ol {
+  margin: 6pt 0;
+  padding-left: 2em;
+}
+
+blockquote {
+  margin: 6pt 2em;
+}
+
+pre {
+  margin: 8pt 0;
+  padding: 6pt 8pt;
+  background: #f5f5f5;
+  font-size: 10pt;
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+code {
+  font-family: ui-monospace, 'CMU Typewriter Text', monospace;
+  font-size: 0.9em;
+}
+
+.callout {
+  margin: 10pt 0;
+  padding: 6pt 10pt;
+  border: 0.4pt solid #888;
+  border-left: 3pt solid #555;
+}
+
+.callout-title,
+.callout > h2,
+.callout > h3 {
+  margin: 0 0 4pt;
+  font-size: 12pt;
+  font-style: normal;
+  font-weight: 700;
+}
+
+/* References and footnotes */
+
+.references {
+  font-size: 10pt;
+  line-height: 1.25;
+}
+
+.csl-entry {
+  margin: 0 0 3pt;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.footnotes {
+  margin-top: 18pt;
+  font-size: 10pt;
+}
+
+.footnotes-sep {
+  width: 30%;
+  margin: 0 0 6pt;
+  border: 0;
+  border-top: 0.4pt solid var(--rule);
+}

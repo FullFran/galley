@@ -1,0 +1,41 @@
+---
+# Synthetic fixture shaped like a quarto-journals/elsevier paper.
+title: "A synthetic model of glow curves in LiF:Mg,Ti"
+author:
+  - name: Ada Example
+    affiliations:
+      - ref: aff1
+  - name: Ben Sample
+    affiliations:
+      - ref: aff1
+      - ref: aff2
+affiliations:
+  - id: aff1
+    name: Example University
+    city: Granada
+    country: Spain
+  - id: aff2
+    name: Sample Institute
+abstract: |
+  A kinetic model has been fitted to a synthetic curve with $n = 3$ traps.
+keywords:
+  - Thermoluminescence
+  - Kinetic model
+journal:
+  highlights:
+    - "Highlights are printed only in the PDF"
+date: last-modified
+---
+
+<!-- Front matter and includes only. -->
+
+{{< include sections/01-introduction.qmd >}}
+
+{{< include sections/02-model.qmd >}}
+
+{{< include sections/A-appendix.qmd >}}
+
+# References {.unnumbered}
+
+::: {#refs}
+:::

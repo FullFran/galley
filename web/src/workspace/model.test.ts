@@ -26,6 +26,7 @@ function fakeGateway(save: (changes: FileChange[], message: string, head: string
     listRepositories: () => Promise.resolve([]),
     openRepository: () => Promise.reject(new Error('unused')),
     readFile: () => Promise.reject(new Error('unused')),
+    readBytes: () => Promise.reject(new Error('unused')),
     save: (_repo, changes, message, head) => {
       calls.push({ changes, message, head });
       return save(changes, message, head);

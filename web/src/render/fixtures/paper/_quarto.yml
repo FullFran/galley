@@ -1,0 +1,22 @@
+project:
+  type: default
+  render:
+    - index.qmd
+
+bibliography: references.bib
+
+crossref:
+  fig-prefix: Fig.
+  tbl-prefix: Table
+  eq-prefix: Eq.
+  sec-prefix: Section
+
+format:
+  html:
+    default-image-extension: png
+    number-sections: true
+  elsevier-pdf:
+    journal:
+      formatting: preprint
+      model: 1p
+      cite-style: authoryear
