@@ -1,7 +1,7 @@
 import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { useT } from '../../i18n';
-import { matchShortcut, typingInField } from '../../shell/shortcuts';
+import { matchShortcut, typingAt } from '../../shell/shortcuts';
 import { saveStateLabel } from '../../workspace/session';
 import { Icon } from './icons';
 
@@ -16,6 +16,8 @@ export interface SaveControlProps {
   more?: ComponentChildren;
   onMessage: (message: string) => void;
   onSave: () => void;
+  /** New sections and uploads in this save, in plain words; uploads can be removed. */
+  pending?: { key: string; text: string; onRemove?: () => void }[];
 }
 
 /**
@@ -23,7 +25,7 @@ export interface SaveControlProps {
  * tooltip) and a split "Save for review" button whose caret opens the
  * optional note. Ctrl/Cmd+S opens the note too, so Enter saves.
  */
-export function SaveControl({ dirtyCount, message, placeholder, saving, noteRequest, more, onMessage, onSave }: SaveControlProps) {
+export function SaveControl({ dirtyCount, message, placeholder, saving, noteRequest, more, onMessage, onSave, pending = [] }: SaveControlProps) {
   const t = useT();
   const m = t.save;
   const [noteOpen, setNoteOpen] = useState(false);
@@ -37,7 +39,7 @@ export function SaveControl({ dirtyCount, message, placeholder, saving, noteRequ
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (matchShortcut(e, typingInField(e.target)) !== 'save') return;
+      if (matchShortcut(e, typingAt(e)) !== 'save') return;
       // Never the browser's "Save page as".
       e.preventDefault();
       e.stopPropagation();
@@ -134,6 +136,23 @@ export function SaveControl({ dirtyCount, message, placeholder, saving, noteRequ
             />
           </label>
           <p class="muted">{m.noteHint}</p>
+          {pending.length > 0 && (
+            <div class="save-pending">
+              <p class="save-pending-title">{t.authoring.pendingTitle}</p>
+              <ul>
+                {pending.map((item) => (
+                  <li key={item.key}>
+                    <span>{item.text}</span>
+                    {item.onRemove && (
+                      <button type="button" class="link" aria-label={t.authoring.removeLabel(item.text)} onClick={item.onRemove}>
+                        {t.authoring.remove}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </form>
     </div>

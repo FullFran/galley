@@ -23,6 +23,7 @@ type harness struct {
 
 	mu           sync.Mutex
 	revokedUsers []string // OnRevoke calls
+	reasons      []auth.RevokeReason
 }
 
 func (h *harness) revocations() []string {
@@ -133,9 +134,10 @@ func newHarness(t *testing.T) *harness {
 		SessionTTL: 30 * 24 * time.Hour,
 		LoginTTL:   10 * time.Minute,
 		Now:        clock,
-		OnRevoke: func(userID string) {
+		OnRevoke: func(userID string, reason auth.RevokeReason) {
 			h.mu.Lock()
 			h.revokedUsers = append(h.revokedUsers, userID)
+			h.reasons = append(h.reasons, reason)
 			h.mu.Unlock()
 		},
 	})
@@ -373,6 +375,54 @@ func TestIssueTokenRejected(t *testing.T) {
 			t.Error("expired refresh token was sent to GitHub")
 		}
 	})
+}
+
+func TestRevokeReasons(t *testing.T) {
+	tests := []struct {
+		name    string
+		trigger func(t *testing.T, h *harness, session string)
+		want    auth.RevokeReason
+		revoked bool
+	}{
+		{"webhook", func(t *testing.T, h *harness, _ string) {
+			if err := h.svc.Revoke(context.Background(), 42); err != nil {
+				t.Fatal(err)
+			}
+		}, auth.RevokeWebhook, true},
+		{"GitHub rejects the refresh token", func(t *testing.T, h *harness, session string) {
+			h.provider.validRefresh = "revoked-elsewhere"
+			_, _ = h.svc.IssueToken(context.Background(), session, 0)
+		}, auth.RevokeRejected, true},
+		{"expired refresh token", func(t *testing.T, h *harness, session string) {
+			uid := h.store.users[42].ID
+			tok := h.store.tokens[uid]
+			tok.ExpiresAt = h.now.Add(-time.Second)
+			h.store.tokens[uid] = tok
+			_, _ = h.svc.IssueToken(context.Background(), session, 0)
+		}, auth.RevokeExpired, false},
+		{"unreadable refresh token (key change)", func(t *testing.T, h *harness, session string) {
+			uid := h.store.users[42].ID
+			tok := h.store.tokens[uid]
+			tok.Ciphertext = "garbage"
+			h.store.tokens[uid] = tok
+			_, _ = h.svc.IssueToken(context.Background(), session, 0)
+		}, auth.RevokeUnreadable, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := newHarness(t)
+			session := h.login(t)
+			tt.trigger(t, h, session)
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			if len(h.reasons) != 1 || h.reasons[0] != tt.want {
+				t.Fatalf("reasons = %v, want [%s]", h.reasons, tt.want)
+			}
+			if h.reasons[0].Revoked() != tt.revoked {
+				t.Errorf("%s.Revoked() = %v", tt.want, !tt.revoked)
+			}
+		})
+	}
 }
 
 func TestLogoutDeletesSession(t *testing.T) {

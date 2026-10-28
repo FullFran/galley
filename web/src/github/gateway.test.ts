@@ -235,6 +235,47 @@ describe('GitHub gateway', () => {
     expect(requests[8]?.body).toMatchObject({ title: 'Edit paper', head: 'galley/ana', base: 'main' });
   });
 
+  it('saves uploaded files as base64 blobs in the same single tree and commit as text changes', async () => {
+    let blob = 0;
+    const { gw, requests } = gateway([
+      on('GET', `${R}/git/ref/heads/galley/ana`, () => json({ object: { sha: 'm1' } })),
+      on('GET', `${R}/git/commits/m1`, () => json({ sha: 'm1', tree: { sha: 'tree-m1' } })),
+      on('GET', `${R}/git/trees/tree-m1?recursive=1`, () => json({ truncated: false, tree: [] })),
+      on('POST', `${R}/git/blobs`, () => json({ sha: `blob${++blob}` }, 201)),
+      on('POST', `${R}/git/trees`, () => json({ sha: 'tree-new' }, 201)),
+      on('POST', `${R}/git/commits`, () => json({ sha: 'c2' }, 201)),
+      on('PATCH', `${R}/git/refs/heads/galley/ana`, () => json({ object: { sha: 'c2' } })),
+      on('GET', `${R}/pulls?state=open&head=octo%3Agalley%2Fana&per_page=1`, () => json([{ html_url: 'u' }])),
+    ]);
+
+    await gw.save(
+      repo,
+      [
+        { path: 'index.qmd', content: '![](figures/a.png)' },
+        { path: 'figures/a.png', content: 'iVBORw0K', encoding: 'base64' },
+        { path: 'figures/b.svg', content: 'PHN2Zy8+', encoding: 'base64' },
+      ],
+      'Add figures',
+      'm1',
+    );
+
+    const posts = requests.filter((r) => r.method === 'POST');
+    expect(posts.map((r) => r.url)).toEqual([`${R}/git/blobs`, `${R}/git/blobs`, `${R}/git/trees`, `${R}/git/commits`]);
+    expect(posts[0]?.body).toEqual({ content: 'iVBORw0K', encoding: 'base64' });
+    expect(posts[1]?.body).toEqual({ content: 'PHN2Zy8+', encoding: 'base64' });
+    expect(posts[2]?.body).toEqual({
+      base_tree: 'tree-m1',
+      tree: [
+        { path: 'index.qmd', mode: '100644', type: 'blob', content: '![](figures/a.png)' },
+        { path: 'figures/a.png', mode: '100644', type: 'blob', sha: 'blob1' },
+        { path: 'figures/b.svg', mode: '100644', type: 'blob', sha: 'blob2' },
+      ],
+    });
+    expect(posts[3]?.body).toEqual({ message: 'Add figures', tree: 'tree-new', parents: ['m1'] });
+    // Fast-forward only.
+    expect(requests.find((r) => r.method === 'PATCH')?.body).toEqual({ sha: 'c2', force: false });
+  });
+
   it('fast-forwards an existing branch with force false and reuses its open pull request', async () => {
     const { gw, requests } = gateway([
       on('GET', `${R}/git/ref/heads/galley/ana`, () => json({ object: { sha: 'b1' } })),

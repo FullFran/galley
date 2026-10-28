@@ -87,8 +87,11 @@ func validRange(r Range) error {
 	return nil
 }
 
-// validText accepts UTF-8 text without NUL or bidi controls; newlines,
+// ValidText accepts UTF-8 text without NUL or bidi controls; newlines,
 // tabs and other format characters (such as the emoji joiner) are fine.
+// Drafts and chat reuse it.
+func ValidText(s string) bool { return validText(s) }
+
 func validText(s string) bool {
 	return utf8.ValidString(s) && !strings.ContainsRune(s, 0) && !strings.ContainsFunc(s, isBidiControl)
 }
