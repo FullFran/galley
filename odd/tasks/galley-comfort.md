@@ -39,6 +39,12 @@ edit it, but anyone with write access could still change it on GitHub).
   `@eq-`, `@sec-` with number and caption) from all `.qmd`; path completion in
   `{{< include >}}` and `![](…)`; inline warnings for unknown citation keys and
   dangling crossrefs; reuse the C2 BibTeX parser and label collection.
+- CX2 also gets "go to definition" in the editor (Fran, 2026-10-28: small
+  comforts are key): double-click (and Ctrl/Cmd+click) on a
+  `{{< include path >}}` opens that file; on a figure path opens or previews
+  the image; on `@fig-x`/`@sec-x`/`@eq-x`/`@tbl-x` jumps to where the label is
+  defined (in whichever file); on `@citekey` opens the entry in the references
+  manager (CX4) or `references.bib`.
 - CX4 References manager (Fran, 2026-10-28): `references.bib` is editable (the
   setup wizard includes it by default) both as text and through an interactive
   editor: list and search entries, add from a DOI (Crossref) or a form, edit
@@ -131,10 +137,12 @@ edit it, but anyone with write access could still change it on GitHub).
   the review UI.
 - [x] CX1 Project config (`feat/comfort-config`). Route: delegated (2+
   non-trivial files). Merged (PR #9, `4589bf1`) and deployed.
-- [ ] CX-UI App shell redesign (`feat/comfort-shell`). Route: delegated (2+
-  non-trivial files, broad UI rewrite). Implemented and checked; pending
-  review, commit and PR.
-- [ ] CX-i18n Spanish/English UI. After CX-UI.
+- [x] CX-UI App shell redesign (`feat/comfort-shell`). Route: delegated (2+
+  non-trivial files, broad UI rewrite). Merged (PR #11, `bb291f2`) and
+  deployed.
+- [ ] CX-i18n Spanish/English UI (`feat/comfort-i18n`). Route: delegated (2+
+  non-trivial files: catalogs, locale, every UI component). Implemented and
+  checked; pending review, commit and PR.
 - [ ] CX2 Writing feel, uploads and autocomplete.
 - [ ] CX3 Guided tour.
 - [ ] CX4 References manager.
@@ -307,6 +315,56 @@ edit it, but anyone with write access could still change it on GitHub).
     toggle: co-author view hides `figures/` and `_quarto.yml`, keeps project
     settings, and is remembered after a reload.
 
+- CX-UI merged: PR #11 (`bb291f2`), deployed.
+- CX-i18n implemented (delegated writer, branch `feat/comfort-i18n`):
+  - Catalogs: `web/src/i18n/en.ts` extended to every interface string
+    (status banners, view notice, settings form and glob messages, stale
+    comments, diff, composer and threads, people and merge boxes, review
+    labels, `describeError`/`describeReviewError`, preview and compile bar,
+    proposal toasts, native confirm prompts, landing mock, About credits,
+    aria-labels and tooltips); `web/src/i18n/es.ts` implements `Messages`
+    with the agreed register (header comment). Plurals through
+    `Intl.PluralRules` (`i18n/plural.ts`); commit messages for saves and
+    settings follow the active language.
+  - Locale (`i18n/locale.ts`, `i18n/LocaleProvider.tsx`): stored choice
+    (`galley-locale`, try/catch), else `navigator.languages[0]` starting with
+    `es`, else English; `<html lang>` synced. ES | EN two-button toggle with
+    `aria-pressed` (`ui/shell/LanguageSwitch.tsx`) in the sidebar footer
+    (App passes it through `ShellContext.languageSwitch` to the AppShell
+    slot; stacked in the icon rail) and in the landing footer.
+  - Switching without reload must not re-run data effects: callbacks read the
+    catalog through `useTRef()`, otherwise `Workspace.load` would be
+    re-created and reload the repository, dropping unsaved edits. Messages
+    that must follow a switch are stored as data (preview status, merge
+    state of proposal rows), not as text. The editor's aria-label is
+    reconfigured through a CodeMirror compartment.
+  - Dates: `i18n/format.ts` with `Intl.DateTimeFormat` and
+    `RelativeTimeFormat` (repository and proposal "updated", comment dates,
+    compile time).
+  - Phones: the Spanish header overflowed by 3px at 390 and 33px at 360;
+    the save button now shows a short label ("Guardar" / "Save") below
+    480px, with the full name as its accessible name. The outline's main
+    file chip reads "Principal" so the file name is not cut.
+  - Still English, by choice: renderer diagnostics (preview notes, produced
+    in the worker), `.galley.yml` validation problems from `config/schema.ts`
+    and `config/load.ts` (admin-facing), and the pull request body written by
+    the gateway.
+  - Checks: tests first (RED: `src/i18n/i18n.test.tsx` failed on the missing
+    `es.ts`, `locale.ts`, `format.ts` and switch modules), then GREEN:
+    `npm ci --ignore-scripts` (0 vulnerabilities), lint, typecheck, test (352
+    passed, 38 files), build. Sizes: main JS 159.1 → 167.9 kB gzip, main CSS
+    6.7 → 6.8 kB gzip, ProjectSettings chunk 4.0 → 3.6 kB gzip.
+  - Headless Chromium against the production build with mocked GitHub,
+    browser locale `es-ES`, at 1440 and 390 (30 screenshots in the session
+    scratchpad `shots-es/`): no CSP violations, no page errors, no
+    horizontal overflow, header not clipped, no truncated text except
+    visually-hidden legends; Spanish detected on first visit; the landing
+    switch to EN survives a reload; the sidebar switch to EN re-renders
+    without reload, keeps the unsaved edit, updates `<html lang>` and
+    storage, and switches back. The C3 review and CX1 config scripts (forced
+    to `en-US`) give the same requests and results as before, apart from the
+    relative "updated" time.
+
 ## Next step
 
-Review, commit and open the CX-UI pull request; then CX-i18n (`es.ts`).
+Review, commit and open the CX-i18n pull request; then CX2.

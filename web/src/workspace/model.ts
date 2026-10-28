@@ -9,6 +9,7 @@ import {
   type RepoGateway,
   type Repository,
 } from '../domain';
+import { en, type Messages } from '../i18n/en';
 
 /** An opened file: `base` is the text at the last loaded or saved head, `text` the user's buffer. */
 export interface Buffer {
@@ -31,10 +32,10 @@ export function dirtyPaths(buffers: Buffers): string[] {
     .sort();
 }
 
-export function defaultMessage(paths: string[]): string {
+export function defaultMessage(paths: string[], t: Messages = en): string {
   const names = paths.map((p) => p.slice(p.lastIndexOf('/') + 1));
-  if (names.length <= 4) return `Update ${names.join(', ')}`;
-  return `Update ${names.slice(0, 3).join(', ')} and ${names.length - 3} more files`;
+  if (names.length <= 4) return t.save.defaultMessage(names.join(', '), 0);
+  return t.save.defaultMessage(names.slice(0, 3).join(', '), names.length - 3);
 }
 
 /** The edited buffers as file changes, in path order. */
@@ -49,6 +50,7 @@ export async function runSave(
   buffers: Buffers,
   message: string,
   headSha: string,
+  t: Messages = en,
 ): Promise<SaveOutcome> {
   const changes = unsavedChanges(buffers);
   try {
@@ -57,7 +59,7 @@ export async function runSave(
   } catch (err) {
     if (err instanceof ConflictError) return { kind: 'conflict', copies: changes };
     if (err instanceof AuthRequiredError) return { kind: 'auth' };
-    return { kind: 'error', message: describeError(err) };
+    return { kind: 'error', message: describeError(err, t) };
   }
 }
 
@@ -72,13 +74,12 @@ export function applySaved(buffers: Buffers, saved: FileChange[]): Buffers {
 }
 
 /** A short explanation of a gateway failure for people who do not use git. */
-export function describeError(err: unknown): string {
-  if (err instanceof TransientError) {
-    return 'GitHub or the galley server could not be reached. Check your connection and try again.';
-  }
-  if (err instanceof NotTextError) return 'This file is not plain text, so it cannot be edited here.';
-  if (err instanceof PermissionError) return 'You do not have permission to change this repository.';
-  if (err instanceof NotFoundError) return 'This repository or file could not be found. It may have been moved.';
-  if (err instanceof AuthRequiredError) return 'Your session has ended. Please sign in again.';
-  return 'Something went wrong. Try again in a moment.';
+export function describeError(err: unknown, t: Messages = en): string {
+  const m = t.errors;
+  if (err instanceof TransientError) return m.network;
+  if (err instanceof NotTextError) return m.notText;
+  if (err instanceof PermissionError) return m.permission;
+  if (err instanceof NotFoundError) return m.notFound;
+  if (err instanceof AuthRequiredError) return m.session;
+  return m.generic;
 }

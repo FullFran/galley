@@ -42,6 +42,30 @@ proposals and review. No real-time co-editing of the same file.
 12. Also from the research: "accept all suggestions", find and replace across
     files, print-to-PDF from the preview as an unofficial copy.
 
+13. **New section** (Fran, 2026-10-28; goes with CX2 next to figure upload):
+    "New section" / "New subsection" from the paper outline. Asks for title and
+    position, creates `sections/<slug>.qmd` with `# Title {#sec-slug}`, inserts
+    the `{{< include >}}` at that position in the entry file, adds a label to
+    `.galley.yml`; all in the user's proposal. Default: anyone with write;
+    `.galley.yml` can restrict it to admins. File names are slugs; order comes
+    from the include list (never renumber files). Rename/move/delete later, with
+    warnings about `@sec-` references they would break.
+
+14. **Team management** (Fran, 2026-10-28), from the team research:
+    - Section owners from CODEOWNERS, shown in the outline, with automatic
+      review requests (owners need write access).
+    - Per-section status (draft / in review / approved) stored in
+      `.galley.yml`, shown as outline badges.
+    - Asks with due dates ("Review Methods by Friday") as issue + assignee +
+      milestone, listed under "My asks" (needs Issues write; org approval).
+    - Weekly activity view per person (owner only, non-judgemental).
+    - Invite co-authors from galley with a role and pending invites (needs
+      Administration write; admins only; 50 invites per repo per day).
+    - Writer vs reviewer roles in `.galley.yml`, backed by CODEOWNERS on
+      `.galley.yml` and branch protection where available.
+    New-section files follow the repo's existing naming (this paper:
+    `sections/NN-name.qmd`); `sections/_slug.qmd` only when there is none.
+
 ## Later
 
 - Bibliographic GraphRAG (like the Shadow Dungeon lore graph).

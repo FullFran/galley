@@ -69,8 +69,18 @@ export function SaveControl({ dirtyCount, message, placeholder, saving, onMessag
         >
           <Icon name="chevron" />
         </button>
-        <button type="submit" class="primary" disabled={disabled}>
-          {saving ? m.saving : m.button}
+        {/* Phones show the short label; the full one stays the accessible name. */}
+        <button type="submit" class="primary" disabled={disabled} aria-label={saving ? undefined : m.button}>
+          {saving ? (
+            m.saving
+          ) : (
+            <>
+              <span class="save-long">{m.button}</span>
+              <span class="save-short" aria-hidden="true">
+                {m.buttonShort}
+              </span>
+            </>
+          )}
         </button>
         <div id="save-note" class="popover" hidden={!noteOpen}>
           <label>

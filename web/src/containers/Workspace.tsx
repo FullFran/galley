@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import { AuthRequiredError, type FileChange, type RepoAccess, type RepoGateway, type Repository, type WorkingState } from '../domain';
 import { CONFIG_PATH, visibleFiles, type ProjectConfig } from '../config/project';
 import { applySaved, defaultMessage, describeError, dirtyPaths, runSave, unsavedChanges, type Buffers } from '../workspace/model';
-import { useT } from '../i18n';
+import { useT, useTRef } from '../i18n';
 import type { NavId } from '../shell/nav';
 import { extractOutline, type OutlineItem } from '../shell/outline';
 import { filesInView, readViewAs, writeViewAs, type ViewAs } from '../config/viewAs';
@@ -45,6 +45,9 @@ type Heading = Extract<OutlineItem, { kind: 'heading' }>;
 
 export function Workspace({ gateway, repo, access, shell, settingsFirst = false, onAuthRequired, onDirtyChange, onSaved }: WorkspaceProps) {
   const t = useT();
+  // Callbacks read the catalog through a ref: a language switch must not
+  // re-create `load` (that would reload the repository and drop edits).
+  const tRef = useTRef();
   const [working, setWorking] = useState<WorkingState>();
   const [project, setProject] = useState<ProjectConfig>({ kind: 'missing' });
   const [admin, setAdmin] = useState(false);
@@ -69,9 +72,9 @@ export function Workspace({ gateway, repo, access, shell, settingsFirst = false,
   const fail = useCallback(
     (err: unknown, show: (message: string) => void) => {
       if (err instanceof AuthRequiredError) onAuthRequired(unsavedChanges(buffersRef.current));
-      else show(describeError(err));
+      else show(describeError(err, tRef.current));
     },
-    [onAuthRequired],
+    [onAuthRequired, tRef],
   );
 
   const load = useCallback(async () => {
@@ -175,7 +178,7 @@ export function Workspace({ gateway, repo, access, shell, settingsFirst = false,
   const save = async () => {
     if (!working || !hasDirty || status.kind === 'saving') return;
     setStatus({ kind: 'saving' });
-    const outcome = await runSave(gateway, repo, buffers, message.trim() || defaultMessage(dirty), working.headSha);
+    const outcome = await runSave(gateway, repo, buffers, message.trim() || defaultMessage(dirty, t), working.headSha, t);
     switch (outcome.kind) {
       case 'saved':
         setWorking((w) => w && { ...w, headSha: outcome.headSha, branchExists: true });
@@ -288,7 +291,7 @@ export function Workspace({ gateway, repo, access, shell, settingsFirst = false,
           <SaveControl
             dirtyCount={dirty.length}
             message={message}
-            placeholder={hasDirty ? defaultMessage(dirty) : t.save.describe}
+            placeholder={hasDirty ? defaultMessage(dirty, t) : t.save.describe}
             saving={status.kind === 'saving'}
             onMessage={setMessage}
             onSave={() => void save()}
@@ -360,6 +363,7 @@ export function Workspace({ gateway, repo, access, shell, settingsFirst = false,
             <Editor
               key={openPath}
               path={openPath}
+              label={t.workspace.editorContents(openPath)}
               doc={open.text}
               jumpTo={jump}
               onChange={(text) => setBuffers((b) => ({ ...b, [openPath]: { base: b[openPath]?.base ?? '', text } }))}

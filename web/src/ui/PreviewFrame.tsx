@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { Diagnostic, PreviewAsset } from '../render';
+import { useT } from '../i18n';
 import { PREVIEW_RENDER, PREVIEW_SCROLL, MAX_SCROLL_TEXT, createReadyGate, parseFrameMessage, type RenderMessage, type ScrollMessage } from '../preview/protocol';
 
 export interface PreviewFrameProps {
@@ -21,6 +22,7 @@ export interface PreviewFrameProps {
  * talk only through validated postMessage calls.
  */
 export function PreviewFrame({ seq, html, assets, diagnostics, status, scrollTo }: PreviewFrameProps) {
+  const t = useT();
   const frame = useRef<HTMLIFrameElement>(null);
   const gate = useRef(createReadyGate());
   // Counts accepted ready messages, so a reloaded frame receives the current content again.
@@ -67,7 +69,7 @@ export function PreviewFrame({ seq, html, assets, diagnostics, status, scrollTo 
       <iframe
         ref={frame}
         class="preview-frame"
-        title="Preview of the paper"
+        title={t.preview.frameTitle}
         src={`${import.meta.env.BASE_URL}preview.html`}
         sandbox="allow-scripts"
         referrerpolicy="no-referrer"
@@ -77,10 +79,7 @@ export function PreviewFrame({ seq, html, assets, diagnostics, status, scrollTo 
         {status && <span class="muted">{status}</span>}
         {diagnostics.length > 0 && (
           <details class="preview-notes">
-            <summary>
-              {diagnostics.length} preview note{diagnostics.length === 1 ? '' : 's'}
-              {problems > 0 && ` (${problems} to check)`}
-            </summary>
+            <summary>{t.preview.notes(diagnostics.length, problems)}</summary>
             <ul>
               {diagnostics.map((d, i) => (
                 <li key={i} class={`note-${d.severity}`}>

@@ -5,6 +5,7 @@ import { createRenderClient, TOO_COMPLEX } from '../render/client';
 import { createCompiler, isRecompileShortcut, type CompileState, type Compiler } from '../compile/compiler';
 import { readAutoCompile, writeAutoCompile } from '../compile/preference';
 import { describeError, type Buffers } from '../workspace/model';
+import { useT } from '../i18n';
 import { CompileBar } from '../ui/CompileBar';
 import { PreviewFrame } from '../ui/PreviewFrame';
 
@@ -41,7 +42,9 @@ function textsDiffer(a: Buffers, b: Buffers): boolean {
  */
 export function Preview({ gateway, repo, headSha, files, buffers, entry, autoCompileDefault = false, scrollTo }: PreviewProps) {
   const [result, setResult] = useState<RenderResult & { seq: number }>();
-  const [status, setStatus] = useState<string | undefined>('Loading the preview…');
+  const t = useT();
+  // Kept as data, so the text follows a language switch.
+  const [status, setStatus] = useState<{ kind: 'loading' } | { kind: 'failed'; error: unknown } | undefined>({ kind: 'loading' });
   const [compile, setCompile] = useState<CompileState>({ compiling: false, stale: false });
   const [auto, setAuto] = useState(() => readAutoCompile(repo.fullName, autoCompileDefault));
   const seq = useRef(0);
@@ -94,7 +97,7 @@ export function Preview({ gateway, repo, headSha, files, buffers, entry, autoCom
           );
           setStatus(undefined);
         } catch (err) {
-          setStatus(`The preview is not available: ${describeError(err)}`);
+          setStatus({ kind: 'failed', error: err });
         }
       },
     });
@@ -148,7 +151,13 @@ export function Preview({ gateway, repo, headSha, files, buffers, entry, autoCom
         html={result?.html ?? ''}
         assets={result?.assets ?? []}
         diagnostics={result?.diagnostics ?? []}
-        status={status}
+        status={
+          status === undefined
+            ? undefined
+            : status.kind === 'loading'
+              ? t.preview.loading
+              : t.preview.unavailable(describeError(status.error, t))
+        }
         scrollTo={scrollTo}
       />
     </>

@@ -1,5 +1,5 @@
 import type { MergeMethod, Person, Proposal, RepoAccess, ReviewEvent } from '../../domain';
-import { mergeLabel, METHOD_LABEL, REVIEWER_LABEL } from '../../review/labels';
+import { mergeLabel, methodLabel, reviewerLabel } from '../../review/labels';
 import { canMerge, type ReviewerRow } from '../../review/status';
 import { useT, type Messages } from '../../i18n';
 
@@ -19,20 +19,22 @@ export interface PeopleProps {
 }
 
 export function People(props: PeopleProps) {
+  const t = useT();
+  const m = t.people;
   const { reviewers, assignees, candidates, canEdit, editHint, busy } = props;
   const pending = new Set(reviewers.filter((r) => r.status === 'pending').map((r) => r.person.login));
   const assigned = new Set(assignees.map((p) => p.login));
   return (
-    <section class="side-block" aria-label="Reviewers">
-      <h3>Reviewers</h3>
-      {reviewers.length === 0 && <p class="muted">Nobody has been asked to review yet.</p>}
+    <section class="side-block" aria-label={m.reviewers}>
+      <h3>{m.reviewers}</h3>
+      {reviewers.length === 0 && <p class="muted">{m.nobodyAsked}</p>}
       <ul class="people">
         {reviewers.map(({ person, status }) => (
           <li key={person.login}>
-            <span>{person.login}</span> <span class={`review-status status-${status}`}>{REVIEWER_LABEL[status]}</span>
+            <span>{person.login}</span> <span class={`review-status status-${status}`}>{reviewerLabel(status, t)}</span>
             {canEdit && status === 'pending' && (
               <button type="button" class="link" disabled={busy} onClick={() => props.onRemoveReviewer(person.login)}>
-                Remove
+                {m.remove}
               </button>
             )}
           </li>
@@ -40,28 +42,28 @@ export function People(props: PeopleProps) {
       </ul>
       {canEdit && (
         <PersonPicker
-          label="Ask someone to review"
+          label={m.askSomeone}
           people={candidates.filter((p) => !pending.has(p.login))}
           busy={busy}
           onPick={props.onRequest}
         />
       )}
-      <h3>Assigned to</h3>
-      {assignees.length === 0 && <p class="muted">Nobody.</p>}
+      <h3>{m.assignedTo}</h3>
+      {assignees.length === 0 && <p class="muted">{m.nobody}</p>}
       <ul class="people">
         {assignees.map((person) => (
           <li key={person.login}>
             <span>{person.login}</span>
             {canEdit && (
               <button type="button" class="link" disabled={busy} onClick={() => props.onUnassign(person.login)}>
-                Remove
+                {m.remove}
               </button>
             )}
           </li>
         ))}
       </ul>
       {canEdit && (
-        <PersonPicker label="Assign someone" people={candidates.filter((p) => !assigned.has(p.login))} busy={busy} onPick={props.onAssign} />
+        <PersonPicker label={m.assignSomeone} people={candidates.filter((p) => !assigned.has(p.login))} busy={busy} onPick={props.onAssign} />
       )}
       {!canEdit && editHint && <p class="muted">{editHint}</p>}
     </section>
@@ -69,6 +71,7 @@ export function People(props: PeopleProps) {
 }
 
 function PersonPicker({ label, people, busy, onPick }: { label: string; people: Person[]; busy: boolean; onPick: (login: string) => void }) {
+  const t = useT();
   if (people.length === 0) return null;
   return (
     <label class="person-picker">
@@ -81,7 +84,7 @@ function PersonPicker({ label, people, busy, onPick }: { label: string; people: 
           if (login) onPick(login);
         }}
       >
-        <option value="">Choose…</option>
+        <option value="">{t.people.choose}</option>
         {people.map((p) => (
           <option key={p.login} value={p.login}>
             {p.login}
@@ -118,8 +121,8 @@ export function ReviewForm(props: ReviewFormProps) {
   const { event, body, pendingCount, ownProposal, busy } = props;
   const needsBody = event === 'REQUEST_CHANGES' || (event === 'COMMENT' && pendingCount === 0);
   return (
-    <section class="side-block" aria-label="Your review" id="your-review" tabIndex={-1}>
-      <h3>Your review</h3>
+    <section class="side-block" aria-label={t.review.yourReview} id="your-review" tabIndex={-1}>
+      <h3>{t.review.yourReview}</h3>
       <fieldset class="segmented review-events">
         <legend class="visually-hidden">{t.review.decision}</legend>
         {EVENTS.map((e) => (
@@ -137,16 +140,14 @@ export function ReviewForm(props: ReviewFormProps) {
         ))}
       </fieldset>
       <label>
-        Overall comment{needsBody ? '' : ' (optional)'}
+        {t.review.overallComment(!needsBody)}
         <textarea rows={4} value={body} onInput={(e) => props.onBody((e.target as HTMLTextAreaElement).value)} />
       </label>
       {pendingCount > 0 && (
-        <p class="muted">
-          {pendingCount} line {pendingCount === 1 ? 'comment' : 'comments'} will be sent with this review.
-        </p>
+        <p class="muted">{t.review.pendingCount(pendingCount)}</p>
       )}
       <button type="button" class="primary" disabled={busy || (needsBody && body.trim() === '')} onClick={props.onSubmit}>
-        {EVENTS.find((e) => e.value === event)?.send ?? 'Send review'}
+        {EVENTS.find((e) => e.value === event)?.send ?? t.review.sendReview}
       </button>
     </section>
   );
@@ -163,31 +164,30 @@ export interface MergeBoxProps {
 
 export function MergeBox({ proposal, access, method, busy, onMethod, onMerge }: MergeBoxProps) {
   const t = useT();
-  if (proposal.state === 'merged') return <p class="notice notice-ok">This proposal has been merged.</p>;
-  if (proposal.state === 'closed') return <p class="notice">This proposal is closed.</p>;
+  const m = t.merge;
+  if (proposal.state === 'merged') return <p class="notice notice-ok">{m.merged}</p>;
+  if (proposal.state === 'closed') return <p class="notice">{m.closed}</p>;
   const allowed = canMerge(proposal, access);
   return (
-    <section class="side-block" aria-label="Merge">
-      <h3>Merge</h3>
-      <p>{proposal.draft ? mergeLabel(proposal.mergeable, 'draft') : mergeLabel(proposal.mergeable, proposal.mergeableState)}</p>
-      {!access.canPush && <p class="muted">Only people who can change this repository can merge.</p>}
-      {access.canPush && access.mergeMethods.length === 0 && (
-        <p class="muted">GitHub did not say which merge methods this repository allows. Merge on GitHub instead.</p>
-      )}
+    <section class="side-block" aria-label={m.title}>
+      <h3>{m.title}</h3>
+      <p>{mergeLabel(proposal.mergeable, proposal.draft ? 'draft' : proposal.mergeableState, t)}</p>
+      {!access.canPush && <p class="muted">{m.onlyPush}</p>}
+      {access.canPush && access.mergeMethods.length === 0 && <p class="muted">{m.noMethods}</p>}
       {allowed && (
         <>
           <button type="button" class="primary" disabled={busy} onClick={onMerge}>
-            Merge
+            {m.button}
           </button>
           {access.mergeMethods.length > 1 && (
             <details class="merge-options">
               <summary>{t.review.mergeOptions}</summary>
               <label>
-                How to merge
+                {m.howTo}
                 <select value={method} onChange={(e) => onMethod((e.target as HTMLSelectElement).value as MergeMethod)}>
-                  {access.mergeMethods.map((m) => (
-                    <option key={m} value={m}>
-                      {METHOD_LABEL[m]}
+                  {access.mergeMethods.map((option) => (
+                    <option key={option} value={option}>
+                      {methodLabel(option, t)}
                     </option>
                   ))}
                 </select>

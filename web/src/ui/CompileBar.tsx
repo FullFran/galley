@@ -1,3 +1,6 @@
+import { useT } from '../i18n';
+import { formatClock } from '../i18n/format';
+
 export interface CompileBarProps {
   compiling: boolean;
   /** Edits made since the last compile. */
@@ -8,10 +11,10 @@ export interface CompileBarProps {
   onAuto: (auto: boolean) => void;
 }
 
-const time = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-
 /** Recompile button (Ctrl/Cmd+Enter), auto-compile toggle and compile state, above the preview. */
 export function CompileBar({ compiling, stale, lastCompiledAt, auto, onRecompile, onAuto }: CompileBarProps) {
+  const t = useT();
+  const m = t.compile;
   return (
     <div class="compile-bar" data-tour="compile">
       <button
@@ -19,21 +22,21 @@ export function CompileBar({ compiling, stale, lastCompiledAt, auto, onRecompile
         class="secondary"
         onClick={onRecompile}
         disabled={compiling}
-        title="Recompile (Ctrl+Enter or Cmd+Enter)"
+        title={m.shortcut}
         aria-keyshortcuts="Control+Enter Meta+Enter"
       >
-        {compiling ? 'Compiling…' : 'Recompile'}
+        {compiling ? m.compiling : m.recompile}
       </button>
       <label class="compile-auto">
-        <input type="checkbox" checked={auto} onChange={(e) => onAuto(e.currentTarget.checked)} /> Auto-compile
+        <input type="checkbox" checked={auto} onChange={(e) => onAuto(e.currentTarget.checked)} /> {m.auto}
       </label>
       <span class="muted compile-state" aria-live="polite">
         {compiling
-          ? 'Compiling…'
+          ? m.compiling
           : stale
-            ? 'Edits not shown yet: press Recompile or Ctrl+Enter.'
+            ? m.stale
             : lastCompiledAt !== undefined
-              ? `Compiled at ${time(lastCompiledAt)}`
+              ? m.compiledAt(formatClock(lastCompiledAt, t.meta.lang))
               : ''}
       </span>
     </div>

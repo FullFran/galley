@@ -153,7 +153,7 @@ describe('ProposalList', () => {
   it('shows review state as a chip', () => {
     const html = render(
       <ProposalList
-        rows={[{ summary: { number: 1, title: 't', updatedAt: '', draft: false }, overall: 'approved', merge: 'Ready to merge' }]}
+        rows={[{ summary: { number: 1, title: 't', updatedAt: '', draft: false }, overall: 'approved', merge: { mergeable: true, state: 'clean' } }]}
         onOpen={noop}
       />,
     );

@@ -20,6 +20,8 @@ export interface ShellContext {
   sidebar: SidebarControl;
   onNavigate: (id: NavId) => void;
   onSignOut: () => void;
+  /** The ES | EN switcher App provides for every signed-in screen. */
+  languageSwitch?: ComponentChildren;
 }
 
 export interface AppShellProps {
@@ -32,7 +34,7 @@ export interface AppShellProps {
   /** Sidebar content shown under the Paper and Files entries (workspace only). */
   panels?: { paper?: ComponentChildren; files?: ComponentChildren };
   toasts?: ComponentChildren;
-  /** Slot in the sidebar footer for the language switcher (ES | EN). */
+  /** Slot in the sidebar footer for the language switcher (ES | EN); defaults to `shell.languageSwitch`. */
   languageSwitch?: ComponentChildren;
   mainClass?: string;
   children: ComponentChildren;
@@ -158,7 +160,7 @@ export function AppShell({ shell, active, crumbs, actions, panels, toasts, langu
             <Icon name="logout" />
             <span class="nav-label">{t.shell.signOut}</span>
           </button>
-          {languageSwitch && <div class="language-slot">{languageSwitch}</div>}
+          {(languageSwitch ?? shell.languageSwitch) && <div class="language-slot">{languageSwitch ?? shell.languageSwitch}</div>}
           <div class="sidebar-credit">
             <Credit />
           </div>

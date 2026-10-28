@@ -850,6 +850,45 @@ label {
   display: none;
 }
 
+/* Save button: the short label only on phones. */
+.save-short {
+  display: none;
+}
+
+@media (max-width: 479px) {
+  .save-long {
+    display: none;
+  }
+
+  .save-short {
+    display: inline;
+  }
+}
+
+/* ES | EN switcher: sidebar footer and landing footer. */
+.language-slot {
+  padding: var(--space-1) var(--space-3);
+}
+
+.language-switch button {
+  min-width: 2.25rem;
+  min-height: 2rem;
+  padding: 0 var(--space-2);
+  font-size: var(--text-xs);
+  letter-spacing: 0.02em;
+}
+
+/* In the icon rail the two buttons stack so they fit 3.5rem. */
+.shell[data-collapsed='true'] .language-slot {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-1) 0;
+}
+
+.shell[data-collapsed='true'] .language-switch {
+  flex-direction: column;
+}
+
 .view-as {
   margin: var(--space-1) 0 var(--space-2);
 }
@@ -1587,6 +1626,11 @@ label {
 }
 
 .landing-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3) var(--space-4);
   padding: var(--space-4) var(--space-6);
   border-top: 1px solid var(--border);
   text-align: center;

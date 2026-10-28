@@ -1,4 +1,5 @@
 import type { FileChange } from '../domain';
+import { useT } from '../i18n';
 
 export type SaveStatus =
   | { kind: 'idle' }
@@ -14,22 +15,24 @@ export interface StatusBannerProps {
 }
 
 export function StatusBanner({ status, onReload, onDismiss }: StatusBannerProps) {
+  const t = useT();
+  const m = t.saveStatus;
   switch (status.kind) {
     case 'idle':
       return null;
     case 'saving':
-      return <p class="banner" role="status">Saving…</p>;
+      return <p class="banner" role="status">{t.save.saving}</p>;
     case 'saved':
       return status.pullRequestUrl ? (
         <p class="banner banner-ok" role="status">
-          Saved. Changes are proposed for review.{' '}
+          {m.saved}{' '}
           <a href={status.pullRequestUrl} target="_blank" rel="noopener noreferrer">
-            View proposal on GitHub
+            {m.viewProposal}
           </a>
         </p>
       ) : (
         <p class="banner banner-warn" role="status">
-          Saved; could not open the proposal, retry later.
+          {m.savedNoProposal}
         </p>
       );
     case 'error':
@@ -42,20 +45,17 @@ export function StatusBanner({ status, onReload, onDismiss }: StatusBannerProps)
       return (
         <section class="banner banner-error" role="alert">
           <p>
-            Someone else changed the document since you opened it, so your changes were not saved.{' '}
-            {status.reloaded
-              ? 'The latest version is now loaded. Copy your text below back into the editor where needed, then save.'
-              : 'Your text is kept below. Reload to get the latest version, then copy your text back in.'}
+            {m.conflict} {status.reloaded ? m.conflictReloaded : m.conflictKept}
           </p>
           <UnsavedCopies copies={status.copies} />
           <div class="actions">
             {!status.reloaded && (
               <button type="button" class="primary" onClick={onReload}>
-                Reload
+                {m.reload}
               </button>
             )}
             <button type="button" onClick={onDismiss}>
-              {status.reloaded ? 'Done' : 'Cancel'}
+              {status.reloaded ? m.done : m.cancel}
             </button>
           </div>
         </section>
@@ -65,11 +65,12 @@ export function StatusBanner({ status, onReload, onDismiss }: StatusBannerProps)
 
 /** Read-only copies of the user's text so it can be copied elsewhere. */
 export function UnsavedCopies({ copies }: { copies: FileChange[] }) {
+  const m = useT().saveStatus;
   return (
     <>
       {copies.map((copy) => (
         <label key={copy.path} class="unsaved-copy">
-          Your text of {copy.path}
+          {m.yourText(copy.path)}
           <textarea readOnly rows={6} value={copy.content} />
         </label>
       ))}
