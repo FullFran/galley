@@ -73,6 +73,7 @@ type OAuthProvider interface {
 type UserTokenStore interface {
 	UpsertUser(ctx context.Context, u GitHubUser) (User, error)
 	UserByGitHubID(ctx context.Context, githubID int64) (User, error)
+	UserByID(ctx context.Context, id string) (User, error)
 	SaveRefreshToken(ctx context.Context, userID string, t StoredToken) error
 	LoadRefreshToken(ctx context.Context, userID string) (StoredToken, error)
 	DeleteRefreshToken(ctx context.Context, userID string) error

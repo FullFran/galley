@@ -19,8 +19,15 @@ type Deps struct {
 	FrontendOrigin string
 	// WebhookSecret verifies GitHub webhook signatures.
 	WebhookSecret []byte
-	// Logger defaults to slog.Default. Never given tokens, codes or cookies.
+	// Logger defaults to slog.Default. Never given tokens, codes, cookies or
+	// comment text.
 	Logger *slog.Logger
+	// Comments enables the comment routes when set.
+	Comments CommentsService
+	// OnAccessChange, when set, runs after GitHub webhooks that can change
+	// repository permissions (installation, membership, repository), so
+	// cached permissions are dropped.
+	OnAccessChange func()
 }
 
 // Register adds galley routes to r.
@@ -30,6 +37,9 @@ func Register(r *router.Router[*core.RequestEvent], d Deps) {
 	}
 	r.GET(HealthPath, health)
 	registerAuth(r, d)
+	if d.Comments != nil {
+		registerComments(r, d)
+	}
 }
 
 func health(e *core.RequestEvent) error {

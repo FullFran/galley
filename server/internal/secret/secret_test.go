@@ -109,3 +109,33 @@ func TestRandomTokenAndHash(t *testing.T) {
 		t.Errorf("hash length = %d, want 64 hex chars", len(secret.HashToken(a)))
 	}
 }
+
+func TestDeriveKey(t *testing.T) {
+	master := testKey()
+	a, err := secret.DeriveKey(master, "galley-data-v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, _ := secret.DeriveKey(master, "galley-data-v1")
+	other, _ := secret.DeriveKey(master, "galley-other-v1")
+	if len(a) != secret.KeySize {
+		t.Fatalf("len = %d", len(a))
+	}
+	if !bytes.Equal(a, again) {
+		t.Error("derivation is not deterministic")
+	}
+	if bytes.Equal(a, master) || bytes.Equal(a, other) {
+		t.Error("derived key is not separated from the master or other purposes")
+	}
+	if _, err := secret.DeriveKey(make([]byte, 16), "galley-data-v1"); err == nil {
+		t.Error("short master key accepted")
+	}
+
+	// A value sealed with the master key never opens with the derived key.
+	ms, _ := secret.NewSealer(master)
+	ds, _ := secret.NewSealer(a)
+	sealed, _ := ms.Seal([]byte("x"), []byte("aad"))
+	if _, err := ds.Open(sealed, []byte("aad")); err == nil {
+		t.Error("derived key opened a value sealed with the master key")
+	}
+}

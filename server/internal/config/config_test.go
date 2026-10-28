@@ -1,6 +1,7 @@
 package config_test
 
 import (
+	"bytes"
 	"encoding/base64"
 	"strings"
 	"testing"
@@ -30,6 +31,9 @@ func TestLoad(t *testing.T) {
 	}
 	if len(cfg.TokenKey) != 32 || cfg.FrontendOrigin != "https://galley.fullfran.com" {
 		t.Errorf("cfg = %+v", cfg)
+	}
+	if len(cfg.DataKey) != 32 || bytes.Equal(cfg.DataKey, cfg.TokenKey) {
+		t.Error("data key must be a separate 32-byte key derived from GALLEY_TOKEN_KEY")
 	}
 }
 

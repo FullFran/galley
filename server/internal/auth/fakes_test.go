@@ -114,6 +114,17 @@ func (s *memStore) UserByGitHubID(_ context.Context, id int64) (auth.User, error
 	return u, nil
 }
 
+func (s *memStore) UserByID(_ context.Context, id string) (auth.User, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, u := range s.users {
+		if u.ID == id {
+			return u, nil
+		}
+	}
+	return auth.User{}, auth.ErrNotFound
+}
+
 func (s *memStore) SaveRefreshToken(ctx context.Context, userID string, t auth.StoredToken) error {
 	if err := ctx.Err(); err != nil {
 		return err
