@@ -180,6 +180,29 @@ func (a *CachedAccess) mint(ctx context.Context, u *userAccess, userID string) (
 	return tok, nil
 }
 
+// Token returns the user's unscoped GitHub token for other server-side
+// calls (re-anchoring, notification checks): the cached one until
+// TokenMargin before it expires, otherwise a freshly minted one, which is
+// cached. Mints are serialized with the user's permission fetches.
+func (a *CachedAccess) Token(ctx context.Context, userID string) (UserToken, error) {
+	u := a.user(userID)
+	a.mu.Lock()
+	tok := u.token
+	a.mu.Unlock()
+	if tok.Token != "" && a.cfg.Clock.Now().Before(tok.ExpiresAt.Add(-a.cfg.TokenMargin)) {
+		return tok, nil
+	}
+	u.fetch.Lock()
+	defer u.fetch.Unlock()
+	a.mu.Lock()
+	tok = u.token
+	a.mu.Unlock()
+	if tok.Token != "" && a.cfg.Clock.Now().Before(tok.ExpiresAt.Add(-a.cfg.TokenMargin)) {
+		return tok, nil
+	}
+	return a.mint(ctx, u, userID)
+}
+
 // TokenIssued records a token issued for the user elsewhere (the browser's
 // refresh). An unscoped token replaces the cached one; a repository-scoped
 // token is never reused, and drops the cached token because the rotation may

@@ -22,7 +22,9 @@ import (
 	"github.com/FullFran/galley/server/internal/drafts"
 	"github.com/FullFran/galley/server/internal/github"
 	"github.com/FullFran/galley/server/internal/httpapi"
+	"github.com/FullFran/galley/server/internal/notify"
 	"github.com/FullFran/galley/server/internal/pbstore"
+	"github.com/FullFran/galley/server/internal/reanchor"
 	"github.com/FullFran/galley/server/internal/secret"
 )
 
@@ -161,13 +163,57 @@ func newDeps(app core.App) (httpapi.Deps, *chat.Service, error) {
 	if err != nil {
 		return httpapi.Deps{}, nil, err
 	}
+	// Re-anchoring and notification checks call GitHub with the viewer's or
+	// caller's own token, the same cached server-side token as the
+	// permission checks.
+	userToken := func(ctx context.Context, userID string) (string, error) {
+		tok, err := access.Token(ctx, userID)
+		return tok.Token, err
+	}
+	reanchorer, err := reanchor.New(reanchor.Config{GitHub: gh, Token: userToken, Logger: logger})
+	if err != nil {
+		return httpapi.Deps{}, nil, err
+	}
 	commentSvc, err := comments.NewService(comments.Config{
-		Store:  pbstore.NewCommentStore(app),
-		Access: guard,
-		Sealer: dataSealer,
+		Store:      pbstore.NewCommentStore(app),
+		Access:     guard,
+		Sealer:     dataSealer,
+		Reanchorer: reanchorer,
 	})
 	if err != nil {
 		return httpapi.Deps{}, nil, err
+	}
+	notifyStore := pbstore.NewNotifyStore(app)
+	var mailer notify.Mailer // nil: notifications disabled
+	if cfg.MailEnabled() {
+		mailer = &notify.ResendMailer{APIKey: cfg.ResendAPIKey, From: cfg.MailFrom, HTTPClient: &http.Client{Timeout: 10 * time.Second}}
+	} else {
+		logger.Info("email notifications disabled: GALLEY_RESEND_API_KEY or GALLEY_MAIL_FROM is not set")
+	}
+	notifySvc, err := notify.NewService(notify.Config{
+		Store:          notifyStore,
+		Users:          notifyStore,
+		GitHub:         gh,
+		Access:         guard,
+		Token:          userToken,
+		Mailer:         mailer,
+		Sealer:         dataSealer,
+		LinkKey:        cfg.LinkKey,
+		PublicURL:      cfg.PublicURL,
+		FrontendOrigin: cfg.FrontendOrigin,
+		Logger:         logger,
+	})
+	if err != nil {
+		return httpapi.Deps{}, nil, err
+	}
+	if err := app.Cron().Add("galley_notify_outbox_purge", "17 3 * * *", func() {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		defer cancel()
+		if _, err := notifySvc.Purge(ctx); err != nil {
+			logger.Error("notification outbox purge failed", "error", err)
+		}
+	}); err != nil {
+		return httpapi.Deps{}, nil, fmt.Errorf("notify purge: %w", err)
 	}
 	adminSvc, err := admin.NewService(admin.Config{
 		Guard:  guard,
@@ -190,6 +236,7 @@ func newDeps(app core.App) (httpapi.Deps, *chat.Service, error) {
 		Comments:       commentSvc,
 		Drafts:         draftSvc,
 		Chat:           httpapi.ChatAdapter(chatSvc),
+		Notify:         notifySvc,
 		OnAccessChange: access.InvalidateAll,
 		FrontendOrigin: cfg.FrontendOrigin,
 		WebhookSecret:  []byte(cfg.WebhookSecret),
