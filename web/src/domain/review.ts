@@ -103,6 +103,8 @@ export interface ReviewSubmission {
 /** What the signed-in user may do in a repository. */
 export interface RepoAccess {
   canPush: boolean;
+  /** Repository admin: galley shows project settings. Not a galley permission of its own. */
+  admin: boolean;
   /** Merge methods the repository settings allow. */
   mergeMethods: MergeMethod[];
 }

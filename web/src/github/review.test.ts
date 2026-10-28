@@ -211,12 +211,17 @@ describe('GitHub review gateway', () => {
         json({ permissions: { push: true }, allow_merge_commit: false, allow_squash_merge: true, allow_rebase_merge: true }),
       ),
     ]);
-    await expect(gw.access(repo)).resolves.toEqual({ canPush: true, mergeMethods: ['squash', 'rebase'] });
+    await expect(gw.access(repo)).resolves.toEqual({ canPush: true, admin: false, mergeMethods: ['squash', 'rebase'] });
+  });
+
+  it('reads admin access, which galley uses for project settings', async () => {
+    const { gw } = gateway([on('GET', R, () => json({ permissions: { admin: true, push: true } }))]);
+    await expect(gw.access(repo)).resolves.toEqual({ canPush: true, admin: true, mergeMethods: [] });
   });
 
   it('offers no merge method when GitHub hides the merge settings', async () => {
     const { gw } = gateway([on('GET', R, () => json({ permissions: { push: false, pull: true } }))]);
-    await expect(gw.access(repo)).resolves.toEqual({ canPush: false, mergeMethods: [] });
+    await expect(gw.access(repo)).resolves.toEqual({ canPush: false, admin: false, mergeMethods: [] });
   });
 
   it('lists people who can be assigned as candidates', async () => {

@@ -40,6 +40,7 @@ export function App({ session, gateway, reviews }: AppProps) {
   const onDirtyChange = useCallback((value: boolean) => {
     dirty.current = value;
   }, []);
+  const access = useCallback((repo: Repository) => reviews.access(repo), [reviews]);
   const canLeave = () => !dirty.current || window.confirm(LEAVE_PROMPT);
 
   const signOut = async () => {
@@ -95,6 +96,7 @@ export function App({ session, gateway, reviews }: AppProps) {
           key={view.repo.id}
           gateway={gateway}
           repo={view.repo}
+          access={access}
           onAuthRequired={signedOut}
           onDirtyChange={onDirtyChange}
         />

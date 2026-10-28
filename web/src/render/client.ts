@@ -7,7 +7,7 @@ import type { ProjectSource, RenderResult } from './index';
 // worker, and the next render starts a fresh one.
 
 export type WorkerRequest =
-  | { type: 'render'; id: number; files: string[] }
+  | { type: 'render'; id: number; files: string[]; entry?: string }
   | { type: 'read-result'; id: number; req: number; ok: true; value: string | Uint8Array }
   | { type: 'read-result'; id: number; req: number; ok: false };
 
@@ -92,7 +92,7 @@ export function createRenderClient(spawn: () => WorkerLike = spawnWorker, budget
     }
     running = { ...job, remaining: budgetMs, startedAt: Date.now(), reads: 0 };
     resume();
-    worker.postMessage({ type: 'render', id: job.id, files: [...job.project.files] });
+    worker.postMessage({ type: 'render', id: job.id, files: [...job.project.files], entry: job.project.entry });
   }
 
   function onReply(from: WorkerLike, reply: WorkerReply) {
