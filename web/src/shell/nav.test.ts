@@ -18,8 +18,8 @@ describe('navigation data', () => {
   it('shows Write and Review to co-authors, without any admin entry', () => {
     const groups = visibleNav({ repoOpen: true, admin: false });
     expect(ids(groups)).toEqual([
-      ['write', ['contents']],
-      ['review', ['proposals', 'comments', 'chat']],
+      ['write', ['contents', 'references']],
+      ['review', ['proposals', 'comments', 'chat', 'history', 'asks']],
     ]);
     expect(groups.flatMap((g) => g.items).some((i) => i.id === 'admin')).toBe(false);
   });
@@ -27,8 +27,8 @@ describe('navigation data', () => {
   it('adds one Admin entry for admins, last and behind a separator', () => {
     const groups = visibleNav({ repoOpen: true, admin: true });
     expect(ids(groups)).toEqual([
-      ['write', ['contents']],
-      ['review', ['proposals', 'comments', 'chat']],
+      ['write', ['contents', 'references']],
+      ['review', ['proposals', 'comments', 'chat', 'history', 'asks']],
       ['admin', ['admin']],
     ]);
     expect(groups[2]?.separated).toBe(true);
@@ -43,6 +43,7 @@ describe('navigation data', () => {
   it('knows the group of every entry', () => {
     expect(groupOf('contents')).toBe('write');
     expect(groupOf('proposals')).toBe('review');
+    expect(groupOf('history')).toBe('review');
     expect(groupOf('admin')).toBe('admin');
   });
 });

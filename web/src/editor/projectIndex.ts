@@ -1,5 +1,7 @@
 import { parseBibtex, type CslName } from '../render/bibtex';
 import { dirname, resolvePath } from '../render/source';
+import { citationsOf, type Citation } from '../references/citations';
+import { paperWords, type PaperWords } from '../writing/words';
 
 // What the editor knows about the whole paper: bibliography entries and
 // crossref labels from every file, with where each one is defined. It feeds
@@ -42,6 +44,10 @@ export interface ProjectIndex {
   labels: LabelDef[];
   paths: string[];
   entry?: string;
+  /** Where each bibliography key is cited (references manager). */
+  cites?: Citation[];
+  /** Word counts of the paper (Outline and header). */
+  words?: PaperWords;
 }
 
 export const EMPTY_INDEX: ProjectIndex = { bib: [], labels: [], paths: [] };
@@ -161,7 +167,9 @@ export function buildIndex(input: IndexInput): ProjectIndex {
     .sort(([a], [b]) => a.localeCompare(b))
     .flatMap(([path, text]) => bibEntries(path, text));
 
-  return { bib, labels, paths: [...known], entry };
+  const cites = citationsOf(input.files);
+  const words = paperWords(texts, entry, (from, raw) => resolveInclude(from, raw, known));
+  return { bib, labels, paths: [...known], entry, cites, words };
 }
 
 function authors(names: unknown): string | undefined {

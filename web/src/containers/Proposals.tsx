@@ -18,13 +18,16 @@ export interface ProposalsProps {
   /** The proposal shown, from the URL; none for the list. */
   number?: number;
   onOpen: (number: number | undefined) => void;
+  /** Only proposals by this GitHub login (from the admin panel's People tab). */
+  author?: string;
+  onAllAuthors?: () => void;
 }
 
 /** How many proposals get their review and merge state looked up for the list. */
 const DETAILED = 30;
 
 /** Open proposals of a repository, and the one being reviewed. */
-export function Proposals({ repos, reviews, repo, number: open, onOpen, onAuthRequired, shell }: ProposalsProps) {
+export function Proposals({ repos, reviews, repo, number: open, onOpen, onAuthRequired, shell, author, onAllAuthors }: ProposalsProps) {
   const t = useT();
   const tRef = useTRef();
   const [rows, setRows] = useState<ProposalRow[]>();
@@ -87,12 +90,24 @@ export function Proposals({ repos, reviews, repo, number: open, onOpen, onAuthRe
             </button>
           </div>
         ) : rows ? (
+          <>
+          {author && (
+            <p class="notice proposals-filter" role="status">
+              {t.proposals.byAuthor(author)}{' '}
+              {onAllAuthors && (
+                <button type="button" onClick={onAllAuthors}>
+                  {t.proposals.allAuthors}
+                </button>
+              )}
+            </p>
+          )}
           <ProposalList
-            rows={rows}
+            rows={author ? rows.filter((r) => r.summary.author?.login.toLowerCase() === author.toLowerCase()) : rows}
             onOpen={onOpen}
             onEmptyAction={() => shell.onNavigate('contents')}
             ciChip={shell.ci && ((sha) => <LiveCiChip ci={shell.ci} repo={repo} sha={sha} />)}
           />
+          </>
         ) : (
           <Skeleton variant="list" lines={3} />
         )}

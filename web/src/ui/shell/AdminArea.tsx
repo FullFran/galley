@@ -1,6 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { useT } from '../../i18n';
-import { availableAdminTabs, type AdminTabId } from '../../shell/adminTabs';
+import { availableAdminTabs, isPanelTab, type AdminTabId } from '../../shell/adminTabs';
 
 export interface AdminAreaProps {
   /** Confirmed admin of the repository; anything else sees no admin content. */
@@ -13,15 +13,19 @@ export interface AdminAreaProps {
   onCoauthorView: (on: boolean) => void;
   /** Files co-authors see. */
   coauthorCount: number;
+  /** The admin panel tabs (People, Access, Shared drafts, Activity log), loaded on demand. */
+  panel?: ComponentChildren;
+  /** Team activity (last 7 days, from GitHub), loaded on demand. */
+  team?: ComponentChildren;
 }
 
 /**
  * Everything for admins in one place, opened from the single Admin entry:
- * tabs for Project settings and View as co-author now, and room for the admin
- * panel later (people, sessions, allowlist). Co-authors never get this
- * content, only a one-line notice.
+ * Project settings, the admin panel (People, Access, Shared drafts, Activity
+ * log) and View as co-author. Co-authors never get this content, only a
+ * one-line notice.
  */
-export function AdminArea({ admin, tab, onTab, settings, coauthorView, onCoauthorView, coauthorCount }: AdminAreaProps) {
+export function AdminArea({ admin, tab, onTab, settings, coauthorView, onCoauthorView, coauthorCount, panel, team }: AdminAreaProps) {
   const t = useT();
   const m = t.admin;
   if (!admin) {
@@ -66,6 +70,10 @@ export function AdminArea({ admin, tab, onTab, settings, coauthorView, onCoautho
       <div id={`admin-panel-${tab}`} role="tabpanel" aria-labelledby={`admin-tab-${tab}`} class="tab-panel">
         {tab === 'settings' ? (
           settings
+        ) : isPanelTab(tab) ? (
+          panel
+        ) : tab === 'team' ? (
+          team
         ) : (
           <div class="view-as">
             <p class="muted">{m.viewAsLead}</p>

@@ -59,3 +59,37 @@ export function addEditable(text: string, path: string): string | undefined {
   lines.splice(block.end, 0, `${indent}- ${scalar(path)}`);
   return `${lines.join('\n')}\n`;
 }
+
+/**
+ * Sets `sections.<path>.status`, changing the one line in place or adding the
+ * entry (or the block). Undefined for flow style or odd indentation.
+ */
+export function setSectionStatus(text: string, path: string, status: string): string | undefined {
+  const lines = text.replace(/\n$/, '').split('\n');
+  const key = `${scalar(path)}:`;
+  const block = findBlock(lines, 'sections');
+  if (!block) return `${lines.join('\n')}\nsections:\n  ${key}\n    status: ${status}\n`;
+  if (block.inline !== '') return undefined;
+  const indent = block.indent ?? '  ';
+  if (indent === '' || indent.includes('\t')) return undefined;
+  for (let i = block.start + 1; i < block.end; i += 1) {
+    const line = lines[i] ?? '';
+    if (line !== `${indent}${key}` && !line.startsWith(`${indent}${key} `)) continue;
+    // The entry's own lines are indented deeper than its key.
+    for (let j = i + 1; j < block.end; j += 1) {
+      const inner = lines[j] ?? '';
+      if (inner.trim() === '' || inner.trimStart().startsWith('#')) continue;
+      const own = /^(\s*)/.exec(inner)?.[1] ?? '';
+      if (own.length <= indent.length) break;
+      const match = /^(\s*status:\s*)([^#\s]*)(.*)$/.exec(inner);
+      if (match) {
+        lines[j] = `${match[1]}${status}${match[3]}`;
+        return `${lines.join('\n')}\n`;
+      }
+    }
+    lines.splice(i + 1, 0, `${indent}${indent}status: ${status}`);
+    return `${lines.join('\n')}\n`;
+  }
+  lines.splice(block.end, 0, `${indent}${key}`, `${indent}${indent}status: ${status}`);
+  return `${lines.join('\n')}\n`;
+}

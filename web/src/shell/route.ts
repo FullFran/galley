@@ -6,15 +6,24 @@
 //   #/r/{owner}/{repo}                 workspace, main document
 //   #/r/{owner}/{repo}/f/{path}        workspace, that file
 //   #/r/{owner}/{repo}/proposals[/{n}] proposals, or one proposal
+//   #/r/{owner}/{repo}/proposals/by/{login}  proposals by one author
 //   #/r/{owner}/{repo}/admin/{tab}     admin area
+//   #/r/{owner}/{repo}/history[/compare|since/{base}...{head}]
+//                                      versions, or what changed between two
+//   #/r/{owner}/{repo}/references[/{key}] references manager, or one entry
+//   #/r/{owner}/{repo}/asks            my asks (review requests with due dates)
 
 import { resolveAdminTab, type AdminTabId } from './adminTabs';
 
 export type Route =
   | { name: 'repos' }
   | { name: 'workspace'; owner: string; repo: string; path?: string }
-  | { name: 'proposals'; owner: string; repo: string; number?: number }
-  | { name: 'admin'; owner: string; repo: string; tab: AdminTabId };
+  | { name: 'proposals'; owner: string; repo: string; number?: number; author?: string }
+  | { name: 'admin'; owner: string; repo: string; tab: AdminTabId }
+  /** `since`: opened from "What changed since your last visit". */
+  | { name: 'history'; owner: string; repo: string; compare?: { base: string; head: string; since: boolean } }
+  | { name: 'references'; owner: string; repo: string; key?: string }
+  | { name: 'asks'; owner: string; repo: string };
 
 export type RepoRoute = Exclude<Route, { name: 'repos' }>;
 
@@ -22,6 +31,9 @@ const REPOS: Route = { name: 'repos' };
 // GitHub owner and repository names.
 const NAME = /^[A-Za-z0-9_.-]{1,100}$/;
 const NUMBER = /^[1-9]\d{0,8}$/;
+const RANGE = /^([0-9a-f]{7,40})\.\.\.([0-9a-f]{7,40})$/;
+// GitHub logins: alphanumerics and single inner hyphens, at most 39 characters.
+export const LOGIN = /^[A-Za-z0-9](?:[A-Za-z0-9]|-(?=[A-Za-z0-9])){0,38}$/;
 const RETURN_KEY = 'galley:return-to';
 
 function decode(segment: string): string | undefined {
@@ -49,9 +61,17 @@ export function parseRoute(hash: string): Route {
   if (section === 'proposals') {
     if (rest.length === 0) return { name: 'proposals', ...base };
     if (rest.length === 1 && NUMBER.test(rest[0] ?? '')) return { name: 'proposals', ...base, number: Number(rest[0]) };
+    if (rest.length === 2 && rest[0] === 'by' && LOGIN.test(rest[1] ?? '')) return { name: 'proposals', ...base, author: rest[1] };
     return REPOS;
   }
   if (section === 'admin' && rest.length <= 1) return { name: 'admin', ...base, tab: resolveAdminTab(rest[0]) };
+  if (section === 'asks' && rest.length === 0) return { name: 'asks', ...base };
+  if (section === 'history') {
+    if (rest.length === 0) return { name: 'history', ...base };
+    const range = rest.length === 2 && (rest[0] === 'compare' || rest[0] === 'since') ? RANGE.exec(rest[1] ?? '') : null;
+    if (range?.[1] && range[2]) return { name: 'history', ...base, compare: { base: range[1], head: range[2], since: rest[0] === 'since' } };
+  }
+  if (section === 'references' && rest.length <= 1) return rest[0] ? { name: 'references', ...base, key: rest[0] } : { name: 'references', ...base };
   return REPOS;
 }
 
@@ -63,9 +83,18 @@ export function formatRoute(route: Route): string {
     case 'workspace':
       return route.path ? `${base}/f/${route.path.split('/').map(enc).join('/')}` : base;
     case 'proposals':
-      return route.number === undefined ? `${base}/proposals` : `${base}/proposals/${route.number}`;
+      if (route.number !== undefined) return `${base}/proposals/${route.number}`;
+      return route.author ? `${base}/proposals/by/${enc(route.author)}` : `${base}/proposals`;
     case 'admin':
       return `${base}/admin/${route.tab}`;
+    case 'history':
+      return route.compare
+        ? `${base}/history/${route.compare.since ? 'since' : 'compare'}/${enc(route.compare.base)}...${enc(route.compare.head)}`
+        : `${base}/history`;
+    case 'references':
+      return route.key ? `${base}/references/${enc(route.key)}` : `${base}/references`;
+    case 'asks':
+      return `${base}/asks`;
   }
 }
 

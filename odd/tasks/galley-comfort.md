@@ -163,7 +163,8 @@ edit it, but anyone with write access could still change it on GitHub).
   (`feat/comments-ui`; roadmap 2, 3, 5). Route: delegated (2+ non-trivial
   files). Implemented and checked; pending review, commit and PR.
 - [ ] CX3 Guided tour.
-- [ ] CX4 References manager.
+- [ ] CX4 References manager (`feat/references`, with C7). Route: delegated (2+
+  non-trivial files). Implemented and checked; pending review, commit and PR.
 - [ ] C4 Drafts. Server API merged. UI (`feat/drafts-chat-ui`, with roadmap
   11 chat): IndexedDB autosave (~1 s), restore with notice and Undo, server
   sync (~5 s, If-Match, 409 "Use it / Keep mine", never overwrites), offer of
@@ -171,9 +172,25 @@ edit it, but anyone with write access could still change it on GitHub).
   save, "Keep drafts on the server" preference, header "Draft saved".
   Route: delegated (2+ non-trivial files). Implemented and checked; pending
   review, commit and PR.
-- [ ] C5 Changed since last visit.
-- [ ] C6 Admin panel.
-- [ ] C7 Writing aids.
+- [x] C5 Changed since last visit (`feat/history`, with roadmap item 6).
+  Route: delegated (2+ non-trivial files). Assessed tier and review outcome:
+  pending (not committed by the writer).
+- [ ] C6 Admin panel. Server side: Admin API (`feat/admin-api`, PR #21).
+  - [x] C6-UI (`feat/admin-ui`): Admin tabs People, Access, Shared drafts,
+    Activity log (lazy chunk `ui/admin/AdminPanels`), revoke sessions with
+    confirmation (`confirm_self` for yourself), allowlist add/remove with
+    validation and a "blocked now" preview, read-only shared-draft viewer with
+    the logging banner and "Copy into my own draft", activity filter, "Open
+    their proposals" (`proposals/by/{login}`), owner share toggle in the
+    editor ⋯ menu, co-author deep links to admin routes redirected, en + es.
+    Route: delegated (2+ non-trivial files). Checks: lint, typecheck, Vitest
+    (RED then GREEN), build, headless Chromium against the production build
+    with mocked APIs (admin and co-author, no CSP violations). Pending
+    review, commit and PR.
+- [ ] C7 Writing aids (`feat/references`): per-section and total word counts
+  with `limits`, DOI to BibTeX via Crossref (in CX4), browser spellcheck in
+  Writing mode. Autocomplete moved to CX2. Implemented and checked; pending
+  review, commit and PR.
 - [x] C8 PR/CI status and CI PDF (`feat/ci-pdf`). Route: delegated (2+ files).
   Assessed tier and review outcome: pending (not committed by the writer).
 
@@ -599,6 +616,46 @@ edit it, but anyone with write access could still change it on GitHub).
     build. Headless check (`pw/ci-check.mjs`, `shots-ci/`): 15 checks, 0
     failed, no CSP violations, no page errors.
   - Bundle: main 118.2 → 121.7 kB gzip (+3.4); fflate chunk 2.7 kB gzip.
+
+- C5 + roadmap 6 implemented (delegated writer, `feat/history` on
+  `49c5005`): History screen (`#/r/{o}/{r}/history`, lazy chunk) with versions
+  of the default branch (merged proposals named), tag labels (add/remove via
+  `git/refs`, names validated first), compare via `compare/{a}...{b}` in the
+  read-only diff view, preview at a SHA, zip as a github.com archive link
+  (codeload sends `Access-Control-Allow-Origin:
+  https://render.githubusercontent.com`, so a browser fetch fails; no CSP
+  change), restore of a file or the whole paper as unsaved changes in the
+  user's buffers (pending deletions are `sha: null` tree entries in the same
+  commit). Last visit: head per login + repository in `localStorage`, banner
+  "N changes since your last visit", "See what changed", "Mark as seen".
+  - Tests first (RED: modules missing, history routes and nav entry absent,
+    deletion test sending content), then GREEN: commit and tag mapping, label
+    rules and requests, compare mapping, restore plan and buffers (deletions),
+    last-visit store and banner. Lint, typecheck, 77 files / 767 tests, build.
+    Headless check (`pw/history-check.mjs`, `shots-history/`): 27 checks, 0
+    failed, no CSP violations, no page errors.
+  - Bundle: initial JS 120.1 -> 125.3 kB gzip (+5.2, mostly en + es copy and
+    the shared-chunk split); History chunk 2.9 kB gzip.
+
+- CX4 + C7 (`feat/references`, delegated writer, based on `545c301`):
+  - References view (`#/r/{o}/{r}/references[/{key}]`, Write group): list,
+    search, sort, file filter, duplicate key/DOI flags; form editor; add by
+    DOI (Crossref transform endpoint, `mailto` = public GitHub e-mail if any,
+    `credentials: omit`, CSP `connect-src` + `https://api.crossref.org`) or
+    form; key convention detected from existing keys; delete warns with the
+    citing `.qmd` lines (new `cites` in the project index). Edits are pending
+    edits of the `.bib` buffer; `bibFile.ts` edits by byte range only.
+    `@citekey` go to definition opens the entry. Lazy chunk (11.6 kB gzip).
+  - Word counts in the index worker (`writing/words.ts`), header status and
+    Outline counts; `limits: { words, abstract_words }` in `.galley.yml`.
+  - Spellcheck: `spellcheck`/`lang` content attributes in Writing mode only,
+    language from `_quarto.yml` or front matter `lang`, Preferences toggle.
+  - Fixed a missing `}` after `.admin-area .tab` in `styles.css` on main,
+    which nested the History styles (and anything appended) inside it.
+  - Checks: tests first (RED: 11 failing files), then GREEN (922 tests);
+    lint, typecheck, build; headless Chromium against the production build
+    with mocked GitHub, galley API and Crossref: 43 checks, no CSP
+    violations. Initial JS+CSS +5.1 kB gzip.
 
 ## Next step
 

@@ -463,6 +463,24 @@ stop working when the address changes. Addresses are sealed with the data key
 (AAD `galley/v1/notify/<user>/email`) in the hidden field of
 `galley_notify_prefs`, and logs only ever show them masked (`a***@e***.com`).
 
+**In the web app.** Admins find these under Admin (`#/r/{owner}/{repo}/admin/{tab}`),
+next to Project settings and View as co-author: **People** (login, permission,
+last seen, draft count, size and age; "Sign out of galley" with a confirmation
+that warns when it is you and then sends `confirm_self`; "Open their proposals"
+filters the proposals list, `#/r/{owner}/{repo}/proposals/by/{login}`),
+**Access** (add a GitHub login with an optional numeric id, remove entries, and
+see who the list blocks now; it says plainly that it limits galley, not GitHub),
+**Shared drafts** (active grants and a read-only plain-text viewer under "Shared
+by <owner> until <time> · this view is logged"; "Copy into my own draft" opens
+the text as the admin's own unsaved edit of that file, never the owner's draft)
+and **Activity log** (the last 200 entries, filtered by action). The panel is a
+separate, lazily loaded chunk (`ui/admin/AdminPanels`), so co-authors never
+download it; a co-author following a link to an admin route is sent back to
+the paper. Owners share from the editor's ⋯ menu: "Share this draft with admins
+(24 h)" and, while shared, "Stop sharing with admins (N h left)". The entry is
+offered only when the galley API answers; without a server draft of the file
+it explains that there is nothing to share yet.
+
 ## Project configuration
 
 A paper repository can hold a `.galley.yml` that chooses which files
@@ -889,6 +907,108 @@ running chip is asked again every 20 s, only while the page is visible.
 The port is `CiGateway` in `web/src/github/ci.ts`; status mapping, run and
 artifact choice and unzipping are plain functions in `web/src/ci/`.
 
+## History
+
+**History** (sidebar, Review group; `#/r/{o}/{r}/history`, a lazy chunk) lists
+the versions of the paper: the commits of the default branch, newest first,
+30 at a time (`GET /repos/{o}/{r}/commits?sha={default}&page=N`; "Show older
+versions" follows GitHub's `Link: rel="next"`). Each row shows the first line
+of the message, the author (GitHub login, else the git name), a relative date
+and the short SHA. Merged proposals read "Proposal #N merged · title" (merge
+commits `Merge pull request #N from …` with the title on a later line, and
+squash merges `Title (#N)`). Labels are git tags (`GET /tags`) shown on the
+version they point at.
+
+Selecting a version offers:
+
+- "Compare with current" or with any other loaded version: `GET
+  /compare/{older}...{newer}` (`#/r/{o}/{r}/history/compare/{base}...{head}`),
+  shown with the review diff view (read-only, no comment buttons). GitHub
+  lists at most 300 changed files; the screen says when the list is cut.
+- "Preview this version": the same sandboxed preview, rendered from that SHA
+  (tree and files read at the commit, nothing editable).
+- "Download as zip": a link to `https://github.com/{o}/{r}/archive/{sha}.zip`
+  in a new tab. galley does not fetch the zip itself: `GET
+  /repos/{o}/{r}/zipball/{ref}` answers 302 to `codeload.github.com`, which
+  sends `Access-Control-Allow-Origin: https://render.githubusercontent.com`
+  (checked 2026-10-28), so a browser fetch from galley fails CORS (headless
+  Chromium: "Failed to fetch"). The new tab uses the person's own github.com
+  sign in (needed for private repositories), and the CSP stays unchanged.
+- "Add label" (users with push access): a lightweight tag, `POST /git/refs`
+  with `{ ref: "refs/tags/<name>", sha }`; the × on a label asks first and
+  sends `DELETE /git/refs/tags/<name>`. Both need Contents: write, like
+  saving. Names follow git's ref rules (no spaces, `..`, `~^:?*[\`, control
+  characters, leading `-` or `/`, trailing `/`, `.` or `.lock`, `@{`, empty
+  path parts), at most 100 characters, and must not exist yet; invalid names
+  are refused before anything is sent.
+- "Restore this file" (in a comparison) and "Restore whole paper to this
+  version": never a commit. The version's files become unsaved changes in the
+  person's own copy (text in the editor buffers, other files as pending
+  uploads, files the version did not have as pending deletions), with the
+  suggested note "Restore files from the version of {date}". Saving for review
+  then works like any edit, so the change reaches the default branch only
+  through a proposal. Deletions are tree entries with `sha: null` in the same
+  single commit (skipped for files the branch does not have). The whole-paper
+  plan compares the blob SHAs of both trees, and also resets unsaved edits.
+
+**What changed since your last visit**: galley remembers, per GitHub login and
+repository, the default-branch head the person last marked as seen
+(`localStorage` key `galley:last-seen`, at most 200 entries, guarded). The
+first visit only remembers the head. When it has moved, a slim banner says
+"N changes since your last visit" (commits from `GET /compare/{seen}...{head}`)
+with "See what changed" (`#/r/{o}/{r}/history/since/{seen}...{head}`, the
+readable diff grouped by file, no restore buttons) and "Mark as seen". A
+remembered SHA GitHub no longer knows (history rewritten) is replaced
+silently.
+
+The port is `HistoryGateway` in `web/src/github/history.ts`; version and
+label mapping, label name rules, the restore plan and the last-visit store are
+plain functions in `web/src/history/`.
+
+## Team
+
+Team features (roadmap item 14) use GitHub itself; galley stores nothing new.
+
+- **Section owners** from `CODEOWNERS` (`web/src/team/codeowners.ts`: the first
+  of `.github/`, root, `docs/`; gitignore-like patterns, last match wins):
+  initials next to each section in the outline, login in the tooltip. On a
+  proposal, a "Section owners" box lists "Owner: @x" for each changed file
+  (CODEOWNERS of the default branch) and "Ask owners to review" requests the
+  user owners (not teams or emails, not the author) as reviewers. Admins edit
+  owners from a section's ⋯ menu; the CODEOWNERS change is a pending edit,
+  saved for review. Owners need write access or GitHub skips them.
+- **Section status** (`draft`, `in_review`, `approved`) in `.galley.yml`
+  `sections` (see `docs/galley-yml.md`): outline badges; admins and the
+  section's owners change it from the ⋯ menu as a pending `.galley.yml` edit.
+- **Asks with due dates**: "Ask someone to review…" (section ⋯ menu, or the
+  proposal's Section owners box) creates a GitHub issue "Review: {name}" with
+  links to galley and GitHub, label `galley-ask` (created if missing), the
+  person as assignee and a milestone "Due YYYY-MM-DD" (created or reused,
+  `due_on` at 12:00 UTC so the day survives time zones). **My asks** (sidebar,
+  Review group; `#/r/{o}/{r}/asks`, a lazy chunk) lists open `galley-ask`
+  issues assigned to you or opened by you, soonest due first, overdue
+  highlighted, with "Comment on GitHub" and "Done" (closes the issue as
+  completed). GitHub keeps the assignee and milestone of a new issue only when
+  the creator has push access.
+- **Team activity** (Admin → Team activity, next to Activity log; lazy): per
+  person, alphabetical, the last 7 days: saves (commits on `galley/*` branches
+  and the default branch, de-duplicated, at most 30 branches), proposals
+  opened and merged (the 100 most recently updated), reviews and comments.
+  Bots are left out; no totals or rankings.
+
+| Endpoint | Permission (GitHub App, user token) |
+| --- | --- |
+| `GET labels/{name}`, `GET milestones`, `GET issues`, `GET assignees`, `GET issues/comments` | Issues: read |
+| `POST labels`, `POST milestones`, `POST issues`, `PATCH issues/{n}` | Issues: write |
+| `GET branches`, `GET commits` | Contents: read |
+| `GET pulls`, `GET pulls/comments`, `GET pulls/{n}/reviews` | Pull requests: read |
+| `POST pulls/{n}/requested_reviewers` | Pull requests: write |
+
+Checked against docs.github.com "Permissions required for GitHub Apps" and
+"About code owners" (2026-10-28). The port is `TeamGateway` in
+`web/src/github/team.ts`; parsing, mapping and aggregation are plain
+functions in `web/src/team/`.
+
 ## Comments in the editor and the preview
 
 Comments anywhere (not only on changed lines), stored by the galley backend
@@ -985,6 +1105,57 @@ The API origin is already in the CSP `connect-src`, which covers EventSource.
 The panel's code and styles load on first open (`web/src/ui/chat/`); the
 gateway, stream and unread badge are in `web/src/chat/` and
 `web/src/containers/Chat.tsx`.
+
+## References and writing aids
+
+**References** (Write group in the sidebar, `#/r/{owner}/{repo}/references`,
+`…/references/{key}` for one entry) lists every entry of the paper's `.bib`
+files (those in your file list): key, authors, year, title and type, with
+search, sort (key, author, year newest first, title) and a file filter when
+there are several. Duplicate keys (compared without case, as biber does) and
+duplicate DOIs are flagged in the list. Double-click or Ctrl+click on
+`@citekey` in the editor opens the entry here.
+
+- **Edit**: a form with the type, the key and the fields (add, remove, rename
+  values). Keys must be free and readable by BibTeX; braces must match.
+  Renaming a cited key warns that the citations are not changed.
+- **Add**: from a DOI (bare, `doi:` or a doi.org link) through Crossref's
+  `https://api.crossref.org/works/{doi}/transform/application/x-bibtex`
+  (`credentials: 'omit'`, no referrer, `mailto` set to your public GitHub
+  e-mail when GitHub gives one, 10 s timeout, 256 KB cap; the reply is
+  scanned as text and only shown as text), or with a form. A DOI already in
+  the bibliography is refused with a link to its entry. New keys follow the
+  file's own convention, detected from the existing keys (`author2020`,
+  `author2020word`, `Author_2020`, `author:2020`…; Google Scholar's
+  `author2020word` when nothing matches), with `a`, `b`… when taken.
+- **Delete**: asks first and lists the `.qmd` files and lines that cite the
+  key (from the project index).
+- **Byte for byte**: changes are ordinary pending edits of the `.bib` buffer,
+  saved for review like any edit. An edit replaces only the changed values,
+  the key, the type or a removed field's line inside the entry; new fields
+  follow the entry's indentation, alignment, delimiters and letter case; new
+  entries are appended after a blank line in the file's style; the file's
+  line endings (LF or CRLF) are kept. Every other byte (other entries,
+  `@string`, `@comment`, `%` lines) stays as it was.
+- The manager is its own chunk, loaded when the screen opens. CSP
+  `connect-src` allows `https://api.crossref.org`.
+
+**Word counts**: the header shows the paper's words and the Outline each
+section's and included file's; `limits` in `.galley.yml` turn the header
+amber when exceeded (rules in `docs/galley-yml.md`). Counted in the index
+worker.
+
+**Spellcheck**: in Writing mode the editor text uses the browser's own
+spellchecker (`spellcheck="true"` and `lang` on the CodeMirror content), in
+the paper's language (`lang` in `_quarto.yml`, else the main file's front
+matter, else the interface language). Off in Code mode, and for anyone who
+turns off Preferences → Editor → "Check spelling in Writing mode".
+
+Code: `web/src/references/` (`bibFile.ts` ranges and edits, `keys.ts`,
+`crossref.ts`, `library.ts`, `duplicates.ts`, `citations.ts`, `validate.ts`),
+`web/src/containers/References.tsx`, `web/src/ui/references/`,
+`web/src/writing/` (`words.ts`, `spellcheck.ts`) and
+`web/src/containers/useWritingAids.tsx`.
 
 ## Licence
 

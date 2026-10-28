@@ -22,7 +22,16 @@ describe('hash routes', () => {
     ['#/r/o/paper/proposals/4', { name: 'proposals', owner: 'o', repo: 'paper', number: 4 }],
     ['#/r/o/paper/admin/settings', { name: 'admin', owner: 'o', repo: 'paper', tab: 'settings' }],
     ['#/r/o/paper/admin/view-as', { name: 'admin', owner: 'o', repo: 'paper', tab: 'view-as' }],
+    ['#/r/o/paper/admin/shared', { name: 'admin', owner: 'o', repo: 'paper', tab: 'shared' }],
+    ['#/r/o/paper/proposals/by/ana-b', { name: 'proposals', owner: 'o', repo: 'paper', author: 'ana-b' }],
     ['#/r/Org-1/my.repo_2', { name: 'workspace', owner: 'Org-1', repo: 'my.repo_2' }],
+    ['#/r/o/paper/history', { name: 'history', owner: 'o', repo: 'paper' }],
+    ['#/r/o/paper/asks', { name: 'asks', owner: 'o', repo: 'paper' }],
+    ['#/r/o/paper/history/compare/abc1234...def5678', { name: 'history', owner: 'o', repo: 'paper', compare: { base: 'abc1234', head: 'def5678', since: false } }],
+    ['#/r/o/paper/history/since/abc1234...def5678', { name: 'history', owner: 'o', repo: 'paper', compare: { base: 'abc1234', head: 'def5678', since: true } }],
+    ['#/r/o/paper/references', { name: 'references', owner: 'o', repo: 'paper' }],
+    ['#/r/o/paper/references/chen1997', { name: 'references', owner: 'o', repo: 'paper', key: 'chen1997' }],
+    ['#/r/o/paper/references/Smith%3A2020', { name: 'references', owner: 'o', repo: 'paper', key: 'Smith:2020' }],
   ];
 
   it.each(routes)('parses and formats %s', (hash, route) => {
@@ -47,6 +56,10 @@ describe('hash routes', () => {
     '#/r/o',
     '#/r//paper',
     '#/r/o/paper/zzz',
+    '#/r/o/paper/history/compare/abc1234',
+    '#/r/o/paper/history/compare/zzzzzzz...abc1234',
+    '#/r/o/paper/history/other/abc1234...def5678',
+    '#/r/o/paper/history/compare/abc1234...def5678/x',
     '#/r/../paper',
     '#/r/o/%2e%2e',
     '#/r/o/paper/f/../secret',
@@ -64,6 +77,10 @@ describe('hash routes', () => {
     '#/r/o/paper/proposals/4x',
     '#/r/o/paper/proposals/99999999999',
     '#/r/o/paper/proposals/4/extra',
+    '#/r/o/paper/proposals/by',
+    '#/r/o/paper/proposals/by/-ana',
+    '#/r/o/paper/proposals/by/a%20b',
+    '#/r/o/paper/proposals/by/ana/x',
     '#/r/o/paper/admin/settings/extra',
     'javascript:alert(1)',
   ])('rejects %s and falls back to the repository list', (hash) => {

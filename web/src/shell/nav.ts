@@ -9,11 +9,11 @@
 
 import type { Messages } from '../i18n';
 
-export type NavId = 'contents' | 'proposals' | 'comments' | 'chat' | 'admin';
+export type NavId = 'contents' | 'references' | 'proposals' | 'comments' | 'chat' | 'history' | 'admin' | 'asks';
 
 export type GroupId = 'write' | 'review' | 'admin';
 
-export type IconName = 'library' | 'outline' | 'folder' | 'proposals' | 'comment' | 'chat' | 'settings' | 'help' | 'info';
+export type IconName = 'library' | 'outline' | 'folder' | 'proposals' | 'comment' | 'chat' | 'history' | 'settings' | 'help' | 'info' | 'asks';
 
 export interface NavItem {
   id: NavId;
@@ -36,9 +36,12 @@ export interface NavGroup {
 
 export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'contents', icon: 'outline', group: 'write', requires: 'repo' },
+  { id: 'references', icon: 'library', group: 'write', requires: 'repo' },
   { id: 'proposals', icon: 'proposals', group: 'review', requires: 'repo', tour: 'proposals' },
   { id: 'comments', icon: 'comment', group: 'review', requires: 'repo' },
   { id: 'chat', icon: 'chat', group: 'review', requires: 'repo' },
+  { id: 'history', icon: 'history', group: 'review', requires: 'repo' },
+  { id: 'asks', icon: 'asks', group: 'review', requires: 'repo' },
   { id: 'admin', icon: 'settings', group: 'admin', requires: 'admin' },
 ];
 
