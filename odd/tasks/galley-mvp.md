@@ -51,13 +51,13 @@ CI status in-app.
 
 ## Tasks
 
-- [ ] T1 Skeleton: monorepo `web/` (Vite + TS + Preact, Vitest, ESLint) and
+- [x] T1 Skeleton: monorepo `web/` (Vite + TS + Preact, Vitest, ESLint) and
   `server/` (Go module, PocketBase app boot, health route, `go test`), root
   README, `.gitignore`, CI workflow (lint + test both), Dependabot, LICENSE.
   Route: delegated direct (writer trigger: 2+ non-trivial files).
   Checks: `npm ci --ignore-scripts && npm run lint && npm test && npm run build`
   in `web/`; `go vet ./... && go test ./...` in `server/`.
-- [ ] T2 Server auth: `/auth/login` (state + PKCE), `/auth/callback` (exchange,
+- [x] T2 Server auth: `/auth/login` (state + PKCE), `/auth/callback` (exchange,
   encrypt refresh token, `__Host-` cookie), `/auth/token` (refresh with per-user
   mutex, Origin + header check, optional `repository_id`), `/auth/logout`,
   `github_app_authorization` revocation webhook. Tests first against a fake
@@ -82,6 +82,18 @@ CI status in-app.
   in production build (Vite dev client is inline); TypeScript 6.0.3
   (typescript-eslint peer range < 6.1.0); no `@preact/preset-vite`.
 
+- T1 committed: `e0ffe4f` on `feat/mvp-skeleton` (main root `2feab84`).
+- 2026-10-28 T2 implemented on `feat/mvp-auth` (delegated writer). Assessed
+  risk: high (RDD off), so an independent read-only verifier reviewed it: no
+  blockers; two should-fix items corrected in one scoped pass (refresh+save
+  detached from the request context with retry; built-in PocketBase `users`
+  collection API rules locked to nil, anonymous sign-up was open), plus 503 for
+  transient errors. Checks: `gofmt -l` clean; `go vet`, `go test -race
+  -count=1 ./...` (6 packages ok), `go build`: pass; RED observed for each fix;
+  parent spot check fresh `go test -race -count=1`: ok.
+  Open: whether `repository_id` survives refresh (not in GitHub refresh docs;
+  sent as a hint; needs a live app). `/_/` restriction deferred to T5 (Traefik).
+
 ## Next step
 
-Choose chain strategy, then commit T1 and start T2.
+T3 on `feat/mvp-gateway`, stacked on `feat/mvp-auth`.
