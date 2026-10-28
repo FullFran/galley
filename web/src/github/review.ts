@@ -39,6 +39,8 @@ export interface GitHubReviewGatewayOptions {
 interface GhUser {
   login: string;
   id: number;
+  /** Public e-mail address; only `/user` sends it. */
+  email?: string | null;
 }
 
 interface GhPull {
@@ -118,7 +120,12 @@ export function createGitHubReviewGateway(options: GitHubReviewGatewayOptions): 
 
   return {
     currentUser() {
-      me ??= gh.request<GhUser>('/user').then((r) => ({ login: r.data.login, id: r.data.id }));
+      me ??= gh.request<GhUser>('/user').then((r) => {
+        const user: Person = { login: r.data.login, id: r.data.id };
+        // Only for Crossref's polite pool (references manager); never shown or stored.
+        if (typeof r.data.email === 'string' && /^[^\s@]+@[^\s@]+$/.test(r.data.email)) user.email = r.data.email;
+        return user;
+      });
       me.catch(() => (me = undefined));
       return me;
     },

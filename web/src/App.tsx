@@ -51,7 +51,7 @@ type View =
   | { name: 'loading' }
   | { name: 'signedOut'; loginFailed: boolean; notice?: string; httpsUrl?: string; unsaved?: FileChange[] }
   | { name: 'repos' }
-  | { name: 'workspace'; repo: Repository; route: Extract<RepoRoute, { name: 'workspace' | 'admin' | 'history' | 'asks' }> }
+  | { name: 'workspace'; repo: Repository; route: Extract<RepoRoute, { name: 'workspace' | 'admin' | 'history' | 'references' | 'asks' }> }
   | { name: 'proposals'; repo: Repository; number?: number; author?: string };
 
 const sameRepo = (r: Repository, route: RepoRoute) => r.fullName.toLowerCase() === `${route.owner}/${route.repo}`.toLowerCase();
@@ -132,7 +132,7 @@ export function App({ session, gateway, reviews, comments, drafts, chat, ci, sha
   const leavesEdits = (route: Route) => {
     const current = viewRef.current;
     if (current.name !== 'workspace' || !dirty.current) return false;
-    return !((route.name === 'workspace' || route.name === 'admin' || route.name === 'history' || route.name === 'asks') && sameRepo(current.repo, route));
+    return !((route.name === 'workspace' || route.name === 'admin' || route.name === 'history' || route.name === 'references' || route.name === 'asks') && sameRepo(current.repo, route));
   };
   const canLeave = () => !dirty.current || window.confirm(tRef.current.app.leavePrompt);
 
@@ -267,6 +267,7 @@ export function App({ session, gateway, reviews, comments, drafts, chat, ci, sha
     else if (id === 'admin') go({ name: 'admin', ...base, tab: DEFAULT_ADMIN_TAB });
     else if (id === 'history') go({ name: 'history', ...base });
     else if (id === 'asks') go({ name: 'asks', ...base });
+    else if (id === 'references') go({ name: 'references', ...base });
     else if (id === 'comments') {
       requestCommentsPanel();
       go({ name: 'workspace', ...base });

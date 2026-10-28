@@ -6,6 +6,8 @@ import type { FileChange, Repository } from './repo';
 export interface Person {
   login: string;
   id: number;
+  /** The signed-in person's public e-mail, when GitHub gives one. */
+  email?: string;
 }
 
 /** GitHub's state of one submitted review. */
