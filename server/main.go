@@ -15,8 +15,10 @@ import (
 	"github.com/pocketbase/pocketbase/core"
 
 	"github.com/FullFran/galley/server/internal/auth"
+	"github.com/FullFran/galley/server/internal/chat"
 	"github.com/FullFran/galley/server/internal/comments"
 	"github.com/FullFran/galley/server/internal/config"
+	"github.com/FullFran/galley/server/internal/drafts"
 	"github.com/FullFran/galley/server/internal/github"
 	"github.com/FullFran/galley/server/internal/httpapi"
 	"github.com/FullFran/galley/server/internal/pbstore"
@@ -37,10 +39,12 @@ func main() {
 	// (for example "superuser upsert") work without the galley variables.
 	// "serve" fails fast when any variable is missing or invalid.
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
-		deps, err := newDeps(se.App)
+		deps, chatSvc, err := newDeps(se.App)
 		if err != nil {
 			return err
 		}
+		// Open chat streams would otherwise hold the graceful shutdown.
+		se.Server.RegisterOnShutdown(chatSvc.Shutdown)
 		httpapi.Register(se.Router, deps)
 		return se.Next()
 	})
@@ -50,18 +54,18 @@ func main() {
 	}
 }
 
-func newDeps(app core.App) (httpapi.Deps, error) {
+func newDeps(app core.App) (httpapi.Deps, *chat.Service, error) {
 	cfg, err := config.Load(os.Getenv)
 	if err != nil {
-		return httpapi.Deps{}, err
+		return httpapi.Deps{}, nil, err
 	}
 	sealer, err := secret.NewSealer(cfg.TokenKey)
 	if err != nil {
-		return httpapi.Deps{}, fmt.Errorf("token key: %w", err)
+		return httpapi.Deps{}, nil, fmt.Errorf("token key: %w", err)
 	}
 	dataSealer, err := secret.NewSealer(cfg.DataKey)
 	if err != nil {
-		return httpapi.Deps{}, fmt.Errorf("data key: %w", err)
+		return httpapi.Deps{}, nil, fmt.Errorf("data key: %w", err)
 	}
 	gh := &github.Client{
 		ClientID:     cfg.GitHubClientID,
@@ -90,6 +94,41 @@ func newDeps(app core.App) (httpapi.Deps, error) {
 		TTL:   accessTTL,
 	})
 
+	draftSvc, err := drafts.NewService(drafts.Config{
+		Store:  pbstore.NewDraftStore(app),
+		Access: access,
+		Sealer: dataSealer,
+		Logger: app.Logger(),
+	})
+	if err != nil {
+		return httpapi.Deps{}, nil, err
+	}
+	if err := drafts.ScheduleRetention(app.Cron(), draftSvc, app.Logger()); err != nil {
+		return httpapi.Deps{}, nil, fmt.Errorf("drafts retention: %w", err)
+	}
+	chatSvc, err := chat.NewService(chat.Config{
+		Store:  pbstore.NewChatStore(app),
+		Access: access,
+		Sealer: dataSealer,
+	})
+	if err != nil {
+		return httpapi.Deps{}, nil, err
+	}
+	logger := app.Logger()
+	// OnRevoke must not block: the cache and the streams are dropped in
+	// memory, and drafts.Service.Revoke purges in the background.
+	onRevoke := func(userID string, reason auth.RevokeReason) {
+		access.Invalidate(userID)
+		chatSvc.CloseUser(userID)
+		// Drafts go only on a real revocation (webhook or GitHub's
+		// bad_refresh_token). An expired token or one unreadable after a key
+		// change is galley's problem, not the user's choice: those drafts
+		// stay until the 30-day retention.
+		if reason.Revoked() {
+			draftSvc.Revoke(userID)
+		}
+	}
+
 	svc, err = auth.NewService(auth.Config{
 		Provider:   gh,
 		Users:      store,
@@ -97,13 +136,13 @@ func newDeps(app core.App) (httpapi.Deps, error) {
 		Sealer:     sealer,
 		SessionTTL: sessionTTL,
 		LoginTTL:   loginTTL,
-		OnRevoke:   access.Invalidate,
+		OnRevoke:   onRevoke,
 		OnTokenIssued: func(userID string, tok auth.AccessToken, repositoryID int64) {
 			access.TokenIssued(userID, comments.UserToken{Token: tok.Token, ExpiresAt: tok.ExpiresAt}, repositoryID != 0)
 		},
 	})
 	if err != nil {
-		return httpapi.Deps{}, err
+		return httpapi.Deps{}, nil, err
 	}
 	commentSvc, err := comments.NewService(comments.Config{
 		Store:  pbstore.NewCommentStore(app),
@@ -111,14 +150,16 @@ func newDeps(app core.App) (httpapi.Deps, error) {
 		Sealer: dataSealer,
 	})
 	if err != nil {
-		return httpapi.Deps{}, err
+		return httpapi.Deps{}, nil, err
 	}
 	return httpapi.Deps{
 		Auth:           svc,
 		Comments:       commentSvc,
+		Drafts:         draftSvc,
+		Chat:           httpapi.ChatAdapter(chatSvc),
 		OnAccessChange: access.InvalidateAll,
 		FrontendOrigin: cfg.FrontendOrigin,
 		WebhookSecret:  []byte(cfg.WebhookSecret),
-		Logger:         app.Logger(),
-	}, nil
+		Logger:         logger,
+	}, chatSvc, nil
 }
