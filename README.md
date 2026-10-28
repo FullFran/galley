@@ -110,6 +110,35 @@ no longer usable (sign in again). Transient failures (database, GitHub outage,
 timeout) answer 503; the client should retry. A refresh that GitHub has
 already rotated is saved even if the browser aborts the request.
 
+## Frontend data layer
+
+`web/src/domain/` defines the `RepoGateway` port and its typed errors
+(`ConflictError`, `AuthRequiredError`, `TransientError`, `NotFoundError`,
+`PermissionError`). The app depends only on that port. `web/src/github/`
+implements it against `api.github.com` with `fetch`, and `web/src/auth/` is the
+session client for the auth endpoints above.
+
+`VITE_API_BASE` sets the galley API base URL at build time (see
+[`web/.env.example`](web/.env.example)). It defaults to `http://127.0.0.1:8090`
+for local development. The GitHub access token is kept in memory only and
+refreshed shortly before it expires; it is never written to browser storage.
+
+Working branch model: each user edits on the branch `galley/<github-login>` in
+each repository. Opening a repository uses that branch if it exists, otherwise
+the default branch head; the branch is created on the first save. If the
+branch exists but has no commits of its own and is behind the default branch
+(its pull request was merged), it is fast-forwarded to the default head first. If it diverged, has no
+open pull request, and its latest closed pull request was merged at exactly its
+current head (a squash or rebase merge), the branch is deleted and recreated
+from the default head on the next save.
+Saved files keep their existing mode; new files are `100644`. A save is one
+commit whose parent is the head the user opened, and the branch is moved
+fast-forward only (never forced). If the branch moved in the meantime, the save
+fails with a conflict. After a save, the open pull request from the working
+branch to the default branch is reused, or a new one is opened. If that step
+fails, the save still reports its commit, without a pull request link. Files
+that are not valid UTF-8 cannot be opened; a byte order mark is preserved.
+
 ## Licence
 
 MIT. See [LICENSE](LICENSE).
