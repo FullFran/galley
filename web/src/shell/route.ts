@@ -11,6 +11,7 @@
 //   #/r/{owner}/{repo}/history[/compare|since/{base}...{head}]
 //                                      versions, or what changed between two
 //   #/r/{owner}/{repo}/references[/{key}] references manager, or one entry
+//   #/r/{owner}/{repo}/asks            my asks (review requests with due dates)
 
 import { resolveAdminTab, type AdminTabId } from './adminTabs';
 
@@ -21,7 +22,8 @@ export type Route =
   | { name: 'admin'; owner: string; repo: string; tab: AdminTabId }
   /** `since`: opened from "What changed since your last visit". */
   | { name: 'history'; owner: string; repo: string; compare?: { base: string; head: string; since: boolean } }
-  | { name: 'references'; owner: string; repo: string; key?: string };
+  | { name: 'references'; owner: string; repo: string; key?: string }
+  | { name: 'asks'; owner: string; repo: string };
 
 export type RepoRoute = Exclude<Route, { name: 'repos' }>;
 
@@ -63,6 +65,7 @@ export function parseRoute(hash: string): Route {
     return REPOS;
   }
   if (section === 'admin' && rest.length <= 1) return { name: 'admin', ...base, tab: resolveAdminTab(rest[0]) };
+  if (section === 'asks' && rest.length === 0) return { name: 'asks', ...base };
   if (section === 'history') {
     if (rest.length === 0) return { name: 'history', ...base };
     const range = rest.length === 2 && (rest[0] === 'compare' || rest[0] === 'since') ? RANGE.exec(rest[1] ?? '') : null;
@@ -90,6 +93,8 @@ export function formatRoute(route: Route): string {
         : `${base}/history`;
     case 'references':
       return route.key ? `${base}/references/${enc(route.key)}` : `${base}/references`;
+    case 'asks':
+      return `${base}/asks`;
   }
 }
 

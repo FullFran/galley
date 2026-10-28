@@ -15,6 +15,8 @@ export interface AdminAreaProps {
   coauthorCount: number;
   /** The admin panel tabs (People, Access, Shared drafts, Activity log), loaded on demand. */
   panel?: ComponentChildren;
+  /** Team activity (last 7 days, from GitHub), loaded on demand. */
+  team?: ComponentChildren;
 }
 
 /**
@@ -23,7 +25,7 @@ export interface AdminAreaProps {
  * log) and View as co-author. Co-authors never get this content, only a
  * one-line notice.
  */
-export function AdminArea({ admin, tab, onTab, settings, coauthorView, onCoauthorView, coauthorCount, panel }: AdminAreaProps) {
+export function AdminArea({ admin, tab, onTab, settings, coauthorView, onCoauthorView, coauthorCount, panel, team }: AdminAreaProps) {
   const t = useT();
   const m = t.admin;
   if (!admin) {
@@ -70,6 +72,8 @@ export function AdminArea({ admin, tab, onTab, settings, coauthorView, onCoautho
           settings
         ) : isPanelTab(tab) ? (
           panel
+        ) : tab === 'team' ? (
+          team
         ) : (
           <div class="view-as">
             <p class="muted">{m.viewAsLead}</p>

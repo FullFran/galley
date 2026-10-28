@@ -11,6 +11,7 @@ import { usePdfDownload } from '../ci/PdfDownload';
 import { AboutDialog } from './AboutDialog';
 import { AccountMenu } from './AccountMenu';
 import { Icon } from './icons';
+import type { TeamGateway } from '../../github/team';
 import { Menu, MenuItem } from './Menu';
 import { PreferencesDialog } from './PreferencesDialog';
 import { ShortcutsDialog } from './ShortcutsDialog';
@@ -36,6 +37,8 @@ export interface ShellContext {
   onSignOut: () => void;
   /** CI builds (status chips, compiled PDF); absent without the Actions/Checks permissions wired in. */
   ci?: CiGateway;
+  /** Asks (issues), weekly activity; absent without the Issues permission wired in. */
+  team?: TeamGateway;
 }
 
 /** A breadcrumb segment; with `onSelect` it is a button. */

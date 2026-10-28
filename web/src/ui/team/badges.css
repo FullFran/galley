@@ -1,0 +1,56 @@
+/* Section owners and status in the outline, on a second line under the
+   section name so the narrow sidebar keeps the name readable. */
+.tree-item:has(> .team-badges) {
+  flex-wrap: wrap;
+  row-gap: 0.15rem;
+  padding-block: 0.3rem;
+}
+.team-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-basis: 100%;
+  margin-left: calc(1rem + var(--space-2, 0.5rem));
+}
+.status-badge {
+  font-size: 0.7rem;
+  line-height: 1.2;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+.status-in_review {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-color: transparent;
+}
+.status-approved {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  border-color: transparent;
+}
+.status-unsaved {
+  border-style: dashed;
+  border-color: var(--border-strong);
+}
+.owner-chips {
+  display: inline-flex;
+}
+.owner-chip {
+  display: inline-grid;
+  place-items: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.6rem;
+  font-weight: 600;
+  border: 1px solid var(--surface);
+}
+.owner-chip + .owner-chip {
+  margin-left: -0.35rem;
+}

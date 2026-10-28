@@ -2,7 +2,7 @@
 // segment) to a shown tab. The admin panel tabs (C6) are rendered by a lazily
 // loaded module (ui/admin/AdminPanels), so co-authors never download it.
 
-export type AdminTabId = 'settings' | 'people' | 'access' | 'shared' | 'activity' | 'view-as';
+export type AdminTabId = 'settings' | 'people' | 'access' | 'shared' | 'activity' | 'team' | 'view-as';
 
 export const ADMIN_TABS: readonly { id: AdminTabId; available: boolean }[] = [
   { id: 'settings', available: true },
@@ -10,6 +10,7 @@ export const ADMIN_TABS: readonly { id: AdminTabId; available: boolean }[] = [
   { id: 'access', available: true },
   { id: 'shared', available: true },
   { id: 'activity', available: true },
+  { id: 'team', available: true },
   { id: 'view-as', available: true },
 ];
 
