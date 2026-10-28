@@ -12,6 +12,7 @@ import { DEFAULT_ADMIN_TAB } from './shell/adminTabs';
 import type { NavId } from './shell/nav';
 import { formatRoute, parseRoute, rememberRoute, repoRoute, takeRememberedRoute, type RepoRoute, type Route } from './shell/route';
 import { useSidebar } from './shell/useSidebar';
+import type { CiGateway } from './github/ci';
 import type { ShellContext } from './ui/shell/AppShell';
 import { CurrentLanguageSwitch } from './ui/shell/LanguageSwitch';
 import { Skeleton } from './ui/shell/Skeleton';
@@ -23,6 +24,8 @@ export interface AppProps {
   reviews: ReviewGateway;
   /** galley's comments API (comments anywhere). */
   comments?: CommentsGateway;
+  /** CI builds: status chips and the compiled PDF. */
+  ci?: CiGateway;
 }
 
 type View =
@@ -39,7 +42,7 @@ const sameRepo = (r: Repository, route: RepoRoute) => r.fullName.toLowerCase() =
  * link or the back button lands where the person was. Leaving the workspace
  * with unsaved edits asks first, also on back and forward.
  */
-export function App({ session, gateway, reviews, comments }: AppProps) {
+export function App({ session, gateway, reviews, comments, ci }: AppProps) {
   // Stable callbacks read the catalog through a ref, so a language switch does
   // not re-run the screens' effects (the workspace would reload and lose edits).
   const tRef = useTRef();
@@ -262,6 +265,7 @@ export function App({ session, gateway, reviews, comments }: AppProps) {
     onNavigate: navigate,
     onRepos: () => go({ name: 'repos' }),
     onSignOut: () => void signOut(),
+    ci,
   };
   if (view.name === 'repos') {
     return (

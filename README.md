@@ -686,8 +686,8 @@ URLs from GitHub's API, with `rel="noopener noreferrer"`.
 The review screens use the app's existing permissions: Pull requests
 (read/write) for proposals, comments, reviews, reviewers and assignees;
 Contents (write) for merging and applying suggestions; Metadata for the
-repository's permissions and merge settings. CI status needs Checks or Actions
-access and is planned separately (C8).
+repository's permissions and merge settings. CI status and the compiled PDF
+use Checks (read) and Actions (read); see below.
 
 The port is `ReviewGateway` in `web/src/domain/review.ts`, implemented in
 `web/src/github/review.ts`; diff parsing, threads, suggestions and reviewer
@@ -702,6 +702,47 @@ the first comment to match the thread) and calls `resolveReviewThread` /
 lists no permission for these mutations, so the buttons follow GitHub's own
 `viewerCanResolve` / `viewerCanUnresolve`; the app needs Pull requests read
 (query) and write (mutations). Resolved conversations are folded.
+
+### CI status and the compiled PDF
+
+Each proposal shows a chip from the check runs of its head commit
+(`GET /repos/{o}/{r}/commits/{sha}/check-runs`, Checks: read): "Compiling…"
+while any run is queued or in progress, "Failed" when a run failed, timed out
+or was cancelled, "Compiled" otherwise; nothing when the commit has no checks
+or the app lacks the permission. The chip links to the run on GitHub. A
+running chip is asked again every 20 s, only while the page is visible.
+
+"Download PDF of this proposal" (proposal ⋯ menu) and "Download latest PDF"
+(⋯ menu of every repository screen, default branch) need Actions: read:
+
+1. `GET /repos/{o}/{r}/actions/runs?head_sha={sha}` (proposal: successful runs
+   first, then other completed ones, since the paper's workflow uploads the
+   PDF before its checks fail the job), or `?branch={default}&status=success`
+   (only `push` and `workflow_dispatch` runs).
+2. `GET /repos/{o}/{r}/actions/runs/{id}/artifacts`: the first live artifact,
+   preferring a name with "pdf" (`paper-pdf-docx` in the paper repository,
+   kept 14 days). Up to five runs are tried.
+3. `GET /repos/{o}/{r}/actions/artifacts/{id}/zip`: GitHub answers 302/303 to a
+   short-lived signed URL on Azure blob storage
+   (`productionresultssaNN.blob.core.windows.net`). This is the only request
+   the GitHub client lets leave `api.github.com`: any other path is refused
+   before sending, and a redirect anywhere but `*.blob.core.windows.net` is
+   refused before reading. The request sends only `Authorization` and
+   `Accept`; the browser drops `Authorization` on the cross-origin hop, so the
+   blob host sees a plain GET with `Origin: null` and no preflight. Checked
+   against a real artifact (2026-10-28): the 303 carries
+   `Access-Control-Allow-Origin: *` and exposes `Location`; the blob answers
+   `Access-Control-Allow-Origin: *` (GET) and allows any preflight. The app CSP
+   adds `https://*.blob.core.windows.net` to `connect-src` (CSP wildcards only
+   cover a whole leftmost label, so the shard number cannot be narrowed).
+   410 means the artifact expired: galley says so and links the run.
+4. The zip is unpacked in the browser with `fflate` (lazy chunk, 2.7 kB gzip).
+   The paper PDF (not the `-diff.pdf`), the DOCX and the changes PDF are
+   offered as blob downloads in a notice; "Open PDF" opens the blob in a new
+   tab. A `.pdf` entry that does not start with `%PDF` is dropped.
+
+The port is `CiGateway` in `web/src/github/ci.ts`; status mapping, run and
+artifact choice and unzipping are plain functions in `web/src/ci/`.
 
 ## Comments in the editor and the preview
 

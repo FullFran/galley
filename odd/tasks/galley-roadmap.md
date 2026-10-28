@@ -44,7 +44,9 @@ proposals and review. No real-time co-editing of the same file.
 6. **History**: versions = commits on main, labels = tags, compare with the
    existing diff view, restore = a proposal (PR), zip download.
 7. **Download the CI-compiled PDF** from galley (needs Actions/Checks read on the
-   app; the org must approve the new permission).
+   app; the org must approve the new permission). Done in C8 (`feat/ci-pdf`):
+   CI chips per proposal, "Download PDF of this proposal" and "Download latest
+   PDF" (default branch), unzipped in the browser.
 8. **Symbol palette** with KaTeX previews.
 9. **Dark theme.**
 10. **Vim mode** toggle (CodeMirror keymap).

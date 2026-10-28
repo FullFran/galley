@@ -13,6 +13,27 @@ export const en = {
     /** BCP 47 tag for `<html lang>` and Intl formatting. */
     lang: 'en',
   },
+  /** CI builds of the paper (GitHub Actions): status chips and the compiled PDF. */
+  ci: {
+    running: 'Compiling…',
+    success: 'Compiled',
+    failure: 'Failed',
+    runTitle: 'See the build on GitHub',
+    downloadLatest: 'Download latest PDF',
+    downloadProposal: 'Download PDF of this proposal',
+    fetching: 'Getting the compiled PDF from GitHub…',
+    ready: 'The compiled PDF is ready.',
+    downloadPdf: 'Download PDF',
+    downloadDocx: 'Download DOCX',
+    downloadDiff: 'Download changes PDF',
+    openPdf: 'Open PDF',
+    expired: 'This compiled PDF has expired: GitHub keeps build files for a limited time. Compile again to get a new one.',
+    stillRunning: 'Still compiling. Try again in a few minutes.',
+    none: 'There is no compiled PDF yet.',
+    empty: 'The build finished without a PDF.',
+    failed: 'Could not get the compiled PDF. Try again, or download it from GitHub.',
+    openRun: 'Open the build on GitHub',
+  },
   app: {
     name: 'galley',
     loading: 'Loading…',

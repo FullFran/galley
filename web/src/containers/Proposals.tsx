@@ -6,6 +6,7 @@ import { ProposalList, type ProposalRow } from '../ui/review/ProposalList';
 import { useT, useTRef } from '../i18n';
 import { AppShell, type ShellContext } from '../ui/shell/AppShell';
 import { Skeleton } from '../ui/shell/Skeleton';
+import { LiveCiChip } from '../ui/ci/CiChip';
 import { ProposalDetail } from './ProposalDetail';
 
 export interface ProposalsProps {
@@ -50,7 +51,7 @@ export function Proposals({ repos, reviews, repo, number: open, onOpen, onAuthRe
             const overall = overallReview(reviewerStatuses(proposal.requestedReviewers, list));
             // Kept as data, so the label follows a language switch.
             const merge = { mergeable: proposal.mergeable, state: proposal.draft ? 'draft' : proposal.mergeableState };
-            setRows((prev) => prev?.map((r) => (r.summary.number === summary.number ? { ...r, overall, merge } : r)));
+            setRows((prev) => prev?.map((r) => (r.summary.number === summary.number ? { ...r, overall, merge, headSha: proposal.headSha } : r)));
           })
           .catch(() => undefined);
       }
@@ -86,7 +87,12 @@ export function Proposals({ repos, reviews, repo, number: open, onOpen, onAuthRe
             </button>
           </div>
         ) : rows ? (
-          <ProposalList rows={rows} onOpen={onOpen} onEmptyAction={() => shell.onNavigate('contents')} />
+          <ProposalList
+            rows={rows}
+            onOpen={onOpen}
+            onEmptyAction={() => shell.onNavigate('contents')}
+            ciChip={shell.ci && ((sha) => <LiveCiChip ci={shell.ci} repo={repo} sha={sha} />)}
+          />
         ) : (
           <Skeleton variant="list" lines={3} />
         )}
