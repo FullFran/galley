@@ -161,6 +161,34 @@ realtime is broadcast from Go (`SubscriptionsBroker`) or a small SSE endpoint
 that checks the session and repo access; unread counts from a `last_read`
 marker.
 
+Implementation status (backend built; the API is in the README, "Chat API"):
+
+- `server/internal/chat`: domain, use cases and an in-process broker. It
+  reuses the comments shared kernel: `CachedAccess` (installed repositories,
+  `pull`), the per-user rate limiter (20 posts, one more per second) and the
+  text rules (no NUL, no bidi controls; bodies at most 4 KB).
+- Messages carry a per-repository `seq` assigned in the append transaction
+  (unique index on `repo_id, seq`); posts are serialized in process so
+  streams see increasing `seq`. Read markers (`galley_chat_reads`) store
+  `last_read_seq`, never move back and are clamped to the newest message.
+- Bodies are sealed with the data key, AAD
+  `galley/v1/chat/<id>/body/<repo_id>/<author>` (author stored as text).
+- Realtime is the small SSE endpoint, not PocketBase realtime:
+  `GET /api/galley/repos/{repo_id}/chat/stream`, behind the same Origin and
+  session middleware as the other routes. Heartbeats every 25 s re-check the
+  session and the repository access (fail closed); revocation (`OnRevoke`)
+  and server shutdown close streams at once; `Last-Event-ID` replays up to
+  200 missed messages, otherwise `event: resync`; a subscriber whose 64-message
+  buffer fills is dropped and reconnects; 5 streams per user, 1,000 per
+  server. Delivery is in memory, so it assumes one server instance.
+- Not built yet: the chat UI, mentions, edits, deletes and attachments.
+
+Drafts (comfort roadmap C4) are built alongside in `server/internal/drafts`
+(README, "Drafts API"): owner-only sealed drafts with optimistic
+concurrency, purged after a save, after 30 days idle (hourly cron) and on
+real revocation (webhook or `bad_refresh_token`; not on expired or
+unreadable tokens).
+
 ## Phases
 
 1. Comment MVP (editor anchoring at head, threads, replies, auth, sealing).
