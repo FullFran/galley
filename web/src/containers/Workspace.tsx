@@ -30,7 +30,9 @@ import { onPrefsChange, resolveEditorMode, writePrefs, type EditorMode } from '.
 import { CONFIG_PATH, visibleFiles, type ProjectConfig } from '../config/project';
 import { applySaved, defaultMessage, describeError, dirtyPaths, unsavedChanges, type Buffers } from '../workspace/model';
 import { useT, useTRef } from '../i18n';
-import type { AdminTabId } from '../shell/adminTabs';
+import { isPanelTab, leaveAdminArea, type AdminTabId } from '../shell/adminTabs';
+import type { DraftSharesGateway } from '../admin/api';
+import { useDraftShare } from '../ui/admin/useDraftShare';
 import type { NavId } from '../shell/nav';
 import { dismissSetup, isSetupDismissed, readContentsTab, readPrefs, writeContentsTab, type ContentsTab } from '../shell/prefs';
 import { MAX_FIGURE_BYTES, figureDataUrl } from '../editor/figure';
@@ -64,6 +66,9 @@ import { useChat } from './Chat';
 // The YAML parser, the wizard and the settings form load on demand.
 type SettingsModule = typeof import('./ProjectSettings');
 const loadSettings = () => import('./ProjectSettings');
+// The admin panel (C6) is its own chunk, loaded when an admin opens one of its tabs.
+type PanelsModule = typeof import('../ui/admin/AdminPanels');
+const loadPanels = () => import('../ui/admin/AdminPanels');
 
 export interface WorkspaceProps {
   gateway: RepoGateway;
@@ -82,6 +87,8 @@ export interface WorkspaceProps {
   onSaved?: () => void;
   /** galley's comments API; without it the comments panel is not offered. */
   comments?: CommentsGateway;
+  /** Owner's draft sharing with admins; without it the ⋯ menu entry is not offered. */
+  shares?: DraftSharesGateway;
   /** galley's drafts API; without it drafts stay in this browser. */
   drafts?: DraftsGateway;
   /** galley's chat API; without it the chat is not offered. */
@@ -91,7 +98,7 @@ export interface WorkspaceProps {
 type Heading = Extract<OutlineItem, { kind: 'heading' }>;
 const NO_FILES: string[] = [];
 
-export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuthRequired, onDirtyChange, onSaved, comments: commentsGateway, drafts: draftsGateway, chat: chatGateway }: WorkspaceProps) {
+export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuthRequired, onDirtyChange, onSaved, comments: commentsGateway, drafts: draftsGateway, chat: chatGateway, shares }: WorkspaceProps) {
   const t = useT();
   // Callbacks read the catalog through a ref: a language switch must not
   // re-create `load` (that would reload the repository and drop edits).
@@ -100,6 +107,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   const [project, setProject] = useState<ProjectConfig>({ kind: 'missing' });
   const [admin, setAdmin] = useState(false);
   const [settings, setSettings] = useState<SettingsModule>();
+  const [adminPanels, setAdminPanels] = useState<PanelsModule>();
   const [buffers, setBuffers] = useState<Buffers>({});
   const [openPath, setOpenPath] = useState<string>();
   const [fileError, setFileError] = useState<string>();
@@ -543,6 +551,42 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
     loadSettings().then(setSettings, (err: unknown) => fail(err, setFileError));
   }, [admin, adminTab, settings, fail]);
 
+  // The admin panel loads on demand too; a confirmed non-admin is sent back to the paper.
+  useEffect(() => {
+    if (!admin || !isPanelTab(adminTab) || adminPanels) return;
+    loadPanels().then(setAdminPanels, (err: unknown) => fail(err, setFileError));
+  }, [admin, adminTab, adminPanels, fail]);
+  useEffect(() => {
+    if (loaded && leaveAdminArea(adminTab, admin)) onRoute({ name: 'workspace', ...base });
+  }, [loaded, adminTab, admin]);
+
+  /** "Copy into my own draft": a shared draft's text becomes the admin's own unsaved edit. */
+  const copyIntoDraft = async (path: string, content: string) => {
+    const m = t.adminPanel.shared;
+    if (!working || !visible.includes(path)) return setNotice(m.copyMissing(path));
+    const current = buffersRef.current[path];
+    if (current && current.text !== current.base && !window.confirm(m.copyReplace(path))) return;
+    try {
+      const baseText = current?.base ?? (await gateway.readFile(repo, path, working.headSha));
+      setBuffers((b) => ({ ...b, [path]: { base: b[path]?.base ?? baseText, text: content } }));
+      setEditorRev((n) => n + 1);
+      setOpenPath(path);
+      onRoute({ name: 'workspace', ...base, path });
+      setNotice(m.copied(path));
+    } catch (err) {
+      fail(err, setFileError);
+    }
+  };
+
+  const draftShare = useDraftShare({
+    gateway: adminTab ? undefined : shares,
+    repoId: repo.id,
+    path: openPath,
+    t,
+    notify: setNotice,
+    onAuthRequired: () => onAuthRequired(unsavedChanges(buffersRef.current)),
+  });
+
   const openSettings = () => onRoute({ name: 'admin', ...base, tab: 'settings' });
 
   const reload = async () => {
@@ -720,6 +764,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
                           narrowOnly: true,
                           onSelect: () => changeMode(mode === 'writing' ? 'code' : 'writing'),
                         },
+                        ...(draftShare.item ? [draftShare.item] : []),
                       ]),
                   { label: t.save.addNoteMenu, narrowOnly: true, onSelect: () => setNoteRequest((n) => n + 1) },
                 ]}
@@ -793,6 +838,20 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
           coauthorView={viewAs === 'coauthor'}
           onCoauthorView={(on) => changeViewAs(on ? 'coauthor' : 'all')}
           coauthorCount={visibleFiles(working.files, project, false).length}
+          panel={
+            admin && adminPanels && isPanelTab(adminTab) ? (
+              <adminPanels.AdminPanels
+                tab={adminTab}
+                repoId={repo.id}
+                me={shell.user?.login}
+                onOpenProposals={(author) => onRoute({ name: 'proposals', ...base, author })}
+                onCopyIntoDraft={(path, content) => void copyIntoDraft(path, content)}
+                onAuthRequired={() => onAuthRequired(unsavedChanges(buffersRef.current))}
+              />
+            ) : (
+              <Skeleton lines={6} label={t.adminPanel.loading} />
+            )
+          }
           settings={
             admin && settings ? (
               <settings.ProjectSettings

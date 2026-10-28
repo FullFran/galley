@@ -172,7 +172,18 @@ edit it, but anyone with write access could still change it on GitHub).
   Route: delegated (2+ non-trivial files). Implemented and checked; pending
   review, commit and PR.
 - [ ] C5 Changed since last visit.
-- [ ] C6 Admin panel.
+- [ ] C6 Admin panel. Server side: Admin API (`feat/admin-api`, PR #21).
+  - [x] C6-UI (`feat/admin-ui`): Admin tabs People, Access, Shared drafts,
+    Activity log (lazy chunk `ui/admin/AdminPanels`), revoke sessions with
+    confirmation (`confirm_self` for yourself), allowlist add/remove with
+    validation and a "blocked now" preview, read-only shared-draft viewer with
+    the logging banner and "Copy into my own draft", activity filter, "Open
+    their proposals" (`proposals/by/{login}`), owner share toggle in the
+    editor ⋯ menu, co-author deep links to admin routes redirected, en + es.
+    Route: delegated (2+ non-trivial files). Checks: lint, typecheck, Vitest
+    (RED then GREEN), build, headless Chromium against the production build
+    with mocked APIs (admin and co-author, no CSP violations). Pending
+    review, commit and PR.
 - [ ] C7 Writing aids.
 - [x] C8 PR/CI status and CI PDF (`feat/ci-pdf`). Route: delegated (2+ files).
   Assessed tier and review outcome: pending (not committed by the writer).

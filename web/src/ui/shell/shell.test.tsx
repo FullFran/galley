@@ -231,7 +231,13 @@ describe('AdminArea', () => {
     expect(html).toMatch(/role="tab"[^>]*aria-selected="true"[^>]*>Project settings/);
     expect(html).toContain('View as co-author');
     expect(html).toContain('SETTINGS');
-    for (const later of ['People', 'Sessions', 'Allowlist']) expect(html).not.toContain(later);
+    for (const tab of ['People', 'Access', 'Shared drafts', 'Activity log']) expect(html).toContain(`>${tab}</button>`);
+  });
+
+  it('shows the admin panel on its tabs', () => {
+    const html = render(<AdminArea {...props} admin tab="people" panel={<p>PANEL</p>} />);
+    expect(html).toContain('PANEL');
+    expect(html).not.toContain('SETTINGS');
   });
 
   it('shows the view-as switch on its tab', () => {
@@ -244,6 +250,7 @@ describe('AdminArea', () => {
     const html = render(<AdminArea {...props} admin={false} />);
     expect(html).not.toContain('SETTINGS');
     expect(html).not.toContain('role="tablist"');
+    expect(html).not.toContain('People');
     expect(html).toContain('Only admins');
   });
 });

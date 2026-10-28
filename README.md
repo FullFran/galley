@@ -387,6 +387,24 @@ None holds content or free text (ids, logins, paths, actions and times), so
 nothing in them is sealed; the audit `target` is `repo`, `user:<id>`,
 `allow:<id>` or `share:<id>`.
 
+**In the web app.** Admins find these under Admin (`#/r/{owner}/{repo}/admin/{tab}`),
+next to Project settings and View as co-author: **People** (login, permission,
+last seen, draft count, size and age; "Sign out of galley" with a confirmation
+that warns when it is you and then sends `confirm_self`; "Open their proposals"
+filters the proposals list, `#/r/{owner}/{repo}/proposals/by/{login}`),
+**Access** (add a GitHub login with an optional numeric id, remove entries, and
+see who the list blocks now; it says plainly that it limits galley, not GitHub),
+**Shared drafts** (active grants and a read-only plain-text viewer under "Shared
+by <owner> until <time> · this view is logged"; "Copy into my own draft" opens
+the text as the admin's own unsaved edit of that file, never the owner's draft)
+and **Activity log** (the last 200 entries, filtered by action). The panel is a
+separate, lazily loaded chunk (`ui/admin/AdminPanels`), so co-authors never
+download it; a co-author following a link to an admin route is sent back to
+the paper. Owners share from the editor's ⋯ menu: "Share this draft with admins
+(24 h)" and, while shared, "Stop sharing with admins (N h left)". The entry is
+offered only when the galley API answers; without a server draft of the file
+it explains that there is nothing to share yet.
+
 ## Project configuration
 
 A paper repository can hold a `.galley.yml` that chooses which files

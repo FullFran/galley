@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import type { FileChange, Person, RepoAccess, RepoGateway, Repository, ReviewGateway } from './domain';
 import type { Session } from './auth/session';
 import type { CommentsGateway } from './domain/comments';
+import type { DraftSharesGateway } from './admin/api';
 import { requestCommentsPanel } from './comments/panelRequest';
 import { requestChatPanel } from './chat/panelRequest';
 import type { DraftsGateway } from './drafts/http';
@@ -36,6 +37,8 @@ export interface AppProps {
   chat?: ChatGateway;
   /** CI builds: status chips and the compiled PDF. */
   ci?: CiGateway;
+  /** Owner's draft sharing with the repository's admins. */
+  shares?: DraftSharesGateway;
 }
 
 type View =
@@ -43,7 +46,7 @@ type View =
   | { name: 'signedOut'; loginFailed: boolean; notice?: string; httpsUrl?: string; unsaved?: FileChange[] }
   | { name: 'repos' }
   | { name: 'workspace'; repo: Repository; route: Extract<RepoRoute, { name: 'workspace' | 'admin' }> }
-  | { name: 'proposals'; repo: Repository; number?: number };
+  | { name: 'proposals'; repo: Repository; number?: number; author?: string };
 
 const sameRepo = (r: Repository, route: RepoRoute) => r.fullName.toLowerCase() === `${route.owner}/${route.repo}`.toLowerCase();
 
@@ -52,7 +55,7 @@ const sameRepo = (r: Repository, route: RepoRoute) => r.fullName.toLowerCase() =
  * link or the back button lands where the person was. Leaving the workspace
  * with unsaved edits asks first, also on back and forward.
  */
-export function App({ session, gateway, reviews, comments, drafts, chat, ci }: AppProps) {
+export function App({ session, gateway, reviews, comments, drafts, chat, ci, shares }: AppProps) {
   // Stable callbacks read the catalog through a ref, so a language switch does
   // not re-run the screens' effects (the workspace would reload and lose edits).
   const tRef = useTRef();
@@ -99,7 +102,7 @@ export function App({ session, gateway, reviews, comments, drafts, chat, ci }: A
         shown.current = '#/';
         return setView({ name: 'repos' });
       }
-      if (route.name === 'proposals') return setView({ name: 'proposals', repo: found, number: route.number });
+      if (route.name === 'proposals') return setView({ name: 'proposals', repo: found, number: route.number, author: route.author });
       setView({ name: 'workspace', repo: found, route });
     },
     [gateway],
@@ -339,7 +342,9 @@ export function App({ session, gateway, reviews, comments, drafts, chat, ci }: A
           reviews={reviews}
           repo={view.repo}
           number={view.number}
+          author={view.author}
           onOpen={(number) => go({ name: 'proposals', ...base, number })}
+          onAllAuthors={() => go({ name: 'proposals', ...base })}
           shell={shell}
           onAuthRequired={signedOut}
         />
@@ -363,6 +368,7 @@ export function App({ session, gateway, reviews, comments, drafts, chat, ci }: A
         comments={comments}
         drafts={drafts}
         chat={chat}
+        shares={shares}
       />
     </>
   );
