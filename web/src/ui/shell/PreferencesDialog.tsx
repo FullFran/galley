@@ -82,6 +82,17 @@ export function PreferencesDialog({ open, theme, onTheme, onClose }: Preferences
           <span>{m.vim}</span>
         </label>
         <p class="muted prefs-hint">{m.vimHint}</p>
+        <label class="switch-row" title={t.writing.spellcheckHint}>
+          <input
+            type="checkbox"
+            role="switch"
+            class="switch"
+            checked={prefs.spellcheck !== false}
+            onChange={(e) => update({ spellcheck: e.currentTarget.checked })}
+          />
+          <span>{t.writing.spellcheck}</span>
+        </label>
+        <p class="muted prefs-hint">{t.writing.spellcheckHint}</p>
         <label class="switch-row" title={m.serverDraftsHint}>
           <input
             type="checkbox"

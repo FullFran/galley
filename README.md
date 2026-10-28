@@ -986,6 +986,57 @@ The panel's code and styles load on first open (`web/src/ui/chat/`); the
 gateway, stream and unread badge are in `web/src/chat/` and
 `web/src/containers/Chat.tsx`.
 
+## References and writing aids
+
+**References** (Write group in the sidebar, `#/r/{owner}/{repo}/references`,
+`…/references/{key}` for one entry) lists every entry of the paper's `.bib`
+files (those in your file list): key, authors, year, title and type, with
+search, sort (key, author, year newest first, title) and a file filter when
+there are several. Duplicate keys (compared without case, as biber does) and
+duplicate DOIs are flagged in the list. Double-click or Ctrl+click on
+`@citekey` in the editor opens the entry here.
+
+- **Edit**: a form with the type, the key and the fields (add, remove, rename
+  values). Keys must be free and readable by BibTeX; braces must match.
+  Renaming a cited key warns that the citations are not changed.
+- **Add**: from a DOI (bare, `doi:` or a doi.org link) through Crossref's
+  `https://api.crossref.org/works/{doi}/transform/application/x-bibtex`
+  (`credentials: 'omit'`, no referrer, `mailto` set to your public GitHub
+  e-mail when GitHub gives one, 10 s timeout, 256 KB cap; the reply is
+  scanned as text and only shown as text), or with a form. A DOI already in
+  the bibliography is refused with a link to its entry. New keys follow the
+  file's own convention, detected from the existing keys (`author2020`,
+  `author2020word`, `Author_2020`, `author:2020`…; Google Scholar's
+  `author2020word` when nothing matches), with `a`, `b`… when taken.
+- **Delete**: asks first and lists the `.qmd` files and lines that cite the
+  key (from the project index).
+- **Byte for byte**: changes are ordinary pending edits of the `.bib` buffer,
+  saved for review like any edit. An edit replaces only the changed values,
+  the key, the type or a removed field's line inside the entry; new fields
+  follow the entry's indentation, alignment, delimiters and letter case; new
+  entries are appended after a blank line in the file's style; the file's
+  line endings (LF or CRLF) are kept. Every other byte (other entries,
+  `@string`, `@comment`, `%` lines) stays as it was.
+- The manager is its own chunk, loaded when the screen opens. CSP
+  `connect-src` allows `https://api.crossref.org`.
+
+**Word counts**: the header shows the paper's words and the Outline each
+section's and included file's; `limits` in `.galley.yml` turn the header
+amber when exceeded (rules in `docs/galley-yml.md`). Counted in the index
+worker.
+
+**Spellcheck**: in Writing mode the editor text uses the browser's own
+spellchecker (`spellcheck="true"` and `lang` on the CodeMirror content), in
+the paper's language (`lang` in `_quarto.yml`, else the main file's front
+matter, else the interface language). Off in Code mode, and for anyone who
+turns off Preferences → Editor → "Check spelling in Writing mode".
+
+Code: `web/src/references/` (`bibFile.ts` ranges and edits, `keys.ts`,
+`crossref.ts`, `library.ts`, `duplicates.ts`, `citations.ts`, `validate.ts`),
+`web/src/containers/References.tsx`, `web/src/ui/references/`,
+`web/src/writing/` (`words.ts`, `spellcheck.ts`) and
+`web/src/containers/useWritingAids.tsx`.
+
 ## Licence
 
 MIT. See [LICENSE](LICENSE).

@@ -28,6 +28,9 @@ describe('hash routes', () => {
     ['#/r/o/paper/history', { name: 'history', owner: 'o', repo: 'paper' }],
     ['#/r/o/paper/history/compare/abc1234...def5678', { name: 'history', owner: 'o', repo: 'paper', compare: { base: 'abc1234', head: 'def5678', since: false } }],
     ['#/r/o/paper/history/since/abc1234...def5678', { name: 'history', owner: 'o', repo: 'paper', compare: { base: 'abc1234', head: 'def5678', since: true } }],
+    ['#/r/o/paper/references', { name: 'references', owner: 'o', repo: 'paper' }],
+    ['#/r/o/paper/references/chen1997', { name: 'references', owner: 'o', repo: 'paper', key: 'chen1997' }],
+    ['#/r/o/paper/references/Smith%3A2020', { name: 'references', owner: 'o', repo: 'paper', key: 'Smith:2020' }],
   ];
 
   it.each(routes)('parses and formats %s', (hash, route) => {
