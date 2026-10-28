@@ -4,3 +4,6 @@ pb_data/
 .env*
 !.env.example
 .atl/
+
+# Local agent worktrees
+.claude/
