@@ -64,7 +64,8 @@ PocketBase stores its data in `server/pb_data/`, which is not committed.
 
 ### Server configuration
 
-`serve` refuses to start unless every variable below is set. See
+`serve` refuses to start unless every variable below is set (the two mail
+variables are optional). See
 [`server/.env.example`](server/.env.example) for placeholders.
 
 | Variable | Meaning |
@@ -75,6 +76,8 @@ PocketBase stores its data in `server/pb_data/`, which is not committed.
 | `GALLEY_WEBHOOK_SECRET` | Webhook secret of the GitHub App. |
 | `GALLEY_FRONTEND_ORIGIN` | Exact frontend origin, for example `https://galley.fullfran.com`. |
 | `GALLEY_PUBLIC_URL` | Public API base URL, for example `https://galley-api.fullfran.com`. |
+| `GALLEY_RESEND_API_KEY` | Optional. Resend API key for email notifications. Without it (or without `GALLEY_MAIL_FROM`) notifications are disabled and `GET /api/galley/me/notifications` reports `"available": false`. |
+| `GALLEY_MAIL_FROM` | Optional. Sender address, for example `galley <notify@notify.fullfran.com>` (a verified Resend sending domain). |
 
 Both URLs must use `https`, except loopback hosts (`localhost`, `127.0.0.1`)
 for local development. The GitHub App's callback URL is
@@ -142,10 +145,10 @@ numeric repository id; thread and comment ids are 15 characters `[a-z0-9]`.
 
 | Route | Purpose |
 | --- | --- |
-| `GET /api/galley/repos/{repo_id}/threads?path=&status=&at=` | Threads (with comments) ordered by path and line, at most 200; `truncated` says when there were more. `status` is `open` or `resolved`; `at` is the head commit being viewed (re-anchoring seam, phase 2). |
+| `GET /api/galley/repos/{repo_id}/threads?path=&status=&at=` | Threads (with comments) ordered by path and line, at most 200; `truncated` says when there were more. `status` is `open` or `resolved`; `at` is the full SHA of the commit being viewed: each thread's `position` is then re-anchored to it (see below). |
 | `POST /api/galley/repos/{repo_id}/threads` | Starts a thread. Body: `path`, `commit_sha`, `start_line`, `end_line`, optional `start_column`/`end_column`, `quote` (`exact`, `prefix`, `suffix`), `origin` (`source` or `preview`), `body`, optional `suggestion`. Returns 201 and the thread. |
 | `GET /api/galley/repos/{repo_id}/unread` | `{"repo_id", "threads", "comments", "by_thread": {id: n}}`: comments by others added after the user's read marker (markers store the thread's comment sequence number, not a timestamp). |
-| `GET /api/galley/threads/{id}` | One thread with its comments. |
+| `GET /api/galley/threads/{id}?at=` | One thread with its comments, re-anchored to `at` when given. |
 | `POST /api/galley/threads/{id}/comments` | Reply: `{"body", "suggestion"?}`. Returns 201 and the comment. |
 | `POST /api/galley/threads/{id}/resolve`, `.../reopen` | Changes the status; 409 when it already has it. |
 | `POST /api/galley/threads/{id}/read` | Marks the thread read now. Returns 204. |
@@ -189,6 +192,30 @@ at most 20 KB each; `quote.exact` at most 20 KB and `prefix`/`suffix` 1 KB.
 Request bodies are at most 128 KB and must not contain unknown fields. Each
 user may make 30 writes at once and one more every 2 seconds (in memory, on
 top of PocketBase's per-IP limiter); reads and read markers are not limited.
+
+Re-anchoring: `anchor` is always the original anchor, never changed;
+`position` is where the thread sits at `at` (`path`, `commit_sha`, lines,
+columns and `state`): `exact` (same place), `moved` (shifted through the
+diff, or the exact quote found elsewhere), `fuzzy` (the quote was edited and
+the closest match within 50 lines is shown) or `orphaned` (the file was
+removed or the quote is gone; the original range is returned). The server
+shifts the range through the file's hunks from
+`GET /repos/{o}/{r}/compare/{anchor_sha}...{at}` (renames followed through
+`previous_filename`); only when a hunk touches the range does it fetch the
+file at `at` and search for the quote (prefix and suffix break ties), then a
+bounded fuzzy match. When GitHub truncates the comparison (300 files) or omits
+the file's patch, it fetches both versions (at most 1 MB each) and diffs them
+itself. A file listed under its own path wins over a file renamed from that
+path. Calls use the viewer's server-side token, are cached per
+(repository, base, head) and per file version (at most 64 MB each),
+deduplicated, limited to 30 at once and one more every 2 seconds per user,
+and failures are remembered for 30 seconds. Positions are cached in memory
+per (thread, at), at most 20,000. Fuzzy matching is limited to quotes of 8 to
+1,000 characters, and one listing shares a budget of 50 million comparison
+cells; `GET /threads/{id}?at=` has no shared budget. If GitHub fails, a limit
+is reached or the budget is spent, the stored position is returned unchanged
+and not cached: its `commit_sha` is then not `at`, which tells the client the
+thread was not mapped yet (fetch the single thread to map it).
 
 Errors are generic `{"error": "<status text>"}` bodies: 400 malformed JSON,
 401 no valid session (sign in again), 403 wrong origin, missing CSRF header,
@@ -386,6 +413,55 @@ Storage: `galley_repo_activity`, `galley_repo_allowlist`,
 None holds content or free text (ids, logins, paths, actions and times), so
 nothing in them is sealed; the audit `target` is `repo`, `user:<id>`,
 `allow:<id>` or `share:<id>`.
+
+### Notifications API
+
+Email only for direct asks (a review was requested from you, you were
+assigned), never digests or activity. Sent with Resend when
+`GALLEY_RESEND_API_KEY` and `GALLEY_MAIL_FROM` are set; otherwise the feature
+reports `disabled`.
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/galley/me/notifications` | `{"available", "email", "verified", "enabled", "kinds"}`. |
+| `PUT /api/galley/me/notifications` | `{"email", "enabled", "kinds"?}` (`kinds` among `review_requested`, `assigned`, `invited`; omitted means all). A new address is stored unverified and gets a verification mail that does not name the requester ("someone using galley"); saving an unverified address again resends it. Verification mails are limited per user (3 at once, one more every 10 minutes), per address whoever asks (3, one more every 8 hours) and for the whole server (60, one more per minute). An empty `email` with `enabled: false` deletes the preferences. 409 `{"reason": "disabled"}` without mail configuration. |
+| `GET`, `POST /api/galley/me/notifications/verify?token=` | The link of the verification mail (valid 24 hours, bound to the user and the address). `GET` only shows a confirm button, so mail scanners cannot confirm an address someone else entered; `POST` verifies. |
+| `POST /api/galley/repos/{repo_id}/notify/review-requested` | `{"pr_number", "reviewer_login"}`. 202 `{"status": "accepted" \| "disabled"}`. |
+| `POST /api/galley/repos/{repo_id}/notify/assigned` | `{"pr_number" or "issue_number", "assignee_login"}`. 202 as above. |
+| `GET`, `POST /api/galley/unsubscribe?token=` | The `List-Unsubscribe` link: `GET` shows a confirmation button (link scanners must not unsubscribe), `POST` (the button, or RFC 8058 one-click with `List-Unsubscribe=One-Click`) turns notifications off. |
+
+The `me` and `notify` routes use the comments middleware (Origin, session,
+CSRF header). The triggers are checked on GitHub with the caller's own
+server-side token: the caller needs `push` on the repository (and to pass the
+allowlist), and the login must be among the pull request's
+`requested_reviewers` (`GET /repos/{o}/{r}/pulls/{n}`) or the issue's or pull
+request's `assignees` (`GET /repos/{o}/{r}/issues/{n}`; `pr_number` for an
+issue is 404), so the web app calls them right after it requested the review
+or added the assignee. 403 without push, 409 when the login is not requested
+or assigned, 429 over 20 triggers at once and one more every 30 seconds per
+caller. The login is resolved to the GitHub account id GitHub returns for
+that reviewer or assignee, and the recipient is the galley user with that
+`github_id` (never matched by login, which can be renamed and reused). They
+must have signed in to galley and opted in with a verified address for that
+kind; otherwise nothing is sent and
+the answer is still `accepted`, so callers cannot probe who opted in.
+
+One mail per event: an idempotency key per (kind, repository, number,
+recipient, UTC day) is reserved before sending (hashed, in
+`galley_notify_outbox`, purged after 48 hours) and released if Resend fails
+(503), and it is also sent to Resend as `Idempotency-Key`. Each recipient gets
+at most 10 mails at once and one more every 6 minutes; over that, mails are
+dropped. Mails hold no paper text: who asked what, where (`owner/repo #n`),
+a link to the galley route (`#/r/{owner}/{repo}/proposals/{n}`, or the
+workspace for an issue) and a signed unsubscribe link, with
+`List-Unsubscribe` and `List-Unsubscribe-Post: List-Unsubscribe=One-Click`
+headers. Link tokens are HMAC-SHA256 with a key derived from
+`GALLEY_TOKEN_KEY` by HKDF (purpose `galley-notify-links-v1`), carry a purpose,
+the user id, a hash of the address and an expiry (unsubscribe: one year
+from the start of the UTC day, so every mail of a day carries the same link), and
+stop working when the address changes. Addresses are sealed with the data key
+(AAD `galley/v1/notify/<user>/email`) in the hidden field of
+`galley_notify_prefs`, and logs only ever show them masked (`a***@e***.com`).
 
 **In the web app.** Admins find these under Admin (`#/r/{owner}/{repo}/admin/{tab}`),
 next to Project settings and View as co-author: **People** (login, permission,

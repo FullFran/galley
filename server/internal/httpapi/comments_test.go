@@ -31,6 +31,7 @@ type fakeComments struct {
 	repoID    int64
 	id        string
 	filter    comments.ListFilter
+	at        string
 	newThread comments.NewThread
 	comment   comments.NewComment
 }
@@ -48,7 +49,7 @@ func sampleThread() comments.Thread {
 		ID: threadID, RepoID: 7, RepoFullName: "o/r", Status: comments.StatusOpen, Origin: comments.OriginSource,
 		Anchor: comments.Anchor{Path: "a.qmd", CommitSHA: strings.Repeat("a", 40),
 			Range: comments.Range{StartLine: 3, EndLine: 4}, Quote: comments.Quote{Exact: "quoted"}},
-		Position:  comments.Position{CommitSHA: strings.Repeat("a", 40), Range: comments.Range{StartLine: 3, EndLine: 4}, State: comments.AnchorExact},
+		Position:  comments.Position{Path: "a.qmd", CommitSHA: strings.Repeat("a", 40), Range: comments.Range{StartLine: 3, EndLine: 4}, State: comments.AnchorExact},
 		CreatedBy: "alice", CreatedAt: created, UpdatedAt: created,
 		Comments: []comments.Comment{{ID: "comment00000001", ThreadID: threadID, AuthorKind: comments.AuthorHuman,
 			AuthorLogin: "alice", Mine: true, Body: "hello", CreatedAt: created,
@@ -72,8 +73,8 @@ func (f *fakeComments) CreateThread(_ context.Context, a comments.Actor, repoID 
 	return sampleThread(), nil
 }
 
-func (f *fakeComments) GetThread(_ context.Context, a comments.Actor, id string) (comments.Thread, error) {
-	f.id = id
+func (f *fakeComments) GetThreadAt(_ context.Context, a comments.Actor, id, at string) (comments.Thread, error) {
+	f.id, f.at = id, at
 	if err := f.record("get", a); err != nil {
 		return comments.Thread{}, err
 	}
@@ -208,6 +209,12 @@ func TestCommentRequestsAreDecoded(t *testing.T) {
 		t.Errorf("filter = %+v", fc.filter)
 	}
 
+	head := strings.Repeat("c", 40)
+	do(t, h, browserReq(http.MethodGet, "/api/galley/threads/"+threadID+"?at="+head, ""))
+	if fc.id != threadID || fc.at != head {
+		t.Errorf("get at = %q %q", fc.id, fc.at)
+	}
+
 	do(t, h, browserReq(http.MethodPost, "/api/galley/threads/"+threadID+"/comments", `{"body":"reply"}`))
 	if fc.id != threadID || fc.comment.Body != "reply" || fc.comment.Suggestion != nil {
 		t.Errorf("reply = %q %+v", fc.id, fc.comment)
@@ -230,7 +237,7 @@ func TestThreadJSON(t *testing.T) {
 	if q := anchor["quote"].(map[string]any); q["exact"] != "quoted" {
 		t.Errorf("quote = %v", q)
 	}
-	if p := got["position"].(map[string]any); p["state"] != "exact" {
+	if p := got["position"].(map[string]any); p["state"] != "exact" || p["path"] != "a.qmd" {
 		t.Errorf("position = %v", p)
 	}
 	c := got["comments"].([]any)[0].(map[string]any)

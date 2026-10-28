@@ -338,3 +338,29 @@ func TestCachedAccessFreshPermissionIsRateLimited(t *testing.T) {
 		t.Errorf("second fresh check = %v, want rate limited", err)
 	}
 }
+
+func TestCachedAccessTokenIsReusedUntilTheMargin(t *testing.T) {
+	clock := newClock()
+	gh := newGitHub(clock)
+	a := newAccess(gh, clock)
+	t1, err := a.Token(ctx, "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t2, _ := a.Token(ctx, "u1")
+	if t1 != t2 {
+		t.Error("token not reused")
+	}
+	if m, _ := gh.counts(); m != 1 {
+		t.Errorf("mints = %d", m)
+	}
+	clock.Advance(gh.lifetime - time.Minute) // inside the 5-minute margin
+	if t3, _ := a.Token(ctx, "u1"); t3 == t1 {
+		t.Error("token near expiry reused")
+	}
+	gh.mintErr = comments.ErrUnauthenticated
+	a.Invalidate("u1")
+	if _, err := a.Token(ctx, "u1"); !errors.Is(err, comments.ErrUnauthenticated) {
+		t.Errorf("mint failure err = %v", err)
+	}
+}

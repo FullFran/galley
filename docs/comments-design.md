@@ -50,9 +50,9 @@ Decisions taken while building:
   thread's `comment_seq` stored in the read marker), not timestamps.
 - Paths reject Unicode format characters (Cf); every text field rejects NUL
   and the bidi controls U+202A–U+202E and U+2066–U+2069.
-- Re-anchoring is not built: the anchor and the current position are stored
-  and returned as stored (`anchor_state` = `exact`). `comments.Reanchorer` is
-  the seam; the `at` query parameter already reaches it.
+- Re-anchoring is built (phase 2, `server/internal/reanchor`, see below):
+  lazy on `at`, never stored; the stored anchor and position are not
+  changed.
 - Repositories the user cannot see and threads in them answer 404, not 403.
 - Deleting the last comment deletes the thread.
 - Not built yet: suggestions accept/apply, PR export, preview selection UI,
@@ -87,7 +87,8 @@ thread whose range lies in an open PR diff can be posted as a review comment).
 - `galley_comments`: `thread`, `author_kind` (human | ai), `author_user` (the
   accountable human), `ai_client`, `ai_model` (reported), sealed body, optional
   sealed suggestion with its `base_sha`.
-- `galley_thread_reads`, `galley_notify_prefs`, `galley_notify_outbox`,
+- `galley_thread_reads`, `galley_notify_prefs` (sealed address, verified,
+  enabled, kinds), `galley_notify_outbox` (idempotency key hashes),
   `galley_api_tokens` (hash, scopes, repo allowlist, expiry).
 
 All collections have nil API rules; access goes through Go routes.
@@ -100,6 +101,46 @@ All collections have nil API rules; access goes through Go routes.
 3. Else bounded fuzzy match (Bitap, about ±50 lines) scored with context.
 4. Else mark the thread orphaned and list it with its original quote. Never
    delete or silently move it.
+
+Implementation (`server/internal/reanchor`, `reanchor.Service` implements
+`comments.Reanchorer`, which now receives the viewer's user id):
+
+- Runs when `GET .../threads` or `GET /threads/{id}` carry `at`; `at` empty or
+  equal to `anchor_sha` returns the stored position. `position.path` is new
+  (it differs from `anchor.path` after a rename).
+- Hunks: the file's `patch` from the comparison (found by `filename` first,
+  else by `previous_filename` when `status` is `renamed`; `removed` orphans). The
+  range is clean when no line in it was deleted and nothing was inserted
+  between its lines; then it is shifted (`exact` if unchanged, else `moved`)
+  without fetching the file.
+- Otherwise the file at `at` is fetched (raw media type, at most 1 MB). The
+  exact quote is searched in the whole file, scored by how much of the prefix
+  and suffix agree, then by distance to the predicted line. The fuzzy step is
+  Sellers' approximate substring matching (edit distance, the dynamic
+  programming relative of Bitap without its 64-rune limit) over ±50 lines,
+  accepting a distance of at most a quarter of the quote, for quotes of 8 to
+  1,000 runes and at most 16,000 runes of text. A listing shares a budget of
+  50 million cells (`comments.WithWorkBudget`); a thread over budget gets the
+  stored, unmapped position, uncached, and `GET /threads/{id}?at=` (no
+  budget) maps it. Columns are recomputed in
+  UTF-16 units, as the editor stores them.
+- Truncation: a comparison with 300 files or a body over 16 MB is treated as
+  truncated; a file missing from it, or listed without a patch, is diffed in
+  Go from both versions (common prefix and suffix trimmed, LCS on the rest up
+  to about 4 million cells, otherwise one hunk, which falls back to search).
+- GitHub calls use the viewer's server-side token
+  (`CachedAccess.Token`), are cached per (repository, base, head) and per
+  (repository, ref, path) in LRUs bounded by count (512 comparisons, 64
+  files) and by bytes (64 MB each; larger entries are not cached). The whole
+  comparison is kept rather than one file of it, so the threads of a listing
+  in different files share one compare call,
+  deduplicated while in flight, limited per user (30, one more every 2 s),
+  and failures are remembered for 30 s. Positions are cached per
+  (thread, anchor_sha, at), at most 20,000. Shared caches are safe because
+  the comments service checks the viewer's access to the repository first.
+- Degradation: GitHub errors, the rate limit or a missing token return the
+  stored position (its `commit_sha` is then not `at`) and are not cached, so
+  the listing never fails because of re-anchoring.
 
 ## Authorization
 
@@ -154,6 +195,38 @@ One email per event, deduplicated with an idempotency key; a sending subdomain
 such as `notify.fullfran.com`; one-click `List-Unsubscribe` headers; emails
 carry no paper text, only who asked what, where, and a link.
 
+Implementation (`server/internal/notify`, API in the README, "Notifications
+API"):
+
+- Optional: `GALLEY_RESEND_API_KEY` and `GALLEY_MAIL_FROM`; without them the
+  service reports `disabled` and sends nothing.
+- Opt-in per user with a verified address (`PUT /api/galley/me/notifications`
+  stores it unverified and mails a signed link that does not name the
+  requester). The link's `GET` only shows a confirm button and `POST`
+  verifies, so mail scanners cannot confirm an address someone else entered.
+  Verification mails are limited per user, per address hash (about 3 a day)
+  and globally. Addresses are sealed with the data key; logs mask them.
+- Triggers are galley-originated, no GitHub webhooks:
+  `POST /api/galley/repos/{repo_id}/notify/review-requested` and
+  `.../notify/assigned`. The server checks with the caller's own token that
+  the caller has push and that the login is a requested reviewer or an
+  assignee on GitHub. The GitHub account id from that answer (not the login)
+  maps to the galley user with that `github_id`; others,
+  and users without a verified, enabled address for the kind, get nothing,
+  with the same `accepted` answer. Invitation notices are reserved
+  (`invited`) for later.
+- Idempotency key per (kind, repository, number, recipient, UTC day),
+  reserved in `galley_notify_outbox` before sending and released when Resend
+  fails; per-caller and per-recipient rate limits.
+- Links (verification 24 h, unsubscribe one year from the UTC day, so a
+  day's mails carry identical links) are HMAC-SHA256 tokens with
+  a key derived from `GALLEY_TOKEN_KEY` by HKDF (`galley-notify-links-v1`),
+  bound to purpose, user and a hash of the address. Unsubscribe `GET` only
+  shows a button; `POST` (button or RFC 8058 one-click) turns mail off.
+  Verification works the same way.
+- Tokens travel in link URLs, so they may appear in PocketBase request logs;
+  they only allow verifying or unsubscribing that one address.
+
 ## Chat per paper
 
 `galley_chat_messages` sealed; galley users are not PocketBase auth records, so
@@ -194,7 +267,7 @@ unreadable tokens).
 1. Comment MVP (editor anchoring at head, threads, replies, auth, sealing).
 2. Resolve/reopen, re-anchoring, preview selection, suggestions, PR export.
 3. AI: galley tokens, CLI/skill, remote MCP with OAuth (high risk).
-4. Email digests.
+4. Email for direct asks (built; no digests, see above).
 5. Chat.
 
 ## Main risks

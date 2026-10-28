@@ -33,7 +33,7 @@ const maxCommentBody = 128 << 10
 type CommentsService interface {
 	ListThreads(ctx context.Context, a comments.Actor, repoID int64, f comments.ListFilter) (comments.ThreadList, error)
 	CreateThread(ctx context.Context, a comments.Actor, repoID int64, in comments.NewThread) (comments.Thread, error)
-	GetThread(ctx context.Context, a comments.Actor, id string) (comments.Thread, error)
+	GetThreadAt(ctx context.Context, a comments.Actor, id, at string) (comments.Thread, error)
 	Reply(ctx context.Context, a comments.Actor, threadID string, in comments.NewComment) (comments.Comment, error)
 	EditComment(ctx context.Context, a comments.Actor, id string, in comments.NewComment) (comments.Comment, error)
 	DeleteComment(ctx context.Context, a comments.Actor, id string) error
@@ -209,7 +209,7 @@ func (h commentHandlers) unread(e *core.RequestEvent, a comments.Actor) error {
 }
 
 func (h commentHandlers) getThread(e *core.RequestEvent, a comments.Actor) error {
-	t, err := h.Comments.GetThread(e.Request.Context(), a, e.Request.PathValue("id"))
+	t, err := h.Comments.GetThreadAt(e.Request.Context(), a, e.Request.PathValue("id"), e.Request.URL.Query().Get("at"))
 	if err != nil {
 		return h.fail(e, err)
 	}
@@ -362,6 +362,7 @@ type anchorJSON struct {
 }
 
 type positionJSON struct {
+	Path        string `json:"path"`
 	CommitSHA   string `json:"commit_sha"`
 	StartLine   int    `json:"start_line"`
 	EndLine     int    `json:"end_line"`
@@ -423,6 +424,7 @@ func toThreadJSON(t comments.Thread) threadJSON {
 			Quote: quoteJSON(t.Anchor.Quote),
 		},
 		Position: positionJSON{
+			Path:      t.Position.Path,
 			CommitSHA: t.Position.CommitSHA,
 			StartLine: t.Position.Range.StartLine, EndLine: t.Position.Range.EndLine,
 			StartColumn: t.Position.Range.StartColumn, EndColumn: t.Position.Range.EndColumn,

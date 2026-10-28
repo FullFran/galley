@@ -37,6 +37,33 @@ func TestLoad(t *testing.T) {
 	}
 }
 
+func TestLoadMail(t *testing.T) {
+	env := validEnv()
+	cfg, err := config.Load(func(k string) string { return env[k] })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MailEnabled() {
+		t.Error("mail must be disabled without GALLEY_RESEND_API_KEY")
+	}
+	if len(cfg.LinkKey) != 32 || bytes.Equal(cfg.LinkKey, cfg.TokenKey) || bytes.Equal(cfg.LinkKey, cfg.DataKey) {
+		t.Error("link key must be a separate key derived from GALLEY_TOKEN_KEY")
+	}
+	env["GALLEY_RESEND_API_KEY"] = "re_123"
+	env["GALLEY_MAIL_FROM"] = "galley <notify@notify.fullfran.com>"
+	if cfg, err = config.Load(func(k string) string { return env[k] }); err != nil || !cfg.MailEnabled() || cfg.ResendAPIKey != "re_123" {
+		t.Errorf("mail config = %v, %v", cfg.MailEnabled(), err)
+	}
+	env["GALLEY_MAIL_FROM"] = "not an address\r\nBcc: x@y.z"
+	if _, err := config.Load(func(k string) string { return env[k] }); err == nil || strings.Contains(err.Error(), "Bcc") {
+		t.Errorf("bad from err = %v", err)
+	}
+	delete(env, "GALLEY_MAIL_FROM")
+	if cfg, err = config.Load(func(k string) string { return env[k] }); err != nil || cfg.MailEnabled() {
+		t.Errorf("key without from = %v, %v", cfg.MailEnabled(), err)
+	}
+}
+
 func TestLoadRejects(t *testing.T) {
 	tests := []struct {
 		name  string

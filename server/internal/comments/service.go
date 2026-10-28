@@ -103,7 +103,8 @@ func (s *Service) ListThreads(ctx context.Context, a Actor, repoID int64, f List
 	if len(recs) > s.cfg.ListLimit {
 		recs, out.Truncated = recs[:s.cfg.ListLimit], true
 	}
-	if out.Threads, err = s.build(ctx, a, recs, f.At); err != nil {
+	// All threads of a listing share one re-anchoring work budget.
+	if out.Threads, err = s.build(WithWorkBudget(ctx, ListWorkBudget), a, recs, f.At); err != nil {
 		return ThreadList{}, err
 	}
 	return out, nil
@@ -167,12 +168,21 @@ func (s *Service) CreateThread(ctx context.Context, a Actor, repoID int64, in Ne
 	return s.thread(ctx, a, t.ID, "")
 }
 
-// GetThread returns a thread with its comments.
+// GetThread returns a thread with its comments, at its stored position.
 func (s *Service) GetThread(ctx context.Context, a Actor, id string) (Thread, error) {
+	return s.GetThreadAt(ctx, a, id, "")
+}
+
+// GetThreadAt returns a thread with its comments, re-anchored at commit at
+// when at is set.
+func (s *Service) GetThreadAt(ctx context.Context, a Actor, id, at string) (Thread, error) {
+	if at != "" && !ValidSHA(at) {
+		return Thread{}, invalid("at")
+	}
 	if _, err := s.visibleThread(ctx, a, id); err != nil {
 		return Thread{}, err
 	}
-	return s.thread(ctx, a, id, "")
+	return s.thread(ctx, a, id, at)
 }
 
 // Reply adds a comment to a thread.
@@ -444,7 +454,7 @@ func (s *Service) build(ctx context.Context, a Actor, recs []ThreadRecord, at st
 		byThread[cr.ThreadID] = append(byThread[cr.ThreadID], c)
 	}
 	for _, r := range recs {
-		t, err := s.openThread(ctx, r, at)
+		t, err := s.openThread(ctx, a, r, at)
 		if err != nil {
 			return nil, err
 		}
@@ -457,7 +467,7 @@ func (s *Service) build(ctx context.Context, a Actor, recs []ThreadRecord, at st
 	return threads, nil
 }
 
-func (s *Service) openThread(ctx context.Context, r ThreadRecord, at string) (Thread, error) {
+func (s *Service) openThread(ctx context.Context, a Actor, r ThreadRecord, at string) (Thread, error) {
 	var q Quote
 	var err error
 	for _, f := range []struct {
@@ -476,9 +486,12 @@ func (s *Service) openThread(ctx context.Context, r ThreadRecord, at string) (Th
 			return Thread{}, err
 		}
 	}
-	pos, err := s.cfg.Reanchorer.Position(ctx, r, q, at)
+	pos, err := s.cfg.Reanchorer.Position(ctx, a.UserID, r, q, at)
 	if err != nil {
 		return Thread{}, fmt.Errorf("%w: re-anchor: %w", ErrUnavailable, err)
+	}
+	if pos.Path == "" {
+		pos.Path = r.Path
 	}
 	return Thread{
 		ID:           r.ID,
