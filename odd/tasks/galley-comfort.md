@@ -140,9 +140,12 @@ edit it, but anyone with write access could still change it on GitHub).
 - [x] CX-UI App shell redesign (`feat/comfort-shell`). Route: delegated (2+
   non-trivial files, broad UI rewrite). Merged (PR #11, `bb291f2`) and
   deployed.
-- [ ] CX-i18n Spanish/English UI (`feat/comfort-i18n`). Route: delegated (2+
-  non-trivial files: catalogs, locale, every UI component). Implemented and
-  checked; pending review, commit and PR.
+- [x] CX-i18n Spanish/English UI (`feat/comfort-i18n`). Route: delegated (2+
+  non-trivial files: catalogs, locale, every UI component). Merged (PR #12,
+  `883ec53`).
+- [ ] CX-UX Shell usability pass and hash routes (`feat/shell-usability`).
+  Route: delegated (2+ non-trivial files: shell, sidebar, header, router,
+  every container). Implemented and checked; pending review, commit and PR.
 - [ ] CX2 Writing feel, uploads and autocomplete.
 - [ ] CX3 Guided tour.
 - [ ] CX4 References manager.
@@ -365,6 +368,81 @@ edit it, but anyone with write access could still change it on GitHub).
     to `en-US`) give the same requests and results as before, apart from the
     relative "updated" time.
 
+- CX-i18n merged: PR #12 (`883ec53`).
+- CX-UX usability pass (delegated writer, branch `feat/shell-usability`, from
+  the shell spec in the session scratchpad `ux-shell-spec.md`; merged with
+  `origin/main` after CX-i18n landed):
+  - Sidebar by task, adopting Álvaro's patterns (hagalink/turing
+    `nav-config.ts` and `use-sidebar-state.ts`, hagalink/puertanueva
+    `navegacion-grupos.ts`, hagalink/gdr `administracion-tabs.ts` and
+    `nav-user.tsx`): one data source whose order is the tab order; daily work
+    first, admin last and separate; group open state as one guarded JSON map
+    (`galley:nav-groups`); a footer outside the main nav; one admin page with
+    tabs and a pure `resolve()` that falls back to the default tab; an
+    account dropdown with a theme radio group and sign out last. Not adopted:
+    role badges (galley has two roles and shows none) and a command palette.
+  - Repository switcher row; Write (Contents with Outline | Files over one
+    tree, per repository); Review (collapsible, closed by default, opens on
+    its route, one "Proposals 2 · 1 yours" row); one Admin entry for admins
+    opening the Admin area (Project settings, View as co-author; People,
+    Sessions, Allowlist declared, not shown); "Viewing as co-author · Exit"
+    banner; one-line "Not set up" banner above the editor, dismissible per
+    repository; active entry with a 3px bar and bold, no dot.
+  - Account menu (theme, language English · Español with `lang`,
+    Preferences…, Keyboard shortcuts, tour, About, Sign out last), Help menu,
+    credit line; Preferences dialog (auto-compile default, theme, language);
+    Keyboard shortcuts dialog on `?`; Ctrl/Cmd+S opens Save for review.
+  - Header: actionable breadcrumb (repository → switcher, folder → Files),
+    save state with a dot, ⋯ menu (Recompile now, Keyboard shortcuts; "Add a
+    note…" on phones), split "Save for review" button; phone header keeps the
+    file name.
+  - Theme System/Light/Dark stored as `galley:theme`, applied before first
+    paint by `web/public/theme-init.js` (external, CSP-safe).
+  - Fixes: drawer footer one row, no overlap; "Out of date · Ctrl+Enter"
+    badge only when stale (opening a file no longer marks the preview stale);
+    auto-compile as a switch; no active card on the repository list; phone
+    review bar hides at the review card; "You can't approve your own
+    proposal."; no GitHub link in proposal rows.
+  - Hash routes (owner bug: reload went back to Repositories):
+    `web/src/shell/route.ts`, strict parsing, `pushState`, back/forward with
+    the unsaved-changes guard, `?login=failed` still stripped with the hash
+    kept, return to the route after sign in (validated `sessionStorage`).
+  - Spanish strings for every new key (key-parity test passes).
+  - Checks: tests first. RED: 7 new test files failed on missing modules
+    (`navGroups`, `prefs`, `theme` + `public/theme-init.js`, `shortcuts`,
+    `menuNav`, `adminTabs`, `route`) and the rewritten `nav.test.ts` failed 5
+    assertions; later `textsEdited` failed with "not a function". Then GREEN:
+    `npm ci --ignore-scripts` (0 vulnerabilities), lint, typecheck, test (439
+    passed, 45 files), build. Sizes against `origin/main`: main JS 167.9 →
+    173.6 kB gzip, main CSS 6.8 → 7.8 kB gzip. No new dependency.
+  - Headless Chromium against the production build
+    (`VITE_API_BASE=https://galley-api.fullfran.com`) with mocked GitHub, at
+    1440, 1280 and 390 in light and dark (108 screenshots in the session
+    scratchpad `shots-v3/`, script `pw/shell-check-v3.mjs`): 0 failed checks,
+    no CSP violations, no page errors, no horizontal overflow, no inline
+    style attributes from galley (Playwright's screenshot leaves `style=""`
+    on inputs; those are ignored). Checked: return to `#/r/o/paper/proposals/4`
+    after sign in; reload keeps the file, the proposal detail and the admin
+    tab; invalid and unknown routes land on `#/`; back goes to the previous
+    file; the unsaved guard holds on sidebar navigation and on a hash change;
+    the Contents tab persists; folder crumb opens Files; Ctrl+S opens the
+    note with focus in it; ⋯ and account menus open on the first item, move
+    with arrows/End and return focus on Escape; `?` opens the shortcuts
+    dialog; Ctrl+B rail keeps Review open; theme switch applies, is present
+    at `DOMContentLoaded` after reload, and System removes the attribute;
+    the drawer footer ends at the viewport bottom with no overlap; Review
+    opens on the proposals route with "2 · 1 yours"; no link in proposal
+    rows; "You can't approve your own proposal."; the phone review bar shows
+    only when the review card is off screen; admin entry and tabs, the view
+    as co-author banner and Exit; the setup banner gives admins "Set up…" and
+    stays dismissed after a reload; a co-author on an admin address sees only
+    "Only admins…". The C3 review (`pw/review-check-v3.mjs`) and CX1 config
+    (`pw/config-check-v3.mjs`) scripts give the same requests and results as
+    v2, apart from selectors (Files tab, "Set up…", "Fix…", Admin entry) and
+    the proposal rows no longer linking to GitHub.
+  - Not done: Writing | Code slot and Vim (CX2), notifications, Download PDF
+    and History in ⋯, and the admin panel tabs (C6) beyond their declaration.
+
 ## Next step
 
-Review, commit and open the CX-i18n pull request; then CX2.
+Review, commit and open the CX-UX pull request; then CX2.

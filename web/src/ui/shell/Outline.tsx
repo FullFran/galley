@@ -25,7 +25,9 @@ export function Outline({ main, openPath, items, label, onOpenFile, onHeading }:
         >
           <Icon name="document" />
           <span class="tree-label">{label(main)}</span>
-          <span class="chip">{m.mainFile}</span>
+          <span class="muted tree-suffix" title={m.mainFileHint}>
+            {m.mainFile}
+          </span>
         </button>
       )}
       {openPath && (

@@ -83,3 +83,13 @@ export function describeError(err: unknown, t: Messages = en): string {
   if (err instanceof AuthRequiredError) return m.session;
   return m.generic;
 }
+
+/**
+ * True when the text of a file that was already open changed. Opening a file
+ * (a new buffer with the repository's text) is not an edit, so the preview is
+ * not marked out of date by it.
+ */
+export function textsEdited(before: Buffers, after: Buffers): boolean {
+  for (const k of Object.keys(after)) if (before[k] !== undefined && before[k]?.text !== after[k]?.text) return true;
+  return false;
+}

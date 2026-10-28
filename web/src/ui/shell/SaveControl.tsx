@@ -1,5 +1,7 @@
+import type { ComponentChildren } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { useT } from '../../i18n';
+import { matchShortcut, typingInField } from '../../shell/shortcuts';
 import { saveStateLabel } from '../../workspace/session';
 import { Icon } from './icons';
 
@@ -8,21 +10,43 @@ export interface SaveControlProps {
   message: string;
   placeholder: string;
   saving: boolean;
+  /** Bumped to open the note (the phone ⋯ menu's "Add a note…"). */
+  noteRequest?: number;
+  /** Between the state and the button: the header ⋯ menu. */
+  more?: ComponentChildren;
   onMessage: (message: string) => void;
   onSave: () => void;
 }
 
 /**
- * Header save: the state ("All changes saved", "2 unsaved files"), one primary
- * "Save for review" button and an optional note in a small popover.
+ * Header save: a dot and "1 unsaved" (role=status, full wording in the
+ * tooltip) and a split "Save for review" button whose caret opens the
+ * optional note. Ctrl/Cmd+S opens the note too, so Enter saves.
  */
-export function SaveControl({ dirtyCount, message, placeholder, saving, onMessage, onSave }: SaveControlProps) {
+export function SaveControl({ dirtyCount, message, placeholder, saving, noteRequest, more, onMessage, onSave }: SaveControlProps) {
   const t = useT();
   const m = t.save;
   const [noteOpen, setNoteOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
-  const noteButton = useRef<HTMLButtonElement>(null);
+  const caret = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (noteRequest) setNoteOpen(true);
+  }, [noteRequest]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (matchShortcut(e, typingInField(e.target)) !== 'save') return;
+      // Never the browser's "Save page as".
+      e.preventDefault();
+      e.stopPropagation();
+      setNoteOpen(true);
+      input.current?.focus();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
 
   useEffect(() => {
     if (!noteOpen) return;
@@ -31,7 +55,9 @@ export function SaveControl({ dirtyCount, message, placeholder, saving, onMessag
       if (e instanceof KeyboardEvent) {
         if (e.key !== 'Escape') return;
         setNoteOpen(false);
-        noteButton.current?.focus();
+        // Phones have no caret; the focus then goes back to the main button.
+        const back = caret.current && caret.current.getClientRects().length > 0 ? caret.current : root.current?.querySelector<HTMLElement>('.save-main');
+        back?.focus();
         return;
       }
       if (!root.current?.contains(e.target as Node)) setNoteOpen(false);
@@ -53,24 +79,25 @@ export function SaveControl({ dirtyCount, message, placeholder, saving, onMessag
 
   return (
     <div class="save-control" data-tour="save" ref={root}>
-      <span class={dirtyCount > 0 ? 'save-state save-state-dirty' : 'save-state'} role="status">
-        {saveStateLabel(dirtyCount, saving, t)}
+      <span
+        class={dirtyCount > 0 ? 'save-state save-state-dirty' : 'save-state'}
+        role="status"
+        title={saveStateLabel(dirtyCount, saving, t)}
+      >
+        {dirtyCount > 0 && !saving && <span class="save-dot" aria-hidden="true" />}
+        {saving ? m.saving : dirtyCount > 0 ? m.unsavedShort(dirtyCount) : m.allSavedShort}
+        <span class="visually-hidden">{` (${saveStateLabel(dirtyCount, saving, t)})`}</span>
       </span>
-      <form class="save-form" onSubmit={submit}>
-        <button
-          type="button"
-          ref={noteButton}
-          class="icon-button note-toggle"
-          aria-label={m.addNote}
-          data-tooltip={m.addNote}
-          aria-expanded={noteOpen}
-          aria-controls="save-note"
-          onClick={() => setNoteOpen((o) => !o)}
-        >
-          <Icon name="chevron" />
-        </button>
+      {more}
+      <form class="save-form split-button" onSubmit={submit}>
         {/* Phones show the short label; the full one stays the accessible name. */}
-        <button type="submit" class="primary" disabled={disabled} aria-label={saving ? undefined : m.button}>
+        <button
+          type="submit"
+          class="primary save-main"
+          disabled={disabled}
+          aria-label={saving ? undefined : m.button}
+          aria-keyshortcuts="Control+S Meta+S"
+        >
           {saving ? (
             m.saving
           ) : (
@@ -81,6 +108,18 @@ export function SaveControl({ dirtyCount, message, placeholder, saving, onMessag
               </span>
             </>
           )}
+        </button>
+        <button
+          type="button"
+          ref={caret}
+          class="primary save-caret"
+          aria-label={m.addNote}
+          data-tooltip={noteOpen ? undefined : m.addNote}
+          aria-expanded={noteOpen}
+          aria-controls="save-note"
+          onClick={() => setNoteOpen((o) => !o)}
+        >
+          <Icon name="chevron" />
         </button>
         <div id="save-note" class="popover" hidden={!noteOpen}>
           <label>

@@ -4,7 +4,7 @@ import { globError, isPlainPath } from '../../config/glob';
 import { visibleFiles } from '../../config/project';
 import { DEFAULT_ACCEPT, DEFAULT_UPLOAD_MB, type ConfigProblem, type GalleyConfig, type UploadRule } from '../../config/schema';
 import { useT } from '../../i18n';
-import { ProblemList } from './ViewNotice';
+import { ProblemList } from './SetupBanner';
 
 export interface ConfigFormProps {
   mode: 'setup' | 'settings';

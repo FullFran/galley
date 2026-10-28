@@ -3,6 +3,7 @@ import { render } from 'preact-render-to-string';
 import { createRef } from 'preact';
 import { initialSidebar } from '../../shell/sidebar';
 import { AboutDialog } from './AboutDialog';
+import { AdminArea } from './AdminArea';
 import { AppShell, type ShellContext } from './AppShell';
 import { Credit } from './Credit';
 import { RepoList } from '../RepoList';
@@ -15,9 +16,10 @@ const shell: ShellContext = {
   repo: { id: 1, owner: 'o', name: 'paper', fullName: 'o/paper', defaultBranch: 'main', private: true },
   admin: false,
   user: { login: 'ana', id: 1 },
-  proposals: { count: 2, mine: 4 },
+  proposals: { count: 2, mine: 1 },
   sidebar: { state: initialSidebar(1280), dispatch: noop, toggleRef: createRef(), panelRef: createRef() },
   onNavigate: noop,
+  onRepos: noop,
   onSignOut: noop,
 };
 
@@ -67,10 +69,21 @@ describe('SignedOut landing', () => {
 
 describe('AppShell', () => {
   const html = render(
-    <AppShell shell={shell} active="paper" crumbs={['o/paper', 'index.qmd']}>
+    <AppShell shell={shell} active="contents" crumbs={[{ label: 'o/paper', onSelect: noop }, 'sections', 'index.qmd']}>
       <p>content</p>
     </AppShell>,
   );
+  const adminHtml = render(
+    <AppShell shell={{ ...shell, admin: true }} active="contents" crumbs={[]}>
+      x
+    </AppShell>,
+  );
+  /** The popover of one menu, by id, up to the next menu root. */
+  const menu = (page: string, id: string) => {
+    const start = page.indexOf(`id="${id}"`);
+    const end = page.indexOf('class="menu-root"', start);
+    return page.slice(start, end === -1 ? undefined : end);
+  };
 
   it('starts with a skip link to the main region', () => {
     expect(html.indexOf('class="skip-link"')).toBeLessThan(html.indexOf('<button'));
@@ -83,38 +96,137 @@ describe('AppShell', () => {
     expect(html).toMatch(/<nav[^>]*aria-label="Main"/);
     expect(html).toContain('<header');
     expect(html).toContain('data-tour="proposals"');
+    expect(html).toContain('data-tour="help"');
   });
 
   it('marks the active entry with aria-current, not colour alone', () => {
-    expect(html).toMatch(/aria-current="page"[^>]*>[\s\S]*?Paper/);
+    expect(html).toMatch(/aria-current="page"[^>]*>[\s\S]*?Contents/);
     expect(html.match(/aria-current="page"/g)?.length).toBe(1);
   });
 
-  it('labels icon buttons and shows the proposal count', () => {
-    expect(html).toMatch(/aria-label="(Collapse|Expand) the sidebar"/);
-    expect(html).toContain('aria-label="Proposals, 2 open"');
-    expect(html).toContain('Yours: #4');
+  it('starts with the repository switcher row', () => {
+    expect(html).toContain('aria-label="Switch repository: o/paper"');
+    expect(html.indexOf('repo-switch')).toBeLessThan(html.indexOf('aria-label="Main"'));
   });
 
-  it('shows the breadcrumb and the account with sign out', () => {
-    expect(html).toMatch(/aria-label="Breadcrumb"/);
-    expect(html).toContain('index.qmd');
-    expect(html).toContain('ana');
-    expect(html).toContain('Sign out');
+  it('groups entries by task, with a collapsible Review header closed by default', () => {
+    expect(html).toContain('>Write<');
+    expect(html).toMatch(/class="nav-group-head"[^>]*aria-expanded="false"[^>]*aria-controls="nav-group-review"/);
+    expect(html).toMatch(/id="nav-group-review"[^>]*hidden/);
   });
 
-  it('hides project settings from co-authors and shows it to admins', () => {
-    expect(html).not.toContain('Project settings');
-    const admin = render(
-      <AppShell shell={{ ...shell, admin: true }} active="paper" crumbs={[]}>
+  it('opens the Review group when the active route is inside it', () => {
+    const page = render(
+      <AppShell shell={shell} active="proposals" crumbs={[]}>
         x
       </AppShell>,
     );
-    expect(admin).toContain('Project settings');
+    expect(page).toMatch(/aria-expanded="true"[^>]*aria-controls="nav-group-review"/);
+  });
+
+  it('never collapses groups in the icon rail', () => {
+    const rail = render(
+      <AppShell shell={{ ...shell, sidebar: { ...shell.sidebar, state: initialSidebar(900) } }} active="contents" crumbs={[]}>
+        x
+      </AppShell>,
+    );
+    expect(rail).not.toContain('nav-group-head');
+    expect(rail).not.toMatch(/id="nav-group-review"[^>]*hidden/);
+  });
+
+  it('labels icon buttons and shows proposals on one row', () => {
+    expect(html).toMatch(/aria-label="(Collapse|Expand) the sidebar"/);
+    expect(html).toContain('aria-label="Proposals, 2 open"');
+    expect(html).toContain('2 · 1 yours');
+    expect(html).not.toContain('Yours: #');
+  });
+
+  it('makes breadcrumb segments actionable', () => {
+    expect(html).toMatch(/aria-label="Breadcrumb"/);
+    expect(html).toMatch(/<button[^>]*class="crumb"[^>]*>o\/paper<\/button>/);
+    expect(html).toMatch(/aria-current="location">index.qmd/);
+  });
+
+  it('has an account menu with Sign out last, and no one-click sign out', () => {
+    expect(html).toContain('aria-label="Account: ana"');
+    expect(html).toMatch(/aria-haspopup="menu"[^>]*aria-expanded="false"[^>]*aria-controls="account-menu"/);
+    const account = menu(html, 'account-menu');
+    const order = [
+      'Signed in as ana',
+      'Theme',
+      'System',
+      'Light',
+      'Dark',
+      'Language',
+      'English',
+      'Español',
+      'Preferences…',
+      'Keyboard shortcuts',
+      'Take the tour',
+      'About galley',
+      'Sign out',
+    ];
+    const positions = order.map((label) => account.indexOf(label));
+    expect(positions.every((p) => p >= 0)).toBe(true);
+    expect([...positions].sort((a, b) => a - b)).toEqual(positions);
+    expect(account).toMatch(/role="separator"><\/div><button[^>]*role="menuitem"[^>]*><span class="menu-label">Sign out/);
+    expect(account).toMatch(/lang="es"[^>]*>Español/);
+    expect(account).toMatch(/lang="en"[^>]*>English/);
+    expect(html.match(/Sign out/g)?.length).toBe(1);
+  });
+
+  it('gives admins and co-authors the same account menu (admin tools live in the Admin area)', () => {
+    expect(menu(adminHtml, 'account-menu')).toBe(menu(html, 'account-menu'));
+    expect(menu(html, 'account-menu')).not.toMatch(/Admin|Project settings|co-author/);
+  });
+
+  it('shows the Admin entry to admins only, and nothing admin-related to co-authors', () => {
+    for (const word of ['Admin', 'Project settings', 'View as co-author']) expect(html).not.toContain(word);
+    expect(adminHtml).toContain('aria-label="Admin"');
+    expect(adminHtml).not.toContain('Project settings');
+  });
+
+  it('offers a More menu with Keyboard shortcuts, and a muted credit line', () => {
+    expect(menu(html, 'more-menu')).toContain('Keyboard shortcuts');
+    expect(html).toContain('galley · by F. Olmedo');
   });
 
   it('has no inline style attributes', () => {
     expect(html).not.toContain('style=');
+    expect(adminHtml).not.toContain('style=');
+  });
+});
+
+describe('AdminArea', () => {
+  const props = {
+    tab: 'settings' as const,
+    onTab: noop,
+    settings: <p>SETTINGS</p>,
+    coauthorView: false,
+    onCoauthorView: noop,
+    coauthorCount: 3,
+  };
+
+  it('shows the admin tabs and the settings to admins', () => {
+    const html = render(<AdminArea {...props} admin />);
+    expect(html).toContain('role="tablist"');
+    expect(html).toMatch(/role="tab"[^>]*aria-selected="true"[^>]*>Project settings/);
+    expect(html).toContain('View as co-author');
+    expect(html).toContain('SETTINGS');
+    for (const later of ['People', 'Sessions', 'Allowlist']) expect(html).not.toContain(later);
+  });
+
+  it('shows the view-as switch on its tab', () => {
+    const html = render(<AdminArea {...props} admin tab="view-as" />);
+    expect(html).toMatch(/role="switch"/);
+    expect(html).toContain('Co-authors see 3 files.');
+  });
+
+  it('never renders admin content for co-authors', () => {
+    const html = render(<AdminArea {...props} admin={false} />);
+    expect(html).not.toContain('SETTINGS');
+    expect(html).not.toContain('role="tablist"');
+    expect(html).toContain('Only admins');
   });
 });
 

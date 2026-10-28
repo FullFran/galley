@@ -4,7 +4,6 @@ import { formatUpdated } from '../../i18n/format';
 import { mergeLabel, overallLabel } from '../../review/labels';
 import type { OverallReview } from '../../review/status';
 import { Icon } from '../shell/icons';
-import { GitHubLink } from './GitHubLink';
 
 export interface ProposalRow {
   summary: ProposalSummary;
@@ -65,8 +64,7 @@ export function ProposalList({ rows, onOpen, onEmptyAction }: ProposalListProps)
               {overall ? <span class={TONE[overall]}>{overallLabel(overall, t)}</span> : <span class="chip chip-loading">{m.loadingState}</span>}
               {merge && <span class="muted">{mergeLabel(merge.mergeable, merge.state, t)}</span>}
             </span>
-            <GitHubLink href={summary.htmlUrl} />
-          </li>
+            </li>
         );
       })}
     </ul>

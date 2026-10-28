@@ -146,7 +146,22 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
     }
   };
 
-  const crumbs = [repo.fullName, t.proposals.title, data ? `#${number} ${data.proposal.title}` : `#${number}`];
+  // Phones: the sticky "Write your review" bar hides while the review card is on screen.
+  const [reviewInView, setReviewInView] = useState(false);
+  const loaded = data !== undefined;
+  useEffect(() => {
+    const target = loaded ? document.getElementById('your-review') : null;
+    if (!target || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => setReviewInView(entries.some((e) => e.isIntersecting)));
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [loaded]);
+
+  const crumbs = [
+    { label: repo.fullName, onSelect: shell.onRepos, title: t.nav.switchRepo },
+    { label: t.proposals.title, onSelect: onBack },
+    data ? `#${number} ${data.proposal.title}` : `#${number}`,
+  ];
   if (loadError) {
     return (
       <AppShell shell={shell} active="proposals" crumbs={crumbs}>
@@ -352,7 +367,7 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
         />
       </aside>
       {open && (
-        <div class="review-bar">
+        <div class="review-bar" hidden={reviewInView}>
           <button
             type="button"
             class="primary"

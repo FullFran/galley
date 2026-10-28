@@ -14,18 +14,20 @@ export interface ProposalsProps {
   repo: Repository;
   onAuthRequired: () => void;
   shell: ShellContext;
+  /** The proposal shown, from the URL; none for the list. */
+  number?: number;
+  onOpen: (number: number | undefined) => void;
 }
 
 /** How many proposals get their review and merge state looked up for the list. */
 const DETAILED = 30;
 
 /** Open proposals of a repository, and the one being reviewed. */
-export function Proposals({ repos, reviews, repo, onAuthRequired, shell }: ProposalsProps) {
+export function Proposals({ repos, reviews, repo, number: open, onOpen, onAuthRequired, shell }: ProposalsProps) {
   const t = useT();
   const tRef = useTRef();
   const [rows, setRows] = useState<ProposalRow[]>();
   const [error, setError] = useState<string>();
-  const [open, setOpen] = useState<number>();
   const [attempt, setAttempt] = useState(0);
 
   const fail = useCallback(
@@ -65,14 +67,14 @@ export function Proposals({ repos, reviews, repo, onAuthRequired, shell }: Propo
         reviews={reviews}
         repo={repo}
         number={open}
-        onBack={() => setOpen(undefined)}
+        onBack={() => onOpen(undefined)}
         onAuthRequired={onAuthRequired}
         shell={shell}
       />
     );
   }
   return (
-    <AppShell shell={shell} active="proposals" crumbs={[repo.fullName, t.proposals.title]}>
+    <AppShell shell={shell} active="proposals" crumbs={[{ label: repo.fullName, onSelect: shell.onRepos, title: t.nav.switchRepo }, t.proposals.title]}>
       <div class="page page-wide">
         <h1>{t.proposals.title}</h1>
         <p class="muted">{t.proposals.intro(repo.fullName)}</p>
@@ -84,7 +86,7 @@ export function Proposals({ repos, reviews, repo, onAuthRequired, shell }: Propo
             </button>
           </div>
         ) : rows ? (
-          <ProposalList rows={rows} onOpen={setOpen} onEmptyAction={() => shell.onNavigate('paper')} />
+          <ProposalList rows={rows} onOpen={onOpen} onEmptyAction={() => shell.onNavigate('contents')} />
         ) : (
           <Skeleton variant="list" lines={3} />
         )}
