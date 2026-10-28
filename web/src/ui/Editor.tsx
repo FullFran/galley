@@ -2,9 +2,10 @@ import { useEffect, useRef } from 'preact/hooks';
 import { EditorState, type Extension } from '@codemirror/state';
 import { EditorView, drawSelection, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { LanguageSupport, defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { markdownKeymap, markdownLanguage } from '@codemirror/lang-markdown';
+import { syntaxHighlighting } from '@codemirror/language';
+import { markdownKeymap } from '@codemirror/lang-markdown';
 import { yaml } from '@codemirror/lang-yaml';
+import { highlightStyle, markdownSupport } from './editorStyle';
 
 export interface EditorProps {
   path: string;
@@ -14,9 +15,7 @@ export interface EditorProps {
 }
 
 function language(path: string): Extension {
-  // markdownLanguage instead of markdown(): the latter bundles HTML, CSS and
-  // JavaScript parsers for embedded HTML, which triples the bundle size.
-  if (/\.(qmd|md|markdown)$/i.test(path)) return [new LanguageSupport(markdownLanguage), keymap.of(markdownKeymap)];
+  if (/\.(qmd|md|markdown)$/i.test(path)) return [markdownSupport, keymap.of(markdownKeymap)];
   if (/\.ya?ml$/i.test(path)) return yaml();
   return [];
 }
@@ -53,7 +52,7 @@ export function Editor({ path, doc, onChange }: EditorProps) {
           drawSelection(),
           highlightActiveLine(),
           EditorView.lineWrapping,
-          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+          syntaxHighlighting(highlightStyle, { fallback: true }),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           language(path),
           EditorView.contentAttributes.of({ 'aria-label': `Contents of ${path}` }),

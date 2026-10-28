@@ -2,8 +2,9 @@
 
 Runbook for the first production deployment: frontend on GitHub Pages at
 `https://galley.fullfran.com`, API on the VPS behind the existing Traefik at
-`https://galley-api.fullfran.com`. Do the steps in order. Items marked
-**[unverified]** could not be checked without the live systems.
+`https://galley-api.fullfran.com`. Do the steps in order. Values below were
+confirmed during the first deployment (2026-10-28); items still marked
+**[unverified]** have not been checked against the live systems.
 
 Artifacts in this repository:
 
@@ -15,6 +16,47 @@ Artifacts in this repository:
   Traefik labels, following the shadow-dungeon API pattern.
 
 ## 1. Create the GitHub App
+
+The production app was created from a manifest: owner organization
+`Tesis-Francisco-Olmedo`, slug `galley-by-fullfran`, private (installable only
+on that organization).
+
+### Recommended: from a manifest
+
+A manifest fills in every field of the table below in one step and avoids
+typos. Serve or open a small HTML page that POSTs a form to
+`https://github.com/organizations/Tesis-Francisco-Olmedo/settings/apps/new`
+with a `manifest` field holding JSON such as:
+
+```json
+{
+  "name": "galley-by-fullfran",
+  "url": "https://galley.fullfran.com",
+  "callback_urls": ["https://galley-api.fullfran.com/api/galley/auth/callback"],
+  "hook_attributes": { "url": "https://galley-api.fullfran.com/api/galley/auth/webhook", "active": true },
+  "redirect_url": "<a page you control that shows the ?code= query parameter>",
+  "public": false,
+  "request_oauth_on_install": false,
+  "default_permissions": { "contents": "write", "pull_requests": "write", "metadata": "read" },
+  "default_events": []
+}
+```
+
+GitHub then redirects to `redirect_url` with a temporary `code`. Exchange it
+within one hour:
+
+```sh
+curl -X POST https://api.github.com/app-manifests/<code>/conversions
+```
+
+The response holds the `client_id`, `client_secret` and `webhook_secret` (and a
+private key galley does not need). Store them in your password manager and in
+`.env`; GitHub generates the webhook secret in this flow, so use its value for
+`GALLEY_WEBHOOK_SECRET` instead of the one from step 2. Afterwards, check on
+the app's **General** page that **Expire user authorization tokens** is on.
+Source: <https://docs.github.com/en/apps/sharing-github-apps/registering-a-github-app-from-a-manifest>.
+
+### Fallback: manual creation
 
 **Owner:** create it under the organization that owns the paper repository
 (`Tesis-Francisco-Olmedo`), with "Where can this GitHub App be installed?" set
@@ -55,7 +97,7 @@ After creating it, on the app's **General** page:
   `GALLEY_GITHUB_CLIENT_SECRET`.
 - No private key is needed: galley only uses user access tokens.
 
-Then **Install App** > the organization > **Only select repositories** >
+In both cases, **Install App** > the organization > **Only select repositories** >
 `paper-tld100-glow-curve`.
 
 ## 2. Generate secrets
@@ -76,12 +118,11 @@ PocketBase source: <https://pocketbase.io/docs/going-to-production/> ("random
 | Name | Type | Target | Proxy |
 | --- | --- | --- | --- |
 | `galley` | CNAME | `fullfran.github.io` | **DNS only** (grey cloud) |
-| `galley-api` | same as `sd-api` (A/AAAA to the VPS or CNAME) | the VPS | same as `sd-api` |
+| `galley-api` | A | the VPS IP address | **DNS only** (grey cloud) |
 
-Make `galley-api` match how `sd-api` is set up, so Traefik obtains its
-certificate the same way. **[unverified]** If `sd-api` is proxied (orange
-cloud), the Traefik IP allowlist sees Cloudflare addresses, not yours; keep the
-default allowlist and use the SSH tunnel for the admin UI.
+This matches `sd-api`, which is also a DNS-only A record to the VPS. Because
+neither is proxied by Cloudflare, Traefik obtains the certificate directly and
+the admin IP allowlist sees real client IP addresses.
 
 ## 4. GitHub Pages
 
@@ -99,6 +140,12 @@ default allowlist and use the SSH tunnel for the admin UI.
 4. Custom domain: `galley.fullfran.com` > Save; once the certificate is issued,
    tick **Enforce HTTPS**.
 
+   If the custom domain was saved before its DNS record existed, the
+   certificate may never be requested. Observed: `https_certificate` stayed
+   `null` for 25 minutes; after removing the custom domain and adding it
+   again, the certificate was approved within 20 seconds. Check with
+   `gh api repos/FullFran/galley/pages --jq .https_certificate`.
+
 Note: `www.fullfran.com` currently has Enforce HTTPS off; consider enabling it
 in that repository too.
 
@@ -106,13 +153,16 @@ in that repository too.
 
 All remote steps run as you, over your usual SSH access.
 
+The service runs from `~/galley-api` on the VPS, which holds the repository
+checkout; `deploy/compose.yml` and `deploy/.env` (mode 600) live in its
+`deploy/` directory.
+
 1. Copy the repository (the build needs `server/`):
-   `git clone https://github.com/FullFran/galley.git ~/galley && cd ~/galley && git checkout <release commit>`
-2. `cd deploy && cp .env.example .env && chmod 600 .env`, then fill it:
-   values from steps 1 and 2, plus `TRAEFIK_NETWORK` and
-   `TRAEFIK_CERTRESOLVER`. The shadow-dungeon plan names `dokploy-network` and
-   `letsencrypt`; confirm both against the running Traefik
-   (`docker network ls`, Traefik static config) **[unverified]**.
+   `git clone https://github.com/FullFran/galley.git ~/galley-api && cd ~/galley-api && git checkout <release commit>`
+2. `cd deploy && cp .env.example .env && chmod 600 .env`, then fill it with
+   the values from steps 1 and 2. The Traefik values are already set for the
+   VPS: Traefik v3.6.7 runs under Dokploy, on the network `dokploy-network`
+   with the certificate resolver `letsencrypt`.
 3. `docker compose up -d --build`, then `docker compose logs galley-api`.
    `serve` exits with `config: <VAR> ...` if a variable is missing or invalid.
 4. Create the superuser over an SSH tunnel. The container publishes 8090 only
@@ -120,10 +170,16 @@ All remote steps run as you, over your usual SSH access.
    `ssh -L 8091:127.0.0.1:8091 <vps>` and open `http://127.0.0.1:8091/_/`.
    On first start, the logs print a `/_/#/pbinstall/...` link; replace its
    host with `127.0.0.1:8091`. Alternative without the browser:
-   `docker compose exec galley-api /pb/galley-api --dir=/pb/pb_data --encryptionEnv=PB_ENCRYPTION_KEY superuser upsert <email> <password>`.
+   `docker exec <container> /pb/galley-api superuser upsert <email> <password> --dir /pb/pb_data --encryptionEnv PB_ENCRYPTION_KEY`
+   (or `docker compose exec galley-api ...` with the same arguments). The
+   `--dir` and `--encryptionEnv` flags are required: an exec runs the binary
+   directly, bypassing the flags that the image entrypoint passes to `serve`,
+   so without them it would use a different data directory and no encryption
+   key.
 5. In the admin UI, Settings > Application:
    - **User IP proxy headers**: `X-Real-IP` (set by Traefik) or
-     `X-Forwarded-For`, so rate limits see client IPs **[unverified]: check
+     `X-Forwarded-For`, so rate limits see client IPs. The DNS record is not
+     proxied, so Traefik sees the real client address **[unverified]: check
      the IP shown in Logs after a request**.
    - **Rate limiting**: enable it (defaults are a reasonable start; tighten
      `*:auth`).
@@ -138,8 +194,14 @@ All remote steps run as you, over your usual SSH access.
 
 - Settings > General > Pull Requests: enable **Automatically delete head
   branches** (galley recreates its `galley/<login>` branch when needed).
-- Settings > Branches (or Rules): protect `main`: require a pull request
-  before merging, 1 approval, no force pushes, no deletion.
+- Branch protection is **not available**: the repository is private on GitHub
+  Free, and the branch protection API returns HTTP 403 ("Upgrade to
+  GitHub Pro or make this repository public"). `main` is therefore not
+  protected; rely on galley never writing to it (it only pushes to
+  `galley/<login>` and opens pull requests) and on reviewing every pull
+  request. To enable protection (require a pull request, 1 approval, no force
+  pushes, no deletion), the organization needs a paid plan such as GitHub
+  Team, or the GitHub Education benefits for the organization.
 - Invite the directors to the organization with access to the repository.
 
 ## 7. First-run checklist
@@ -174,7 +236,7 @@ scope is not kept; record the result in `odd/tasks/galley-mvp.md`.
 
 - **Backup** before every upgrade: Settings > Backups in the admin UI, or stop
   the service and archive the `galley_pb_data` volume.
-- **Rollback**: `git checkout <previous commit>` in `~/galley`, then
+- **Rollback**: `git checkout <previous commit>` in `~/galley-api`, then
   `docker compose up -d --build` in `deploy/`. Restore the backup if a newer
   migration ran. Frontend: re-run the Pages workflow on the previous commit.
 - **`GALLEY_TOKEN_KEY`**: change it in `.env` and `docker compose up -d`.

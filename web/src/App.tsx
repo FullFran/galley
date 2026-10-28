@@ -13,7 +13,7 @@ export interface AppProps {
 
 type View =
   | { name: 'loading' }
-  | { name: 'signedOut'; loginFailed: boolean; notice?: string; unsaved?: FileChange[] }
+  | { name: 'signedOut'; loginFailed: boolean; notice?: string; httpsUrl?: string; unsaved?: FileChange[] }
   | { name: 'repos' }
   | { name: 'workspace'; repo: Repository };
 
@@ -26,7 +26,7 @@ export function App({ session, gateway }: AppProps) {
   useEffect(() => {
     const search = window.location.search;
     if (search) window.history.replaceState(null, '', window.location.pathname);
-    void startView(session, search).then(setView);
+    void startView(session, search, window.location).then(setView);
   }, [session]);
 
   const signedOut = useCallback((unsaved: FileChange[] = []) => {
@@ -52,6 +52,7 @@ export function App({ session, gateway }: AppProps) {
       <SignedOut
         loginFailed={view.loginFailed}
         notice={view.notice}
+        httpsUrl={view.httpsUrl}
         unsaved={view.unsaved}
         onSignIn={() => window.location.assign(session.loginUrl())}
       />

@@ -21,6 +21,16 @@ describe('SignedOut', () => {
   });
 });
 
+describe('SignedOut on an http origin', () => {
+  it('links to the https address instead of offering sign in', () => {
+    const html = render(<SignedOut loginFailed={false} httpsUrl="https://galley.fullfran.com/" onSignIn={noop} />);
+    expect(html).toContain('Open galley over https');
+    expect(html).toContain('href="https://galley.fullfran.com/"');
+    expect(html).not.toContain('could not be reached');
+    expect(html).not.toContain('Sign in with GitHub');
+  });
+});
+
 describe('SignedOut with unsaved edits', () => {
   it('keeps edits visible after the session ended', () => {
     const html = render(

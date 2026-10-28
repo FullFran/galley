@@ -148,6 +148,9 @@ Edited files are kept in memory until saved, and the page warns before closing
 with unsaved changes. If someone else changed the branch since it was opened,
 the save is refused and the user's text stays visible so it can be copied after
 reloading. If the session ends, unsaved text is shown on the sign-in screen.
+Opened over plain `http:` on a public host, the sign-in screen links to the
+https address instead of trying to sign in (the session cookie is `Secure`);
+http on `localhost` and `127.0.0.1` keeps working for local development.
 
 ## Frontend data layer
 
