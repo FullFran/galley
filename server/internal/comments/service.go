@@ -567,6 +567,9 @@ func storeErr(err error) error {
 
 const idAlphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
 
+// NewID returns a random record id (IDLength characters of [a-z0-9]).
+func NewID() string { return randomID() }
+
 // randomID returns IDLength characters of idAlphabet from crypto/rand.
 func randomID() string {
 	out := make([]byte, 0, IDLength)

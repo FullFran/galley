@@ -153,9 +153,12 @@ numeric repository id; thread and comment ids are 15 characters `[a-z0-9]`.
 | `DELETE /api/galley/comments/{id}` | Deletes your own comment, and the thread when it was the last one. Returns 204. |
 
 Every route requires `Origin` equal to `GALLEY_FRONTEND_ORIGIN` and the
-session cookie; `POST`, `PATCH` and `DELETE` also require `X-Galley-CSRF: 1`.
-CORS allows only the frontend origin, with credentials, for `GET`, `POST`,
-`PATCH` and `DELETE`. Responses are `Cache-Control: no-store`.
+session cookie; `POST`, `PUT`, `PATCH` and `DELETE` also require
+`X-Galley-CSRF: 1`. CORS allows only the frontend origin, with credentials,
+for `GET`, `POST`, `PUT`, `PATCH` and `DELETE` (request headers
+`Content-Type`, `X-Galley-CSRF`, `If-Match` and `Last-Event-ID`; `ETag` is
+exposed). Responses are `Cache-Control: no-store`. The drafts and chat
+routes below share this middleware.
 
 Only repositories where the galley app is installed can be commented on. The
 server lists the repositories of the user's installations, with the user's
@@ -203,6 +206,117 @@ stored in the hidden fields of `galley_threads` and `galley_comments`
 (`galley_thread_reads` holds read markers); all three collections have
 superuser-only API rules, and comment text, quotes and tokens are never
 logged.
+
+### Drafts API
+
+Server-side drafts: one working copy per user, repository and path, so an
+edit started on one device can continue on another. Drafts are private to
+their owner: nobody else can read, list or delete them (repository admins
+neither; another user's draft answers 404). Access also needs `pull` on a
+repository where the galley app is installed (the same check as comments).
+`{path...}` is the repository-relative file path, with the comment path rules.
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/galley/repos/{repo_id}/drafts` | Your drafts in the repository, newest first, metadata only: `{"drafts": [{"path", "base_sha", "base_ref", "device", "size", "updated_at", "etag"}]}`. |
+| `GET /api/galley/repos/{repo_id}/drafts/{path...}` | One draft with its `content`; the `ETag` header carries its version. |
+| `PUT /api/galley/repos/{repo_id}/drafts/{path...}` | Creates or replaces the draft. Body: `base_sha` (the blob or commit the edit started from), optional `base_ref`, `device` (a short label) and `expected_updated_at`, and `content`. Returns 201 (created) or 200 (replaced) with the metadata and `ETag`. |
+| `DELETE /api/galley/repos/{repo_id}/drafts/{path...}` | Deletes one draft. Returns 204, or 404 when there is none. |
+| `DELETE /api/galley/repos/{repo_id}/drafts` | Deletes all your drafts in the repository (call it after a successful save). Returns `{"deleted": n}`. |
+
+Optimistic concurrency: a `PUT` without a precondition only creates. To
+replace a draft, send the version you last saw, as `If-Match: "<etag>"` or as
+`expected_updated_at` (the `updated_at` you received; both must agree when
+both are sent). If the draft changed meanwhile (another device saved) or no
+longer exists, the answer is 409 with `{"error": "Conflict", "current":
+{...metadata} | null}` and nothing is written, so a stale device cannot
+overwrite a newer draft. `updated_at` has millisecond precision and strictly
+increases per draft. The ETag is `"<updated_at in Unix ms>-<nonce>"`, with a
+random nonce renewed on every write, so a draft deleted and recreated within
+the same millisecond still gets a new ETag; prefer `If-Match`, because
+`expected_updated_at` alone compares only the time.
+
+Limits: `content` at most 2 MB (UTF-8, no NUL; bidi controls are allowed in a
+draft because it is a copy of a repository file shown only to its owner);
+request bodies at most 12 MB + 64 KB, the worst case of JSON escaping (a
+control character becomes `\u00XX`), 413 beyond; `device` at most 64 bytes on
+one line; `base_ref` a branch or tag name of at most 255 bytes; per user, 200
+drafts per repository (422 with `"field": "drafts"`) and, across all
+repositories, 1,000 drafts (`"field": "owner_drafts"`) and 50 MB of content
+(`"field": "owner_storage"`), all checked in the write transaction; 60 writes
+(`PUT` and `DELETE`) at once and one more per second per user (429).
+
+Retention: an hourly PocketBase cron job (`galley_drafts_retention`) deletes
+drafts not updated for 30 days. All of a user's drafts are deleted on a real
+revocation: the `github_app_authorization` revoked webhook, or GitHub
+answering `bad_refresh_token`. A refresh token that merely expired or no
+longer opens (for example after a key change) invalidates the user's access
+but keeps their drafts until the 30-day retention. On a real revocation the
+user is also marked revoked in memory for 2 minutes; the mark is checked
+inside the write transaction, so a `PUT` in flight either lands before the
+purge or is refused (401), and a second purge runs 30 seconds later.
+Content is sealed with AES-256-GCM
+under the data key; the associated data binds it to the record id, field,
+owner, `repo_id` and `path`
+(`galley/v1/draft/<id>/content/<owner>/<repo_id>/<path>`), so ciphertext
+copied or moved anywhere else does not open (generic 500). The
+`galley_drafts` collection has superuser-only API rules and a hidden
+`content` field; draft content is never logged.
+
+### Chat API
+
+One chat per paper (repository), with persistent history, unread counts and a
+live stream. Everything needs `pull` on an installed repository.
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/galley/repos/{repo_id}/chat?before_seq=&limit=` | History, oldest first: `{"messages": [{"id", "repo_id", "seq", "author": {"kind", "login"}, "mine", "body", "created_at"}], "has_more"}`. Without `before_seq`, the newest page; pass the first `seq` you hold to page back. `limit` defaults to 50, at most 200. |
+| `POST /api/galley/repos/{repo_id}/chat` | Posts `{"body"}` (non-blank, at most 4 KB, no NUL or bidi controls). Returns 201 and the message. 20 posts at once and one more per second per user. |
+| `POST /api/galley/repos/{repo_id}/chat/read` | `{"seq"?}` moves your read marker to `seq`, or to the newest message when omitted. Markers never move back. Returns `{"last_read_seq"}`. |
+| `GET /api/galley/repos/{repo_id}/chat/unread` | `{"repo_id", "unread", "last_read_seq", "latest_seq"}`: messages by others after your marker. |
+| `GET /api/galley/repos/{repo_id}/chat/stream` | Server-Sent Events of new messages (below). |
+
+Messages are numbered per repository (`seq` 1, 2, 3..., unique, assigned in
+one transaction). Bodies are sealed under the data key with associated data
+`galley/v1/chat/<id>/body/<repo_id>/<author user id>` in the hidden `body`
+field of `galley_chat_messages`, so a body copied to another message or
+reattributed to another author does not open. The author id is stored as
+text, not a relation, so deleting a user keeps the history readable. Read
+markers live in `galley_chat_reads`. Both collections have superuser-only API
+rules.
+
+The stream is served from Go, not by PocketBase realtime: galley users are
+not PocketBase auth records, so record rules cannot express repository
+access. Open it with `new EventSource(url, { withCredentials: true })`; it
+needs the session cookie and the exact `Origin` like every other route. Each
+new message is one event, flushed on its own:
+
+```text
+id: 42
+event: message
+data: {"id":"...","seq":42,"author":{"kind":"human","login":"alice"},...}
+```
+
+A `: ping` comment follows every 25 seconds; each heartbeat also re-checks the
+session and the repository access, and the stream ends (with `event: close`)
+when either is gone. A revocation ends the user's streams at once. Load the
+history first, then open the stream with `?last_event_id=<newest seq you
+hold>` (EventSource cannot set the header on its first request), so messages
+posted between the two calls are replayed rather than lost. On reconnect,
+EventSource sends `Last-Event-ID` itself, and the server replays up to 200
+missed messages; when more were missed it sends
+`event: resync` and the client should reload the history. A client that stops
+reading is dropped and reconnects the same way. Each user may hold 5 streams
+(1,000 per server; 429 beyond). Live delivery is in process, so it assumes
+one server instance.
+
+Proxies: the stream sets `Content-Type: text/event-stream`,
+`Cache-Control: no-store` and `X-Accel-Buffering: no`, and flushes every
+event. Traefik does not buffer responses by default, so it needs no extra
+configuration; do not put a buffering or compression middleware in front of
+`/api/galley/repos/*/chat/stream`. The heartbeat keeps idle streams under the
+usual 60-second proxy timeouts, and the stream lifts PocketBase's 5-minute
+server write and read timeouts (per-write deadline, read deadline cleared).
 
 ## Project configuration
 

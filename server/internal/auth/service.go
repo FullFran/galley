@@ -35,8 +35,9 @@ type Config struct {
 	// OnRevoke, when set, is called with the galley user id whenever the
 	// user's GitHub authorization is gone (revocation webhook, rejected,
 	// expired or unreadable refresh token), so caches of the user's GitHub
-	// permissions can be dropped. It must not block.
-	OnRevoke func(userID string)
+	// permissions can be dropped. reason tells real revocations from tokens
+	// that only became unusable. It must not block.
+	OnRevoke func(userID string, reason RevokeReason)
 	// OnTokenIssued, when set, is called after every successful refresh with
 	// the new access token and the repository hint it was requested with, so
 	// a server-side token cache can follow rotations made by the browser. It
@@ -228,14 +229,14 @@ func (s *Service) UserAccessToken(ctx context.Context, userID string, repository
 	}
 	if !stored.ExpiresAt.IsZero() && !s.cfg.Now().Before(stored.ExpiresAt) {
 		_ = s.cfg.Users.DeleteRefreshToken(ctx, userID)
-		s.notifyRevoked(userID)
+		s.notifyRevoked(userID, RevokeExpired)
 		return AccessToken{}, ErrUnauthenticated
 	}
 	refresh, err := s.cfg.Sealer.Open(stored.Ciphertext, []byte(userID))
 	if err != nil {
 		// Unreadable (for example after a key change): it can never be used.
 		_ = s.cfg.Users.DeleteRefreshToken(ctx, userID)
-		s.notifyRevoked(userID)
+		s.notifyRevoked(userID, RevokeUnreadable)
 		return AccessToken{}, ErrUnauthenticated
 	}
 
@@ -248,7 +249,7 @@ func (s *Service) UserAccessToken(ctx context.Context, userID string, repository
 
 	tokens, err := s.cfg.Provider.Refresh(dctx, string(refresh), repositoryID)
 	if errors.Is(err, ErrTokenRevoked) {
-		s.notifyRevoked(userID)
+		s.notifyRevoked(userID, RevokeRejected)
 		if delErr := s.cfg.Users.DeleteRefreshToken(dctx, userID); delErr != nil {
 			return AccessToken{}, fmt.Errorf("auth: delete rejected refresh token: %w", delErr)
 		}
@@ -296,16 +297,35 @@ func (s *Service) Revoke(ctx context.Context, githubID int64) error {
 	if err := s.cfg.Users.DeleteRefreshToken(ctx, user.ID); err != nil && !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("auth: delete refresh token: %w", err)
 	}
-	s.notifyRevoked(user.ID)
+	s.notifyRevoked(user.ID, RevokeWebhook)
 	if err := s.cfg.Sessions.DeleteUserSessions(ctx, user.ID); err != nil {
 		return fmt.Errorf("auth: delete sessions: %w", err)
 	}
 	return nil
 }
 
-func (s *Service) notifyRevoked(userID string) {
+// RevokeReason says why a user's GitHub authorization is gone.
+type RevokeReason string
+
+// Revocation reasons.
+const (
+	// RevokeWebhook: the user revoked the app (github_app_authorization).
+	RevokeWebhook RevokeReason = "webhook"
+	// RevokeRejected: GitHub answered bad_refresh_token.
+	RevokeRejected RevokeReason = "bad_refresh_token"
+	// RevokeExpired: the stored refresh token passed its expiry.
+	RevokeExpired RevokeReason = "expired"
+	// RevokeUnreadable: the stored refresh token no longer opens (key change).
+	RevokeUnreadable RevokeReason = "unreadable"
+)
+
+// Revoked reports a real revocation by the user or GitHub, as opposed to a
+// token galley can no longer use (expired, or unreadable after a key change).
+func (r RevokeReason) Revoked() bool { return r == RevokeWebhook || r == RevokeRejected }
+
+func (s *Service) notifyRevoked(userID string, reason RevokeReason) {
 	if s.cfg.OnRevoke != nil {
-		s.cfg.OnRevoke(userID)
+		s.cfg.OnRevoke(userID, reason)
 	}
 }
 

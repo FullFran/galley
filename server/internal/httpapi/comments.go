@@ -47,11 +47,13 @@ var _ CommentsService = (*comments.Service)(nil)
 
 type commentHandlers struct{ Deps }
 
-func registerComments(r *router.Router[*core.RequestEvent], d Deps) {
-	h := commentHandlers{d}
-	methods := []string{http.MethodGet, http.MethodPost, http.MethodPatch, http.MethodDelete}
+// credentialedMethods are the methods the credentialed groups allow.
+var credentialedMethods = []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete}
 
-	repos := credentialedGroup(r, ReposPrefix, d.FrontendOrigin, methods)
+func registerComments(r *router.Router[*core.RequestEvent], repos *router.RouterGroup[*core.RequestEvent], d Deps) {
+	h := commentHandlers{d}
+	methods := credentialedMethods
+
 	repos.GET("/{repo_id}/threads", h.wrap(h.listThreads))
 	repos.POST("/{repo_id}/threads", h.wrap(h.createThread))
 	repos.GET("/{repo_id}/unread", h.wrap(h.unread))
@@ -78,7 +80,8 @@ func credentialedGroup(r *router.Router[*core.RequestEvent], prefix, origin stri
 		AllowOriginFunc:  func(o string) (bool, error) { return o == origin, nil },
 		AllowCredentials: true,
 		AllowMethods:     methods,
-		AllowHeaders:     []string{"Content-Type", CSRFHeader},
+		AllowHeaders:     []string{"Content-Type", CSRFHeader, "If-Match", "Last-Event-ID"},
+		ExposeHeaders:    []string{"ETag"},
 	})
 	cors.Id = corsMiddlewareID
 	g.Bind(cors)
@@ -88,12 +91,23 @@ func credentialedGroup(r *router.Router[*core.RequestEvent], prefix, origin stri
 
 type actorHandler func(e *core.RequestEvent, a comments.Actor) error
 
+// sessionHandler also receives the session token, for handlers (streams)
+// that re-check the session later.
+type sessionHandler func(e *core.RequestEvent, a comments.Actor, session string) error
+
 // wrap enforces, in order: the exact frontend Origin on every request, the
 // CSRF header on state-changing ones, and a valid session.
 func (h commentHandlers) wrap(fn actorHandler) func(*core.RequestEvent) error {
+	return withSession(h.Deps, func(e *core.RequestEvent, a comments.Actor, _ string) error { return fn(e, a) })
+}
+
+// withSession is the middleware of every credentialed galley API route:
+// exact Origin, CSRF header on state-changing methods, no-store, and a
+// valid session.
+func withSession(d Deps, fn sessionHandler) func(*core.RequestEvent) error {
 	return func(e *core.RequestEvent) error {
 		r := e.Request
-		if h.FrontendOrigin == "" || r.Header.Get("Origin") != h.FrontendOrigin {
+		if d.FrontendOrigin == "" || r.Header.Get("Origin") != d.FrontendOrigin {
 			return errorJSON(e, http.StatusForbidden)
 		}
 		if r.Method != http.MethodGet && r.Header.Get(CSRFHeader) != "1" {
@@ -104,15 +118,15 @@ func (h commentHandlers) wrap(fn actorHandler) func(*core.RequestEvent) error {
 		if token == "" {
 			return errorJSON(e, http.StatusUnauthorized)
 		}
-		u, err := h.Auth.Authenticate(r.Context(), token)
+		u, err := d.Auth.Authenticate(r.Context(), token)
 		if errors.Is(err, auth.ErrUnauthenticated) {
 			return errorJSON(e, http.StatusUnauthorized)
 		}
 		if err != nil {
-			h.Logger.Error("comments authenticate failed", "error", err)
+			d.Logger.Error("authenticate failed", "error", err)
 			return errorJSON(e, http.StatusServiceUnavailable)
 		}
-		return fn(e, comments.Actor{UserID: u.ID, Login: u.Login})
+		return fn(e, comments.Actor{UserID: u.ID, Login: u.Login}, token)
 	}
 }
 
@@ -261,10 +275,14 @@ func (h commentHandlers) markRead(e *core.RequestEvent, a comments.Actor) error 
 	return e.NoContent(http.StatusNoContent)
 }
 
-// fail maps service errors to generic bodies. Validation errors also name
-// the field. Only server-side failures are logged, and service errors never
-// carry comment text, quotes or tokens.
 func (h commentHandlers) fail(e *core.RequestEvent, err error) error {
+	return failJSON(h.Deps, e, err, "comments")
+}
+
+// failJSON maps service errors to generic bodies. Validation errors also
+// name the field. Only server-side failures are logged, and service errors
+// never carry comment, draft or chat text, quotes or tokens.
+func failJSON(d Deps, e *core.RequestEvent, err error, what string) error {
 	var ve *comments.ValidationError
 	switch {
 	case errors.As(err, &ve):
@@ -284,10 +302,10 @@ func (h commentHandlers) fail(e *core.RequestEvent, err error) error {
 		e.Response.Header().Set("Retry-After", "2")
 		return errorJSON(e, http.StatusTooManyRequests)
 	case errors.Is(err, comments.ErrUnavailable):
-		h.Logger.Error("comments request failed", "error", err)
+		d.Logger.Error(what+" request failed", "error", err)
 		return errorJSON(e, http.StatusServiceUnavailable)
 	default:
-		h.Logger.Error("comments request failed", "error", err)
+		d.Logger.Error(what+" request failed", "error", err)
 		return errorJSON(e, http.StatusInternalServerError)
 	}
 }
@@ -301,11 +319,16 @@ func repoIDFrom(e *core.RequestEvent) (int64, bool) {
 // success, 413 for an oversized body and 400 otherwise. An empty body is an
 // empty object.
 func decodeJSON(r *http.Request, dst any) int {
-	raw, err := io.ReadAll(io.LimitReader(r.Body, maxCommentBody+1))
+	return decodeJSONLimit(r, dst, maxCommentBody)
+}
+
+// decodeJSONLimit is decodeJSON with a body limit of limit bytes.
+func decodeJSONLimit(r *http.Request, dst any, limit int64) int {
+	raw, err := io.ReadAll(io.LimitReader(r.Body, limit+1))
 	if err != nil {
 		return http.StatusBadRequest
 	}
-	if len(raw) > maxCommentBody {
+	if int64(len(raw)) > limit {
 		return http.StatusRequestEntityTooLarge
 	}
 	if len(bytes.TrimSpace(raw)) == 0 {
