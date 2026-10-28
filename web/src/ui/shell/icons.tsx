@@ -3,7 +3,7 @@
 
 export type IconId =
   | 'library' | 'outline' | 'folder' | 'proposals' | 'settings' | 'help' | 'info' | 'menu' | 'panel'
-  | 'close' | 'logout' | 'file' | 'document' | 'image' | 'bib' | 'chevron' | 'github' | 'dots' | 'selector' | 'eye' | 'comment' | 'chat' | 'history';
+  | 'close' | 'logout' | 'file' | 'document' | 'image' | 'bib' | 'chevron' | 'github' | 'dots' | 'selector' | 'eye' | 'comment' | 'chat' | 'history' | 'asks';
 
 const PATHS: Record<IconId, string[]> = {
   library: ['M4 4h4v16H4z', 'M10 4h4v16h-4z', 'M16.5 4.5l3.5 1-4 15-3.5-1'],
@@ -25,6 +25,7 @@ const PATHS: Record<IconId, string[]> = {
   dots: ['M5 11a1 1 0 1 0 0 2 1 1 0 1 0 0-2z', 'M12 11a1 1 0 1 0 0 2 1 1 0 1 0 0-2z', 'M19 11a1 1 0 1 0 0 2 1 1 0 1 0 0-2z'],
   selector: ['M8 9l4-4 4 4', 'M16 15l-4 4-4-4'],
   history: ['M3 12a9 9 0 1 0 2.6-6.4', 'M3 4v4h4', 'M12 7v5l3 2'],
+  asks: ['M8 4h8v3H8z', 'M6 5.5H5v15h14v-15h-1', 'M9 13l2 2 4-4'],
   comment: ['M4 5.5A1.5 1.5 0 0 1 5.5 4h13A1.5 1.5 0 0 1 20 5.5v9a1.5 1.5 0 0 1-1.5 1.5H10l-4 4v-4h-.5A1.5 1.5 0 0 1 4 14.5z', 'M8 9h8', 'M8 12h5'],
   chat: ['M4 6.5A1.5 1.5 0 0 1 5.5 5h9A1.5 1.5 0 0 1 16 6.5v5a1.5 1.5 0 0 1-1.5 1.5H9l-3 3v-3h-.5A1.5 1.5 0 0 1 4 11.5z', 'M18 9h.5A1.5 1.5 0 0 1 20 10.5v5a1.5 1.5 0 0 1-1.5 1.5H18v3l-3-3h-4.5'],
   eye: ['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'],

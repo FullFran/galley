@@ -3,7 +3,7 @@ import { ADMIN_TABS, availableAdminTabs, DEFAULT_ADMIN_TAB, isPanelTab, leaveAdm
 
 describe('admin area tabs', () => {
   it('shows Project settings, the admin panel tabs and View as co-author, in that order', () => {
-    expect(availableAdminTabs().map((t) => t.id)).toEqual(['settings', 'people', 'access', 'shared', 'activity', 'view-as']);
+    expect(availableAdminTabs().map((t) => t.id)).toEqual(['settings', 'people', 'access', 'shared', 'activity', 'team', 'view-as']);
     expect(DEFAULT_ADMIN_TAB).toBe('settings');
     expect(ADMIN_TABS.every((t) => t.available)).toBe(true);
   });

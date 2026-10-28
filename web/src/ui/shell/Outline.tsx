@@ -3,6 +3,7 @@ import { useT } from '../../i18n';
 import type { OutlineItem } from '../../shell/outline';
 import { Icon } from './icons';
 import { Menu, MenuItem } from './Menu';
+import { SectionBadges, type OutlineTeam } from '../team/Badges';
 
 type Heading = Extract<OutlineItem, { kind: 'heading' }>;
 
@@ -25,10 +26,14 @@ export interface OutlineProps {
   onOpenFile: (path: string) => void;
   onHeading: (item: Heading) => void;
   structure?: OutlineStructure;
+  /** Word count of a heading's section or an included file ("1,204 words"). */
+  words?: (item: OutlineItem) => string | undefined;
+  /** Section owners and status, and their menu items. */
+  team?: OutlineTeam;
 }
 
 /** The Paper panel: the main file pinned first, then the outline of the open file. */
-export function Outline({ main, openPath, items, label, onOpenFile, onHeading, structure }: OutlineProps) {
+export function Outline({ main, openPath, items, label, onOpenFile, onHeading, structure, words, team }: OutlineProps) {
   const t = useT();
   const m = t.outline;
   const a = t.authoring;
@@ -44,11 +49,19 @@ export function Outline({ main, openPath, items, label, onOpenFile, onHeading, s
       </li>
     ) : null;
   const rowMenu = (id: string, name: string, children: ComponentChildren) =>
-    structure ? (
+    structure || team ? (
       <Menu id={`outline-menu-${id}`} label={a.rowActions(name)} buttonClass="icon-button outline-more" buttonContent={<Icon name="dots" />}>
         {children}
       </Menu>
     ) : null;
+  const count = (item: OutlineItem) => {
+    const text = words?.(item);
+    return text ? (
+      <span class="muted outline-words" title={text}>
+        {text}
+      </span>
+    ) : null;
+  };
   return (
     <div class="outline-panel" data-tour="outline">
       {main && (
@@ -64,6 +77,7 @@ export function Outline({ main, openPath, items, label, onOpenFile, onHeading, s
           <span class="muted tree-suffix" title={m.mainFileHint}>
             {m.mainFile}
           </span>
+          {team && <SectionBadges team={team} path={main} />}
         </button>
       )}
       {openPath && (
@@ -76,11 +90,15 @@ export function Outline({ main, openPath, items, label, onOpenFile, onHeading, s
                   <>
                     <button type="button" class="tree-item" onClick={() => onHeading(item)}>
                       <span class="tree-label">{item.title}</span>
+                      {count(item)}
                     </button>
                     {rowMenu(
                       `h${item.line}`,
                       item.title,
-                      <MenuItem onSelect={() => structure?.onNewSubsection({ line: item.line, title: item.title })}>{a.newSubsectionIn(item.title)}</MenuItem>,
+                      <>
+                        {structure && <MenuItem onSelect={() => structure.onNewSubsection({ line: item.line, title: item.title })}>{a.newSubsectionIn(item.title)}</MenuItem>}
+                        {team?.menu(openPath, label(openPath))}
+                      </>,
                     )}
                   </>
                 ) : (
@@ -94,15 +112,20 @@ export function Outline({ main, openPath, items, label, onOpenFile, onHeading, s
                     >
                       <Icon name="document" />
                       <span class="tree-label">{label(item.path)}</span>
+                      {count(item)}
+                      {team && <SectionBadges team={team} path={item.path} />}
                     </button>
                     {rowMenu(
                       `i${item.line}`,
                       label(item.path),
                       <>
-                        {inMain && <MenuItem onSelect={() => structure?.onNewSection(item.line)}>{a.newSectionAfter(label(item.path))}</MenuItem>}
-                        <MenuItem onSelect={() => structure?.onNewSubsection({ path: item.path, title: label(item.path) })}>
-                          {a.newSubsectionIn(label(item.path))}
-                        </MenuItem>
+                        {structure && inMain && <MenuItem onSelect={() => structure.onNewSection(item.line)}>{a.newSectionAfter(label(item.path))}</MenuItem>}
+                        {structure && (
+                          <MenuItem onSelect={() => structure.onNewSubsection({ path: item.path, title: label(item.path) })}>
+                            {a.newSubsectionIn(label(item.path))}
+                          </MenuItem>
+                        )}
+                        {team?.menu(item.path, label(item.path))}
                       </>,
                     )}
                   </>

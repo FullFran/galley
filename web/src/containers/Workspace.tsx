@@ -68,6 +68,9 @@ import { LastVisitBannerView, useLastVisit, useRestore } from './useHistory';
 import type { EditorView } from '@codemirror/view';
 import { useSymbolPalette } from './useSymbolPalette';
 import { useFindReplace } from './useFindReplace';
+import { isBib } from '../editor/projectIndex';
+import { useWritingAids } from './useWritingAids';
+import { useTeam } from './useTeam';
 
 // The YAML parser, the wizard and the settings form load on demand.
 type SettingsModule = typeof import('./ProjectSettings');
@@ -78,6 +81,14 @@ const loadPanels = () => import('../ui/admin/AdminPanels');
 // The History screen loads on demand too.
 type HistoryModule = typeof import('./History');
 const loadHistory = () => import('./History');
+// The references manager (BibTeX editing, Crossref) loads on demand too.
+type ReferencesModule = typeof import('./References');
+const loadReferences = () => import('./References');
+// My asks and Team activity load on demand too.
+type AsksModule = typeof import('./MyAsks');
+const loadAsks = () => import('./MyAsks');
+type TeamActivityModule = typeof import('./TeamActivity');
+const loadTeamActivity = () => import('./TeamActivity');
 
 export interface WorkspaceProps {
   gateway: RepoGateway;
@@ -86,7 +97,7 @@ export interface WorkspaceProps {
   access: (repo: Repository) => Promise<RepoAccess>;
   shell: ShellContext;
   /** Where the URL points inside this repository: a file, or an admin tab. */
-  route: Extract<RepoRoute, { name: 'workspace' | 'admin' | 'history' }>;
+  route: Extract<RepoRoute, { name: 'workspace' | 'admin' | 'history' | 'references' | 'asks' }>;
   /** Moves to another route (App keeps the URL and the unsaved-changes guard). */
   onRoute: (route: RepoRoute) => void;
   /** Called with the edits that are not saved yet, so they can stay visible. */
@@ -136,10 +147,17 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   const [noteRequest, setNoteRequest] = useState(0);
   const adminTab: AdminTabId | undefined = route.name === 'admin' ? route.tab : undefined;
   const historyRoute = route.name === 'history' ? route : undefined;
+  const asksRoute = route.name === 'asks';
+  const [asksModule, setAsksModule] = useState<AsksModule>();
+  const [teamActivity, setTeamActivity] = useState<TeamActivityModule>();
   const [historyModule, setHistoryModule] = useState<HistoryModule>();
   // Files restored from History, waiting for the next save.
   const restored = useRestore();
   const lastVisit = useLastVisit(history, gateway, repo, shell.user?.login);
+  const refsRoute = route.name === 'references' ? route : undefined;
+  const [refsModule, setRefsModule] = useState<ReferencesModule>();
+  // Screens without the editor and preview panes.
+  const paneless = adminTab !== undefined || historyRoute !== undefined || refsRoute !== undefined || asksRoute;
   const routePath = route.name === 'workspace' ? route.path : undefined;
   const routePathRef = useRef(routePath);
   routePathRef.current = routePath;
@@ -243,7 +261,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
     onReplaced: (path) => path === openPathRef.current && setEditorRev((n) => n + 1),
     notify: setNotice,
     insert: (text, at) => setInsertReq((r) => ({ text, at, block: true, seq: (r?.seq ?? 0) + 1 })),
-    canInsert: !adminTab && openPath !== undefined && /\.(qmd|md|markdown)$/i.test(openPath) && !buffers[openPath]?.merge,
+    canInsert: !paneless && openPath !== undefined && /\.(qmd|md|markdown)$/i.test(openPath) && !buffers[openPath]?.merge,
   });
   const hasDirty = dirty.length > 0 || authoring.uploads.length > 0 || restored.pending.length > 0;
   useEffect(() => onDirtyChange(hasDirty), [hasDirty, onDirtyChange]);
@@ -270,6 +288,20 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   const main = mainDocument(visible.filter((p) => fileKind(p) !== 'binary'), entry);
   const openText = openPath ? buffers[openPath]?.text : undefined;
   const outline = useMemo(() => (openText === undefined ? [] : extractOutline(openText)), [openText]);
+  const team = useTeam({
+    team: shell.team,
+    gateway,
+    repo,
+    working,
+    project,
+    admin,
+    me: shell.user?.login,
+    buffers,
+    setBuffers,
+    onReplaced: (path) => path === openPathRef.current && setEditorRev((n) => n + 1),
+    notify: setNotice,
+    onAuthRequired: () => onAuthRequired(unsavedChanges(buffersRef.current)),
+  });
 
   const showFile = (path: string, follow: boolean) => {
     setOpenPath(path);
@@ -313,7 +345,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
 
   const goToHeading = (item: Heading) => {
     shell.sidebar.dispatch({ type: 'navigate' });
-    if (adminTab) onRoute({ name: 'workspace', ...base, path: openPath });
+    if (paneless) onRoute({ name: 'workspace', ...base, path: openPath });
     setJump((j) => ({ line: item.line, id: item.id, text: item.title, seq: (j?.seq ?? 0) + 1 }));
     setEditorJump((j) => ({ line: item.line, seq: (j?.seq ?? 0) + 1 }));
   };
@@ -395,6 +427,15 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   const indexRef = useRef(indexState.index);
   indexRef.current = indexState.index;
   late.current = { main, label, ids: new Set((indexState.index?.labels ?? []).map((l) => l.id)) };
+  const aids = useWritingAids({
+    gateway,
+    repo,
+    working,
+    index: indexState.index,
+    limits: project.kind === 'valid' ? project.config.limits : undefined,
+    mainText: main ? buffers[main]?.text : undefined,
+    openPath,
+  });
   const announce = (text: string) => setAnnouncement(text);
 
   const openAt = async (path: string, line?: number) => {
@@ -433,8 +474,11 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
     switch (target.kind) {
       case 'file':
         return void openAt(target.path);
-      case 'label':
       case 'citation':
+        if (!visible.includes(target.path)) return void openAt(target.path, target.line);
+        announce(t.references.title);
+        return onRoute({ name: 'references', ...base, key: target.key });
+      case 'label':
         return void openAt(target.path, target.line);
       case 'image':
         return void showFigure(target.path);
@@ -606,6 +650,32 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
     notify: setNotice,
     onAuthRequired: () => onAuthRequired(unsavedChanges(buffersRef.current)),
   });
+  // The references manager: its chunk, and the .bib files as buffers (edits are ordinary pending edits).
+  const bibPaths = visible.filter(isBib);
+  const bibKey = bibPaths.join('\u0000');
+  const [bibFailed, setBibFailed] = useState(false);
+  useEffect(() => {
+    if (!refsRoute || refsModule) return;
+    loadReferences().then(setRefsModule, (err: unknown) => fail(err, setFileError));
+  }, [refsRoute !== undefined, refsModule, fail]);
+  useEffect(() => {
+    if (!refsRoute || !working) return;
+    const missing = bibKey ? bibKey.split('\u0000').filter((p) => !buffersRef.current[p]) : [];
+    let active = true;
+    for (const path of missing) {
+      gateway.readFile(repo, path, working.headSha).then(
+        (text) => active && setBuffers((b) => (b[path] ? b : { ...b, [path]: { base: text, text } })),
+        (err: unknown) => {
+          if (!active) return;
+          setBibFailed(true);
+          fail(err, setFileError);
+        },
+      );
+    }
+    return () => {
+      active = false;
+    };
+  }, [refsRoute !== undefined, bibKey, working?.headSha, gateway, repo, fail]);
 
   const openSettings = () => onRoute({ name: 'admin', ...base, tab: 'settings' });
 
@@ -613,6 +683,15 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
     if (!historyRoute || historyModule) return;
     loadHistory().then(setHistoryModule, (err: unknown) => fail(err, setFileError));
   }, [historyRoute !== undefined, historyModule, fail]);
+
+  useEffect(() => {
+    if (!asksRoute || asksModule) return;
+    loadAsks().then(setAsksModule, (err: unknown) => fail(err, setFileError));
+  }, [asksRoute, asksModule, fail]);
+  useEffect(() => {
+    if (!admin || adminTab !== 'team' || teamActivity) return;
+    loadTeamActivity().then(setTeamActivity, (err: unknown) => fail(err, setFileError));
+  }, [admin, adminTab, teamActivity, fail]);
 
   /** Restored files become unsaved changes (never a commit); then back to the editor. */
   const restoreFromHistory = async (changes: RestoreChange[], when: string) => {
@@ -651,18 +730,20 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   const navigate = (id: NavId) => {
     if (id === 'admin') return openSettings();
     if (id === 'history') return onRoute({ name: 'history', ...base });
+    if (id === 'asks') return onRoute({ name: 'asks', ...base });
     if (id === 'comments' && comments.enabled) {
-      if (adminTab || historyRoute) toEditor();
+      if (paneless) toEditor();
       return comments.toggle();
     }
     if (id === 'chat' && chat.enabled) {
-      if (adminTab || historyRoute) toEditor();
+      if (paneless) toEditor();
       return chat.toggle();
     }
     if (id === 'contents') {
-      if (adminTab || historyRoute) toEditor();
+      if (paneless) toEditor();
       return;
     }
+    if (id === 'references') return onRoute({ name: 'references', ...base });
     shell.onNavigate(id);
   };
   const screenShell: ShellContext = { ...shell, admin, onNavigate: navigate, comments: comments.enabled ? { unread: comments.unread } : undefined, chat: chat.enabled ? { unread: chat.unread } : undefined };
@@ -686,11 +767,11 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   };
   const crumbs: (string | Crumb)[] = [
     repoCrumb,
-    ...(adminTab ? [t.admin.title, t.admin[adminTab]] : historyRoute ? [t.history.title] : openPath ? fileCrumbs(openPath) : []),
+    ...(adminTab ? [t.admin.title, t.admin[adminTab]] : historyRoute ? [t.history.title] : refsRoute ? [t.references.title] : asksRoute ? [t.team.asksTitle] : openPath ? fileCrumbs(openPath) : []),
   ];
-  const active: NavId = adminTab ? 'admin' : historyRoute ? 'history' : 'contents';
-  // Admin and History replace the editor: no editor actions in the header.
-  const away = adminTab !== undefined || historyRoute !== undefined;
+  const active: NavId = adminTab ? 'admin' : historyRoute ? 'history' : refsRoute ? 'references' : asksRoute ? 'asks' : 'contents';
+  // Admin, History and References replace the editor: no editor actions in the header.
+  const away = paneless;
   // Symbol palette and find in files (editing extras).
   const editorView = useRef<EditorView>(undefined);
   const symbols = useSymbolPalette({ enabled: !away, view: () => editorView.current, notify: setNotice });
@@ -813,6 +894,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
       banner={banner}
       actions={
         <>
+          {aids.status}
           {!away && <EditorModeSwitch mode={mode} onMode={changeMode} />}
           {symbols.button}
           {!away && <ViewSwitch view={view} onView={setView} />}
@@ -864,6 +946,8 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
               onOpenFile={(p) => void openFile(p)}
               onHeading={goToHeading}
               structure={authoring.structure}
+              team={team.outline}
+              words={aids.outlineWords}
             />
           }
           files={
@@ -915,6 +999,13 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
           coauthorView={viewAs === 'coauthor'}
           onCoauthorView={(on) => changeViewAs(on ? 'coauthor' : 'all')}
           coauthorCount={visibleFiles(working.files, project, false).length}
+          team={
+            shell.team && teamActivity ? (
+              <teamActivity.TeamActivity team={shell.team} repo={repo} onAuthRequired={() => onAuthRequired(unsavedChanges(buffersRef.current))} />
+            ) : (
+              <Skeleton lines={6} label={t.team.activityLoading} />
+            )
+          }
           panel={
             admin && adminPanels && isPanelTab(adminTab) ? (
               <adminPanels.AdminPanels
@@ -945,6 +1036,12 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
             )
           }
         />
+      ) : asksRoute ? (
+        shell.team && asksModule ? (
+          <asksModule.MyAsks team={shell.team} repo={repo} me={shell.user?.login} onAuthRequired={() => onAuthRequired(unsavedChanges(buffersRef.current))} />
+        ) : (
+          <Skeleton lines={6} label={t.team.asksLoading} />
+        )
       ) : historyRoute ? (
         history && historyModule ? (
           <historyModule.History
@@ -963,6 +1060,24 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
           />
         ) : (
           <Skeleton lines={8} label={t.history.loading} />
+        )
+      ) : refsRoute ? (
+        refsModule ? (
+          <refsModule.References
+            paths={bibPaths}
+            texts={Object.fromEntries(bibPaths.map((p) => [p, buffers[p]?.text]))}
+            failed={bibFailed}
+            selectedKey={refsRoute.key}
+            cites={indexState.index?.cites}
+            mailto={shell.user?.email}
+            label={label}
+            onSelect={(key) => onRoute({ name: 'references', ...base, key })}
+            onChange={(path, text) => setBuffers((b) => ({ ...b, [path]: { base: b[path]?.base ?? '', text } }))}
+            onOpenAt={(path, line) => void openAt(path, line)}
+            onNotice={setNotice}
+          />
+        ) : (
+          <Skeleton lines={8} label={t.references.loading} />
         )
       ) : (
         <div class="workspace" data-view={view} data-comments={comments.panel || chat.panel ? 'open' : undefined}>
@@ -984,6 +1099,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
                 jumpTo={editorJump}
                 mode={mode}
                 vim={prefs.vim === true}
+                spellcheck={{ on: prefs.spellcheck !== false, lang: aids.lang }}
                 onVimFailed={() => setNotice(t.editor.vimFailed)}
                 onSave={() => setNoteRequest((n) => n + 1)}
                 assist={assist}
@@ -1024,6 +1140,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
       {authoring.dialogs}
       {symbols.dialog}
       {find.panel}
+      {team.dialogs}
       <FigureLightbox path={figure?.path} state={figure?.state ?? { kind: 'loading' }} onClose={() => setFigure(undefined)} />
     </AppShell>
   );

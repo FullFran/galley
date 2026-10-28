@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"net"
+	"net/mail"
 	"net/url"
 	"strings"
 
@@ -16,6 +17,10 @@ const CallbackPath = "/api/galley/auth/callback"
 // DataKeyPurpose is the HKDF purpose of the data-at-rest key. Changing it, or
 // GALLEY_TOKEN_KEY, makes every stored comment unreadable.
 const DataKeyPurpose = "galley-data-at-rest-v1"
+
+// LinkKeyPurpose is the HKDF purpose of the key that signs notification
+// verification and unsubscribe links.
+const LinkKeyPurpose = "galley-notify-links-v1"
 
 // Config holds the server settings. Secrets are never printed.
 type Config struct {
@@ -30,7 +35,16 @@ type Config struct {
 	FrontendOrigin string
 	// PublicURL is the API base URL as seen by browsers and GitHub.
 	PublicURL string
+	// LinkKey signs notification links (HKDF of TokenKey, LinkKeyPurpose).
+	LinkKey []byte
+	// ResendAPIKey and MailFrom are optional; without both, email
+	// notifications are disabled.
+	ResendAPIKey string
+	MailFrom     string
 }
+
+// MailEnabled reports whether email notifications are configured.
+func (c Config) MailEnabled() bool { return c.ResendAPIKey != "" && c.MailFrom != "" }
 
 // RedirectURI is the OAuth callback URL registered in the GitHub App.
 func (c Config) RedirectURI() string {
@@ -65,6 +79,16 @@ func Load(getenv func(string) string) (Config, error) {
 	}
 	if c.DataKey, err = secret.DeriveKey(c.TokenKey, DataKeyPurpose); err != nil {
 		return Config{}, fmt.Errorf("config: GALLEY_TOKEN_KEY: %w", err)
+	}
+	if c.LinkKey, err = secret.DeriveKey(c.TokenKey, LinkKeyPurpose); err != nil {
+		return Config{}, fmt.Errorf("config: GALLEY_TOKEN_KEY: %w", err)
+	}
+	c.ResendAPIKey = strings.TrimSpace(getenv("GALLEY_RESEND_API_KEY"))
+	if from := strings.TrimSpace(getenv("GALLEY_MAIL_FROM")); from != "" {
+		if _, perr := mail.ParseAddress(from); perr != nil || strings.ContainsAny(from, "\r\n") {
+			return Config{}, fmt.Errorf("config: GALLEY_MAIL_FROM must be an address such as \"galley <notify@example.com>\"")
+		}
+		c.MailFrom = from
 	}
 	if c.FrontendOrigin, err = parseOrigin(origin, false); err != nil {
 		return Config{}, fmt.Errorf("config: GALLEY_FRONTEND_ORIGIN %w", err)

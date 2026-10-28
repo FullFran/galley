@@ -90,6 +90,14 @@ describe('editor preferences', () => {
     expect(readPrefs(store)).toEqual({ autoCompile: true, editorMode: 'code', vim: true });
   });
 
+  it('stores the spellcheck choice and drops non-boolean values', () => {
+    const store = memory();
+    writePrefs({ spellcheck: false }, store);
+    expect(readPrefs(store)).toEqual({ spellcheck: false });
+    store.setItem('galley:prefs', '{"spellcheck":"yes"}');
+    expect(readPrefs(store)).toEqual({});
+  });
+
   it('drops unknown modes and non-boolean Vim values', () => {
     const store = memory();
     store.setItem('galley:prefs', '{"editorMode":"emacs","vim":"on"}');

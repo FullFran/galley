@@ -20,6 +20,7 @@ const loadAssist = () => {
 const isProse = (path: string) => /\.(qmd|md|markdown)$/i.test(path);
 import type { EditorMode } from '../shell/prefs';
 import { en } from '../i18n/en';
+import { spellcheckExtension } from '../writing/spellcheck';
 
 export interface EditorProps {
   path: string;
@@ -53,6 +54,8 @@ export interface EditorProps {
   insert?: { text: string; at?: number; block?: boolean; seq: number };
   /** The live view while mounted (undefined once destroyed), for the symbol palette. */
   onView?: (view: EditorView | undefined) => void;
+  /** The browser's spellcheck (Writing mode only) and the paper's language. */
+  spellcheck?: { on: boolean; lang: string };
 }
 
 function language(path: string): Extension {
@@ -98,9 +101,12 @@ const theme = EditorView.theme({
 });
 
 /** CodeMirror 6 editor. Owns the EditorView for its lifetime. */
-export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim = false, onVimFailed, onSave, assist, indexVersion, onDropFiles, insert, comments, applyEdit, onView }: EditorProps) {
+export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim = false, onVimFailed, onSave, assist, indexVersion, onDropFiles, insert, comments, applyEdit, spellcheck, onView }: EditorProps) {
   const onViewRef = useRef(onView);
   onViewRef.current = onView;
+  const spelling = useRef(new Compartment());
+  const spellOn = spellcheck?.on === true && isProse(path);
+  const spellLang = spellcheck?.lang ?? 'en';
   const commentsRef = useRef(comments);
   commentsRef.current = comments;
   const commenting = useRef(new Compartment());
@@ -155,6 +161,7 @@ export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim 
           keymap.of([...defaultKeymap, ...historyKeymap]),
           language(path),
           labelling.current.of(named(label)),
+          spelling.current.of(spellcheckExtension(mode, spellOn, spellLang)),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) onChangeRef.current(update.state.doc.toString());
           }),
@@ -206,6 +213,10 @@ export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim 
   useEffect(() => {
     viewRef.current?.dispatch({ effects: labelling.current.reconfigure(named(label)) });
   }, [label]);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: spelling.current.reconfigure(spellcheckExtension(mode, spellOn, spellLang)) });
+  }, [mode, spellOn, spellLang]);
 
   useEffect(() => {
     viewRef.current?.dispatch({

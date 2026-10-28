@@ -100,8 +100,11 @@ type Anchor struct {
 	Quote     Quote
 }
 
-// Position is where a thread currently sits.
+// Position is where a thread currently sits. Path differs from the anchor's
+// when the file was renamed; the service fills it with the anchor's path
+// when a Reanchorer leaves it empty.
 type Position struct {
+	Path      string
 	CommitSHA string
 	Range     Range
 	State     AnchorState
@@ -251,17 +254,20 @@ type ClockFunc func() time.Time
 // Now implements Clock.
 func (f ClockFunc) Now() time.Time { return f() }
 
-// Reanchorer computes where a thread sits at commit at. It is the seam for
-// phase 2 (shift through compare hunks, exact quote search, bounded fuzzy
-// match, orphaning). The quote is passed in plaintext.
+// Reanchorer computes where a thread sits at commit at, for the user
+// viewing it (whose GitHub token it may use). reanchor.Service implements it
+// (shift through compare hunks, exact quote search, bounded fuzzy match,
+// orphaning). The quote is passed in plaintext. It must never change the
+// stored anchor.
 type Reanchorer interface {
-	Position(ctx context.Context, t ThreadRecord, quote Quote, at string) (Position, error)
+	Position(ctx context.Context, userID string, t ThreadRecord, quote Quote, at string) (Position, error)
 }
 
-// StoredPosition is the phase 1 Reanchorer: the stored position, unchanged.
+// StoredPosition is the Reanchorer without GitHub: the stored position,
+// unchanged.
 type StoredPosition struct{}
 
 // Position implements Reanchorer.
-func (StoredPosition) Position(_ context.Context, t ThreadRecord, _ Quote, _ string) (Position, error) {
+func (StoredPosition) Position(_ context.Context, _ string, t ThreadRecord, _ Quote, _ string) (Position, error) {
 	return t.Position, nil
 }

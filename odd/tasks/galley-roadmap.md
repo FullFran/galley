@@ -97,6 +97,13 @@ proposals and review. No real-time co-editing of the same file.
       Administration write; admins only; 50 invites per repo per day).
     - Writer vs reviewer roles in `.galley.yml`, backed by CODEOWNERS on
       `.galley.yml` and branch protection where available.
+    Progress (2026-10-28, `feat/team`): owners from CODEOWNERS in the outline
+    and on proposals ("Ask owners to review"), admin owner edits as pending
+    CODEOWNERS changes; `sections.<path>.status` in `.galley.yml` (admins and
+    section owners change it, as a pending edit); asks as `galley-ask` issues
+    with assignee and a "Due YYYY-MM-DD" milestone, listed in My asks (Review
+    group) with Done; Admin → Team activity (7 days, alphabetical). Pending:
+    invites and writer/reviewer roles.
     New-section files follow the repo's existing naming (this paper:
     `sections/NN-name.qmd`); `sections/_slug.qmd` only when there is none.
 

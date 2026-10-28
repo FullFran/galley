@@ -31,6 +31,8 @@ type Deps struct {
 	Chat ChatService
 	// Admin enables the admin and draft-sharing routes when set.
 	Admin AdminService
+	// Notify enables the notification routes when set.
+	Notify NotifyService
 	// ChatHeartbeat is how often a chat stream sends a heartbeat comment and
 	// re-checks the session and repository access; defaults to
 	// DefaultChatHeartbeat.
@@ -48,7 +50,7 @@ func Register(r *router.Router[*core.RequestEvent], d Deps) {
 	}
 	r.GET(HealthPath, health)
 	registerAuth(r, d)
-	if d.Comments == nil && d.Drafts == nil && d.Chat == nil && d.Admin == nil {
+	if d.Comments == nil && d.Drafts == nil && d.Chat == nil && d.Admin == nil && d.Notify == nil {
 		return
 	}
 	// One group per prefix: its CORS middleware and OPTIONS route are shared
@@ -65,6 +67,9 @@ func Register(r *router.Router[*core.RequestEvent], d Deps) {
 	}
 	if d.Admin != nil {
 		registerAdmin(repos, d)
+	}
+	if d.Notify != nil {
+		registerNotify(r, repos, d)
 	}
 }
 

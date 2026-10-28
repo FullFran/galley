@@ -210,6 +210,29 @@ preview:
     expect(serializeConfig({ ...base, editor: {} })).not.toContain('editor');
   });
 
+  it('writes limits back and round-trips them', () => {
+    const config: GalleyConfig = { version: 1, editable: [], uploads: [], labels: {}, preview: { autoCompile: false }, limits: { words: 8000, abstractWords: 250 } };
+    const text = serializeConfig(config);
+    expect(text).toContain('limits:\n  words: 8000\n  abstract_words: 250\n');
+    expect(parseConfig(text).config?.limits).toEqual({ words: 8000, abstractWords: 250 });
+    expect(serializeConfig({ ...config, limits: {} })).not.toContain('limits');
+  });
+
+  it('reads word limits for the paper and the abstract', () => {
+    const base = 'version: 1\neditable: [index.qmd]\n';
+    expect(parseConfig(`${base}limits:\n  words: 8000\n  abstract_words: 250\n`).config?.limits).toEqual({ words: 8000, abstractWords: 250 });
+    expect(parseConfig(`${base}limits: { words: 5000 }\n`).config?.limits).toEqual({ words: 5000 });
+    expect(parseConfig(base).config?.limits).toBeUndefined();
+  });
+
+  it('refuses limits that are not whole positive numbers, and warns on unknown limit keys', () => {
+    const base = 'version: 1\neditable: [index.qmd]\n';
+    expect(errors(`${base}limits:\n  words: -1\n`)).toEqual(['"limits.words" must be a whole number between 1 and 1000000.']);
+    expect(errors(`${base}limits:\n  abstract_words: 2.5\n`)).toEqual(['"limits.abstract_words" must be a whole number between 1 and 1000000.']);
+    expect(errors(`${base}limits: 8000\n`)).toEqual(['"limits" must be a mapping.']);
+    expect(warnings(`${base}limits:\n  pages: 10\n`)).toEqual(['Unknown setting "limits.pages" is ignored.']);
+  });
+
   it('quotes text that YAML would read as another type', () => {
     const text = serializeConfig({ version: 1, title: 'yes', editable: ['true'], uploads: [], labels: {}, preview: { autoCompile: false } });
     expect(parseConfig(text).config?.title).toBe('yes');

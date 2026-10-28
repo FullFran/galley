@@ -36,6 +36,10 @@ import { Skeleton } from '../ui/shell/Skeleton';
 import { Toast } from '../ui/shell/Toasts';
 import { Preview } from './Preview';
 
+// Section owners and asks on a proposal: their own chunk, loaded with the page.
+type TeamModule = typeof import('./ProposalTeam');
+const loadTeam = () => import('./ProposalTeam');
+
 export interface ProposalDetailProps {
   repos: RepoGateway;
   reviews: ReviewGateway;
@@ -82,6 +86,10 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
   const [notice, setNotice] = useState<Notice>();
   const [preview, setPreview] = useState<ProposalFiles & { sha: string }>();
   const [threadStates, setThreadStates] = useState<Record<number, ReviewThreadState>>({});
+  const [teamModule, setTeamModule] = useState<TeamModule>();
+  useEffect(() => {
+    loadTeam().then(setTeamModule, () => undefined);
+  }, []);
 
   const fail = useCallback(
     (err: unknown, show: (text: string) => void) => {
@@ -413,6 +421,20 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
           onAssign={people((l) => reviews.addAssignees(repo, number, l), m.assigned)}
           onUnassign={people((l) => reviews.removeAssignees(repo, number, l), m.unassigned)}
         />
+        {teamModule && (
+          <teamModule.ProposalTeam
+            repos={repos}
+            team={shell.team}
+            repo={repo}
+            proposal={proposal}
+            files={files}
+            canRequest={open && access.canPush}
+            busy={busy}
+            onRequestOwners={(logins) => void act(() => reviews.requestReviewers(repo, number, logins), t.team.askedOwners)}
+            onNotice={(text) => setNotice({ kind: 'ok', text })}
+            onAuthRequired={onAuthRequired}
+          />
+        )}
       </aside>
       {open && (
         <div class="review-bar" hidden={reviewInView}>

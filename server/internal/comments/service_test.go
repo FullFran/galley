@@ -448,10 +448,16 @@ func TestUnreadCounts(t *testing.T) {
 }
 
 // reanchorSpy records that the service routes positions through the seam.
-type reanchorSpy struct{ at []string }
+type reanchorSpy struct {
+	at, users []string
+	budgeted  []bool
+}
 
-func (r *reanchorSpy) Position(_ context.Context, t comments.ThreadRecord, q comments.Quote, at string) (comments.Position, error) {
+func (r *reanchorSpy) Position(ctx context.Context, userID string, t comments.ThreadRecord, q comments.Quote, at string) (comments.Position, error) {
 	r.at = append(r.at, at)
+	r.users = append(r.users, userID)
+	_, ok := comments.WorkBudget(ctx)
+	r.budgeted = append(r.budgeted, ok)
 	p := t.Position
 	if q.Exact != "" && at != "" {
 		p.State = comments.AnchorMoved
@@ -475,10 +481,24 @@ func TestReanchorSeam(t *testing.T) {
 	if list.Threads[0].Anchor.CommitSHA != sha {
 		t.Error("the original anchor must be returned as stored")
 	}
-	if _, err := e.svc.GetThread(ctx, e.alice, th.ID); err != nil {
+	if p := list.Threads[0].Position; p.Path != list.Threads[0].Anchor.Path {
+		t.Errorf("position path = %q", p.Path)
+	}
+	got, err := e.svc.GetThreadAt(ctx, e.alice, th.ID, head)
+	if err != nil {
 		t.Fatal(err)
 	}
+	// Listings share one work budget; a single thread has none.
+	if len(spy.budgeted) != 3 || !spy.budgeted[1] || spy.budgeted[2] { // create, list, get
+		t.Errorf("budgeted = %v", spy.budgeted)
+	}
+	if got.Position.CommitSHA != head || spy.users[len(spy.users)-1] != e.alice.UserID {
+		t.Errorf("get at = %+v, users %v", got.Position, spy.users)
+	}
 	var ve *comments.ValidationError
+	if _, err := e.svc.GetThreadAt(ctx, e.alice, th.ID, "HEAD"); !errors.As(err, &ve) || ve.Field != "at" {
+		t.Errorf("bad get at err = %v", err)
+	}
 	if _, err := e.svc.ListThreads(ctx, e.alice, repo, comments.ListFilter{At: "main"}); !errors.As(err, &ve) || ve.Field != "at" {
 		t.Errorf("bad at err = %v", err)
 	}
