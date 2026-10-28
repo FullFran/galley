@@ -44,7 +44,16 @@ export interface GalleyConfig {
   editor?: { defaultMode?: EditorMode };
   /** Who may add sections and subsections in galley; undefined means `write`. */
   structure?: StructureRole;
+  /** Word limits shown in the header and the Outline; unset means no limit. */
+  limits?: WordLimits;
 }
+
+export interface WordLimits {
+  words?: number;
+  abstractWords?: number;
+}
+
+export const MAX_WORD_LIMIT = 1_000_000;
 
 export type StructureRole = 'admin' | 'write';
 
@@ -64,10 +73,11 @@ export interface ParsedConfig {
 type Record_ = Record<string, unknown>;
 const isRecord = (v: unknown): v is Record_ => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-const TOP_KEYS = ['version', 'title', 'entry', 'editable', 'uploads', 'labels', 'preview', 'editor', 'structure'];
+const TOP_KEYS = ['version', 'title', 'entry', 'editable', 'uploads', 'labels', 'preview', 'editor', 'structure', 'limits'];
 const UPLOAD_KEYS = ['folder', 'accept', 'max_size_mb'];
 const PREVIEW_KEYS = ['auto_compile'];
 const EDITOR_KEYS = ['default_mode'];
+const LIMIT_KEYS: Record<string, keyof WordLimits> = { words: 'words', abstract_words: 'abstractWords' };
 
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f]/;
@@ -192,6 +202,26 @@ export function parseConfig(text: string): ParsedConfig {
     else config.structure = doc.structure;
   }
 
+  if (doc.limits !== undefined) {
+    if (!isRecord(doc.limits)) error('"limits" must be a mapping.');
+    else {
+      const limits: WordLimits = {};
+      for (const [key, value] of Object.entries(doc.limits)) {
+        const field = LIMIT_KEYS[key];
+        if (!field) {
+          warn(`Unknown setting "limits.${key}" is ignored.`);
+          continue;
+        }
+        if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > MAX_WORD_LIMIT) {
+          error(`"limits.${key}" must be a whole number between 1 and ${MAX_WORD_LIMIT}.`);
+          continue;
+        }
+        limits[field] = value;
+      }
+      config.limits = limits;
+    }
+  }
+
   return problems.some((p) => p.severity === 'error') ? { problems } : { config, problems };
 }
 
@@ -258,5 +288,9 @@ export function serializeConfig(config: GalleyConfig): string {
   out.preview = { auto_compile: config.preview.autoCompile };
   if (config.editor?.defaultMode) out.editor = { default_mode: config.editor.defaultMode };
   if (config.structure === 'admin') out.structure = 'admin';
+  const limits: Record_ = {};
+  if (config.limits?.words !== undefined) limits.words = config.limits.words;
+  if (config.limits?.abstractWords !== undefined) limits.abstract_words = config.limits.abstractWords;
+  if (Object.keys(limits).length > 0) out.limits = limits;
   return dump(out, { lineWidth: -1, noRefs: true });
 }

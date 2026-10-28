@@ -13,7 +13,8 @@ const APP_CSP = [
   // productionresultssaNN.blob.core.windows.net, CORS `*`); CSP host wildcards
   // only cover a whole leftmost label. github/client.ts allows that redirect
   // for the artifact zip endpoint alone.
-  "connect-src 'self' https://api.github.com https://galley-api.fullfran.com https://*.blob.core.windows.net",
+  // api.crossref.org: DOI to BibTeX in the references manager (CORS `*`, no credentials).
+  "connect-src 'self' https://api.github.com https://galley-api.fullfran.com https://*.blob.core.windows.net https://api.crossref.org",
   "frame-src 'self'",
   "worker-src 'self'",
   "object-src 'none'",

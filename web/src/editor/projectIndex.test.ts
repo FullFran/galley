@@ -39,6 +39,24 @@ describe('project index', () => {
     expect(spare?.number).toBeUndefined();
   });
 
+  it('lists where each key is cited and counts the words of the paper', () => {
+    const small = buildIndex({
+      entry: 'index.qmd',
+      paths: ['index.qmd', 'sections/a.qmd'],
+      files: [
+        { path: 'index.qmd', text: '---\nabstract: Two words.\n---\n\n{{< include sections/a.qmd >}}\n' },
+        { path: 'sections/a.qmd', text: '# Intro\n\nAs @smith2020 said [@doe1999].\n' },
+      ],
+    });
+    expect(small.cites).toEqual([
+      { key: 'smith2020', path: 'sections/a.qmd', line: 3, text: 'As @smith2020 said [@doe1999].' },
+      { key: 'doe1999', path: 'sections/a.qmd', line: 3, text: 'As @smith2020 said [@doe1999].' },
+    ]);
+    expect(small.words?.total).toBe(4);
+    expect(small.words?.abstract).toBe(2);
+    expect(small.words?.files['sections/a.qmd']?.sections).toEqual([{ line: 1, level: 1, words: 4 }]);
+  });
+
   it('survives include cycles and missing files', () => {
     const cyclic = buildIndex({
       entry: 'a.qmd',

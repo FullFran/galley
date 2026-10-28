@@ -35,6 +35,9 @@ preview:
 editor:
   default_mode: writing
 structure: write
+limits:
+  words: 8000
+  abstract_words: 250
 ```
 
 ## Fields
@@ -52,6 +55,8 @@ structure: write
 | `labels` | no | map of path to text, at most 500 | none | Friendly names shown for files. |
 | `preview.auto_compile` | no | `true` or `false` | `false` | Default for people who have not chosen; each person can toggle it. |
 | `editor.default_mode` | no | `writing` or `code` | Writing for co-authors, Code for admins | Editor mode for people who have not chosen one. |
+| `limits.words` | no | whole number, 1 to 1000000 | none | Word limit of the paper body; the header count turns amber above it. |
+| `limits.abstract_words` | no | whole number, 1 to 1000000 | none | Word limit of the abstract. |
 | `structure` | no | `admin` or `write` | `write` | Who may add sections and subsections in galley: everyone with write access, or only admins. |
 
 ## Uploads
@@ -201,6 +206,25 @@ the ⋯ menu on phones) or in Preferences → Editor:
 Each person's choice is remembered in this browser. Until someone chooses,
 `editor.default_mode` decides; without it co-authors get Writing and admins
 get Code. The settings screen has the same choice under "Editor".
+
+## Word counts
+
+The header shows the words of the paper ("4,512 words"); its tooltip adds the
+abstract and the limits. The Outline shows the words of each section (with
+its subsections) and of each included file. The count follows the entry
+document through its `{{< include >}}` files, each once, and updates a moment
+after you stop typing.
+
+- **Counted**: headings and prose, table text, link text. A narrative
+  citation or crossref (`@key`, `@fig-x`) counts as one word.
+- **Not counted**: the YAML front matter, fenced code, inline code, math
+  (`$…$`, `$$…$$`, `\begin{…}` blocks), bracketed citations (`[@a; @b]`),
+  figures (the image markup and its caption), HTML comments, shortcodes,
+  attributes (`{#sec-x}`), div fences (`:::`), URLs and footnote markers.
+- **Abstract**: the front matter `abstract:` and any section titled
+  "Abstract" (or with `.abstract`) are counted on their own, not in the body.
+- With `limits.words` or `limits.abstract_words`, the header count turns amber
+  when either is exceeded. Nothing is blocked.
 
 ## Safety
 
