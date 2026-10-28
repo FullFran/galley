@@ -6,6 +6,8 @@ export interface Repository {
   fullName: string;
   defaultBranch: string;
   private: boolean;
+  /** Last push (or update) time, ISO 8601, when GitHub sent it. */
+  updatedAt?: string;
 }
 
 /** The branch the user edits in a repository, and the files at its head. */

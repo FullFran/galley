@@ -100,7 +100,7 @@ describe('FileTree', () => {
     expect(html).toContain('<details');
     expect(html).toContain('aria-current="true"');
     expect(html).toContain('(edited)');
-    expect(html).toMatch(/<button[^>]*disabled[^>]*>plot\.png/);
+    expect(html).toMatch(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*plot\.png/);
   });
 });
 

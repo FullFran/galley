@@ -23,6 +23,8 @@ interface GhRepo {
   owner: { login: string };
   default_branch: string;
   private: boolean;
+  pushed_at?: string | null;
+  updated_at?: string | null;
 }
 
 interface GhPull {
@@ -201,6 +203,7 @@ function toRepository(r: GhRepo): Repository {
     fullName: r.full_name,
     defaultBranch: r.default_branch,
     private: r.private,
+    updatedAt: r.pushed_at ?? r.updated_at ?? undefined,
   };
 }
 

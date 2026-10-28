@@ -4,6 +4,7 @@
 
 export const PREVIEW_RENDER = 'galley-preview:render';
 export const FRAME_READY = 'galley-preview:ready';
+export const PREVIEW_SCROLL = 'galley-preview:scroll';
 
 export const MAX_HTML_LENGTH = 8 * 1024 * 1024;
 export const MAX_ASSETS = 500;
@@ -24,6 +25,19 @@ export interface RenderMessage {
   html: string;
   assets: FrameAsset[];
 }
+
+/**
+ * Parent to frame: scroll to a heading, by its id when it has one, otherwise
+ * by its text. The frame only reads these two strings to look up an element.
+ */
+export interface ScrollMessage {
+  type: typeof PREVIEW_SCROLL;
+  id: string;
+  text: string;
+}
+
+export const MAX_SCROLL_TEXT = 500;
+const HEADING_ID = /^[\w:.-]{0,200}$/;
 
 /** Frame to parent: the frame script is running and listening. */
 export interface ReadyMessage {
@@ -62,6 +76,15 @@ export function parseRenderMessage(data: unknown): RenderMessage | undefined {
     parsed.push(a);
   }
   return { type, seq, html, assets: parsed };
+}
+
+export function parseScrollMessage(data: unknown): ScrollMessage | undefined {
+  if (!isRecord(data) || !hasExactly(data, ['type', 'id', 'text'])) return undefined;
+  const { type, id, text } = data;
+  if (type !== PREVIEW_SCROLL) return undefined;
+  if (typeof id !== 'string' || !HEADING_ID.test(id)) return undefined;
+  if (typeof text !== 'string' || text.length > MAX_SCROLL_TEXT) return undefined;
+  return { type, id, text };
 }
 
 export function parseFrameMessage(data: unknown): ReadyMessage | undefined {

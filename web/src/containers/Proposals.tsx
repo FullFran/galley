@@ -3,6 +3,9 @@ import { AuthRequiredError, type RepoGateway, type Repository, type ReviewGatewa
 import { describeReviewError, mergeLabel } from '../review/labels';
 import { overallReview, reviewerStatuses } from '../review/status';
 import { ProposalList, type ProposalRow } from '../ui/review/ProposalList';
+import { useT } from '../i18n';
+import { AppShell, type ShellContext } from '../ui/shell/AppShell';
+import { Skeleton } from '../ui/shell/Skeleton';
 import { ProposalDetail } from './ProposalDetail';
 
 export interface ProposalsProps {
@@ -10,13 +13,15 @@ export interface ProposalsProps {
   reviews: ReviewGateway;
   repo: Repository;
   onAuthRequired: () => void;
+  shell: ShellContext;
 }
 
 /** How many proposals get their review and merge state looked up for the list. */
 const DETAILED = 30;
 
 /** Open proposals of a repository, and the one being reviewed. */
-export function Proposals({ repos, reviews, repo, onAuthRequired }: ProposalsProps) {
+export function Proposals({ repos, reviews, repo, onAuthRequired, shell }: ProposalsProps) {
+  const t = useT();
   const [rows, setRows] = useState<ProposalRow[]>();
   const [error, setError] = useState<string>();
   const [open, setOpen] = useState<number>();
@@ -60,25 +65,28 @@ export function Proposals({ repos, reviews, repo, onAuthRequired }: ProposalsPro
         number={open}
         onBack={() => setOpen(undefined)}
         onAuthRequired={onAuthRequired}
+        shell={shell}
       />
     );
   }
   return (
-    <main class="page page-wide">
-      <h2>Proposals</h2>
-      <p class="muted">Changes people propose for {repo.fullName}. Open one to read it, comment and review.</p>
-      {error ? (
-        <div class="banner banner-error" role="alert">
-          {error}{' '}
-          <button type="button" onClick={() => setAttempt((n) => n + 1)}>
-            Try again
-          </button>
-        </div>
-      ) : rows ? (
-        <ProposalList rows={rows} onOpen={setOpen} />
-      ) : (
-        <p class="muted">Loading proposals…</p>
-      )}
-    </main>
+    <AppShell shell={shell} active="proposals" crumbs={[repo.fullName, t.proposals.title]}>
+      <div class="page page-wide">
+        <h1>{t.proposals.title}</h1>
+        <p class="muted">{t.proposals.intro(repo.fullName)}</p>
+        {error ? (
+          <div class="notice notice-danger" role="alert">
+            <p>{error}</p>
+            <button type="button" onClick={() => setAttempt((n) => n + 1)}>
+              {t.proposals.tryAgain}
+            </button>
+          </div>
+        ) : rows ? (
+          <ProposalList rows={rows} onOpen={setOpen} onEmptyAction={() => shell.onNavigate('paper')} />
+        ) : (
+          <Skeleton variant="list" lines={3} />
+        )}
+      </div>
+    </AppShell>
   );
 }

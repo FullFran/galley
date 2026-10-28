@@ -19,6 +19,8 @@ export interface PreviewProps {
   entry?: string;
   /** `preview.auto_compile` from `.galley.yml`; the user's own choice wins. */
   autoCompileDefault?: boolean;
+  /** Heading to scroll the preview to, from the outline. */
+  scrollTo?: { id?: string; text: string; seq: number };
 }
 
 const DEBOUNCE_MS = 300;
@@ -37,7 +39,7 @@ function textsDiffer(a: Buffers, b: Buffers): boolean {
  * stays out of the initial bundle, and a document that takes too long to
  * render cannot freeze the editor.
  */
-export function Preview({ gateway, repo, headSha, files, buffers, entry, autoCompileDefault = false }: PreviewProps) {
+export function Preview({ gateway, repo, headSha, files, buffers, entry, autoCompileDefault = false, scrollTo }: PreviewProps) {
   const [result, setResult] = useState<RenderResult & { seq: number }>();
   const [status, setStatus] = useState<string | undefined>('Loading the preview…');
   const [compile, setCompile] = useState<CompileState>({ compiling: false, stale: false });
@@ -147,6 +149,7 @@ export function Preview({ gateway, repo, headSha, files, buffers, entry, autoCom
         assets={result?.assets ?? []}
         diagnostics={result?.diagnostics ?? []}
         status={status}
+        scrollTo={scrollTo}
       />
     </>
   );

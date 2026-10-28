@@ -26,6 +26,10 @@ import { FileDiff, type CommentDraft } from '../ui/review/FileDiff';
 import { GitHubLink } from '../ui/review/GitHubLink';
 import { MergeBox, People, ReviewForm } from '../ui/review/SidePanel';
 import { StaleComments } from '../ui/review/StaleComments';
+import { useT } from '../i18n';
+import { AppShell, type ShellContext } from '../ui/shell/AppShell';
+import { Skeleton } from '../ui/shell/Skeleton';
+import { Toast } from '../ui/shell/Toasts';
 import { Preview } from './Preview';
 
 export interface ProposalDetailProps {
@@ -35,6 +39,7 @@ export interface ProposalDetailProps {
   number: number;
   onBack: () => void;
   onAuthRequired: () => void;
+  shell: ShellContext;
 }
 
 interface Loaded {
@@ -53,7 +58,8 @@ const NO_ACCESS: RepoAccess = { canPush: false, admin: false, mergeMethods: [] }
 // The preview of a proposal is read-only: no open buffers.
 const NO_BUFFERS: Buffers = {};
 
-export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthRequired }: ProposalDetailProps) {
+export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthRequired, shell }: ProposalDetailProps) {
+  const t = useT();
   const [data, setData] = useState<Loaded>();
   const [loadError, setLoadError] = useState<string>();
   const [access, setAccess] = useState<RepoAccess>(NO_ACCESS);
@@ -138,22 +144,35 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
     }
   };
 
+  const crumbs = [repo.fullName, t.proposals.title, data ? `#${number} ${data.proposal.title}` : `#${number}`];
   if (loadError) {
     return (
-      <main class="page">
-        <p class="banner banner-error" role="alert">
-          {loadError}{' '}
-          <button type="button" onClick={() => void load()}>
-            Try again
-          </button>{' '}
-          <button type="button" onClick={onBack}>
-            Back to proposals
-          </button>
-        </p>
-      </main>
+      <AppShell shell={shell} active="proposals" crumbs={crumbs}>
+        <div class="page">
+          <div class="notice notice-danger" role="alert">
+            <p>{loadError}</p>
+            <div class="actions">
+              <button type="button" onClick={() => void load()}>
+                {t.proposals.tryAgain}
+              </button>
+              <button type="button" onClick={onBack}>
+                {t.review.back}
+              </button>
+            </div>
+          </div>
+        </div>
+      </AppShell>
     );
   }
-  if (!data) return <main class="page muted">Opening proposal #{number}…</main>;
+  if (!data) {
+    return (
+      <AppShell shell={shell} active="proposals" crumbs={crumbs}>
+        <div class="page page-wide">
+          <Skeleton lines={8} label={t.review.opening(number)} />
+        </div>
+      </AppShell>
+    );
+  }
 
   const { proposal, files } = data;
   const threads = groupThreads(data.comments);
@@ -243,12 +262,18 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
   const people = (fn: (logins: string[]) => Promise<void>, done: string) => (login: string) =>
     void act(() => fn([login]), done);
 
+  const toasts = notice && (
+    <Toast tone={notice.kind === 'error' ? 'danger' : 'ok'} onDismiss={() => setNotice(undefined)}>
+      <p role={notice.kind === 'error' ? 'alert' : 'status'}>{notice.text}</p>
+    </Toast>
+  );
   return (
-    <main class="proposal">
+    <AppShell shell={shell} active="proposals" crumbs={crumbs} toasts={toasts}>
+    <div class="proposal">
       <div class="proposal-main">
         <p>
           <button type="button" onClick={onBack}>
-            Back to proposals
+            {t.review.back}
           </button>
         </p>
         <h2 class="proposal-heading">{proposal.title}</h2>
@@ -258,11 +283,6 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
           <GitHubLink href={proposal.htmlUrl} />
         </p>
         {proposal.body && <p class="comment-body">{proposal.body}</p>}
-        {notice && (
-          <p class={`banner banner-${notice.kind}`} role={notice.kind === 'error' ? 'alert' : 'status'}>
-            {notice.text}
-          </p>
-        )}
         <StaleComments comments={stale} onDismiss={() => setStale([])} />
         <div class="actions">
           <button type="button" onClick={() => void showPreview()}>
@@ -302,19 +322,7 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
           />
         ))}
       </div>
-      <aside class="proposal-side">
-        <People
-          reviewers={reviewerStatuses(proposal.requestedReviewers, data.reviews)}
-          assignees={proposal.assignees}
-          candidates={candidates}
-          canEdit={open && access.canPush}
-          editHint={open ? 'Only people who can change this repository can ask for reviews or assign people.' : undefined}
-          busy={busy}
-          onRequest={people((l) => reviews.requestReviewers(repo, number, l), 'Review requested.')}
-          onRemoveReviewer={people((l) => reviews.removeReviewers(repo, number, l), 'Review request removed.')}
-          onAssign={people((l) => reviews.addAssignees(repo, number, l), 'Assigned.')}
-          onUnassign={people((l) => reviews.removeAssignees(repo, number, l), 'Unassigned.')}
-        />
+      <aside class="proposal-side" aria-label="Review and merge">
         {open && (
           <ReviewForm
             event={event}
@@ -328,7 +336,35 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
           />
         )}
         <MergeBox proposal={proposal} access={access} method={method} busy={busy} onMethod={setMethod} onMerge={merge} />
+        <People
+          reviewers={reviewerStatuses(proposal.requestedReviewers, data.reviews)}
+          assignees={proposal.assignees}
+          candidates={candidates}
+          canEdit={open && access.canPush}
+          editHint={open ? 'Only people who can change this repository can ask for reviews or assign people.' : undefined}
+          busy={busy}
+          onRequest={people((l) => reviews.requestReviewers(repo, number, l), 'Review requested.')}
+          onRemoveReviewer={people((l) => reviews.removeReviewers(repo, number, l), 'Review request removed.')}
+          onAssign={people((l) => reviews.addAssignees(repo, number, l), 'Assigned.')}
+          onUnassign={people((l) => reviews.removeAssignees(repo, number, l), 'Unassigned.')}
+        />
       </aside>
-    </main>
+      {open && (
+        <div class="review-bar">
+          <button
+            type="button"
+            class="primary"
+            onClick={() => {
+              const target = document.getElementById('your-review');
+              target?.scrollIntoView({ block: 'start' });
+              target?.focus();
+            }}
+          >
+            {t.review.writeReview}
+          </button>
+        </div>
+      )}
+    </div>
+    </AppShell>
   );
 }

@@ -1,13 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { AuthRequiredError, type FileChange, type RepoAccess, type RepoGateway, type Repository, type WorkingState } from '../domain';
 import { CONFIG_PATH, visibleFiles, type ProjectConfig } from '../config/project';
 import { applySaved, defaultMessage, describeError, dirtyPaths, runSave, unsavedChanges, type Buffers } from '../workspace/model';
+import { useT } from '../i18n';
+import type { NavId } from '../shell/nav';
+import { extractOutline, type OutlineItem } from '../shell/outline';
+import { filesInView, readViewAs, writeViewAs, type ViewAs } from '../config/viewAs';
+import { mainDocument } from '../workspace/session';
+import { fileKind } from '../workspace/tree';
 import { Editor } from '../ui/Editor';
 import { Preview } from './Preview';
 import { FileTree } from '../ui/FileTree';
-import { SaveBar } from '../ui/SaveBar';
 import { StatusBanner, type SaveStatus } from '../ui/StatusBanner';
 import { ViewNotice } from '../ui/config/ViewNotice';
+import { AppShell, type ShellContext } from '../ui/shell/AppShell';
+import { Outline } from '../ui/shell/Outline';
+import { SaveControl } from '../ui/shell/SaveControl';
+import { Skeleton } from '../ui/shell/Skeleton';
+import { Toast } from '../ui/shell/Toasts';
+import { ViewSwitch, type PaneView } from '../ui/shell/ViewSwitch';
+import { ViewAsSwitch } from '../ui/shell/ViewAsSwitch';
 import type { ConfigSaved } from './ProjectSettings';
 
 // The YAML parser, the wizard and the settings form load on demand.
@@ -19,12 +31,20 @@ export interface WorkspaceProps {
   repo: Repository;
   /** What the user may do in the repository; admins get project settings. */
   access: (repo: Repository) => Promise<RepoAccess>;
+  shell: ShellContext;
+  /** Open project settings right away (chosen in the sidebar on another screen). */
+  settingsFirst?: boolean;
   /** Called with the edits that are not saved yet, so they can stay visible. */
   onAuthRequired: (unsaved: FileChange[]) => void;
   onDirtyChange: (dirty: boolean) => void;
+  /** A save created or updated a proposal. */
+  onSaved?: () => void;
 }
 
-export function Workspace({ gateway, repo, access, onAuthRequired, onDirtyChange }: WorkspaceProps) {
+type Heading = Extract<OutlineItem, { kind: 'heading' }>;
+
+export function Workspace({ gateway, repo, access, shell, settingsFirst = false, onAuthRequired, onDirtyChange, onSaved }: WorkspaceProps) {
+  const t = useT();
   const [working, setWorking] = useState<WorkingState>();
   const [project, setProject] = useState<ProjectConfig>({ kind: 'missing' });
   const [admin, setAdmin] = useState(false);
@@ -36,10 +56,15 @@ export function Workspace({ gateway, repo, access, onAuthRequired, onDirtyChange
   const [loadError, setLoadError] = useState<string>();
   const [message, setMessage] = useState('');
   const [status, setStatus] = useState<SaveStatus>({ kind: 'idle' });
-  // On narrow screens the editor and the preview share one column.
-  const [view, setView] = useState<'edit' | 'preview'>('edit');
+  const [jump, setJump] = useState<{ line: number; id?: string; text: string; seq: number }>();
+  // Below 1024px the editor and the preview share one pane.
+  const [view, setView] = useState<PaneView>('edit');
+  // Admins can look at the paper as co-authors see it.
+  const [viewAs, setViewAs] = useState<ViewAs>(() => readViewAs(repo.fullName));
   const buffersRef = useRef(buffers);
   buffersRef.current = buffers;
+  const openPathRef = useRef(openPath);
+  openPathRef.current = openPath;
 
   const fail = useCallback(
     (err: unknown, show: (message: string) => void) => {
@@ -70,6 +95,22 @@ export function Workspace({ gateway, repo, access, onAuthRequired, onDirtyChange
       setBuffers({});
       setOpenPath(undefined);
       setWorking(state);
+      // Open the main document (or the file that was open before a reload).
+      const visible = filesInView(state.files, config, isAdmin, readViewAs(repo.fullName)).filter((p) => fileKind(p) !== 'binary');
+      const previous = openPathRef.current;
+      const target =
+        previous && visible.includes(previous)
+          ? previous
+          : mainDocument(visible, config.kind === 'valid' ? config.config.entry : undefined);
+      if (target) {
+        try {
+          const text = await gateway.readFile(repo, target, state.headSha);
+          setBuffers((b) => (b[target] ? b : { ...b, [target]: { base: text, text } }));
+          setOpenPath(target);
+        } catch (err) {
+          fail(err, setFileError);
+        }
+      }
       return true;
     } catch (err) {
       fail(err, setLoadError);
@@ -94,10 +135,23 @@ export function Workspace({ gateway, repo, access, onAuthRequired, onDirtyChange
     return () => window.removeEventListener('beforeunload', warn);
   }, [hasDirty]);
 
-  const visible = working ? visibleFiles(working.files, project, admin) : [];
+  const visible = working ? filesInView(working.files, project, admin, viewAs) : [];
+  const changeViewAs = (mode: ViewAs) => {
+    setViewAs(mode);
+    writeViewAs(repo.fullName, mode);
+  };
+  const labels = project.kind === 'valid' ? project.config.labels : {};
+  const label = (path: string) => labels[path] ?? path.slice(path.lastIndexOf('/') + 1);
+  const entry = project.kind === 'valid' ? project.config.entry : undefined;
+  const main = mainDocument(visible.filter((p) => fileKind(p) !== 'binary'), entry);
+  const openText = openPath ? buffers[openPath]?.text : undefined;
+  const outline = useMemo(() => (openText === undefined ? [] : extractOutline(openText)), [openText]);
 
   const openFile = async (path: string) => {
     setFileError(undefined);
+    setSettingsOpen(false);
+    shell.sidebar.dispatch({ type: 'navigate' });
+    if (path !== openPath) setJump(undefined);
     if (!visible.includes(path)) return;
     if (buffers[path] || !working) {
       setOpenPath(path);
@@ -112,6 +166,12 @@ export function Workspace({ gateway, repo, access, onAuthRequired, onDirtyChange
     }
   };
 
+  const goToHeading = (item: Heading) => {
+    setSettingsOpen(false);
+    shell.sidebar.dispatch({ type: 'navigate' });
+    setJump((j) => ({ line: item.line, id: item.id, text: item.title, seq: (j?.seq ?? 0) + 1 }));
+  };
+
   const save = async () => {
     if (!working || !hasDirty || status.kind === 'saving') return;
     setStatus({ kind: 'saving' });
@@ -122,6 +182,7 @@ export function Workspace({ gateway, repo, access, onAuthRequired, onDirtyChange
         setBuffers((b) => applySaved(b, outcome.saved));
         setMessage('');
         setStatus({ kind: 'saved', pullRequestUrl: outcome.pullRequestUrl });
+        onSaved?.();
         break;
       case 'conflict':
         setStatus({ kind: 'conflict', copies: outcome.copies, reloaded: false });
@@ -149,9 +210,10 @@ export function Workspace({ gateway, repo, access, onAuthRequired, onDirtyChange
     setBuffers((b) => applySaved(b, [{ path: CONFIG_PATH, content: saved.content }]));
     setSettingsOpen(false);
     setStatus({ kind: 'saved', pullRequestUrl: saved.pullRequestUrl });
+    onSaved?.();
   };
 
-  const openSettings = () => {
+  const openSettings = useCallback(() => {
     setSettingsOpen(true);
     if (!settings) {
       loadSettings().then(setSettings, (err: unknown) => {
@@ -159,7 +221,15 @@ export function Workspace({ gateway, repo, access, onAuthRequired, onDirtyChange
         fail(err, setFileError);
       });
     }
-  };
+  }, [settings, fail]);
+
+  const wantsSettings = useRef(settingsFirst);
+  useEffect(() => {
+    if (admin && wantsSettings.current) {
+      wantsSettings.current = false;
+      openSettings();
+    }
+  }, [admin, openSettings]);
 
   const reload = async () => {
     if (status.kind !== 'conflict') return;
@@ -167,90 +237,150 @@ export function Workspace({ gateway, repo, access, onAuthRequired, onDirtyChange
     if (await load()) setStatus({ kind: 'conflict', copies, reloaded: true });
   };
 
+  // Paper, Files and Settings live on this screen; everything else is App's.
+  const navigate = (id: NavId) => {
+    if (id === 'settings') return openSettings();
+    if (id === 'paper') {
+      setSettingsOpen(false);
+      return;
+    }
+    if (id === 'files') return;
+    shell.onNavigate(id);
+  };
+  const screenShell: ShellContext = { ...shell, admin, onNavigate: navigate };
+  const crumbs = [repo.fullName, ...(settingsOpen ? [t.nav.settings] : openPath ? [label(openPath)] : [])];
+
   if (loadError) {
     return (
-      <main class="page">
-        <p class="banner banner-error" role="alert">
-          {loadError}{' '}
-          <button type="button" onClick={() => void load()}>
-            Try again
-          </button>
-        </p>
-      </main>
+      <AppShell shell={screenShell} active="paper" crumbs={[repo.fullName]}>
+        <div class="page">
+          <div class="notice notice-danger" role="alert">
+            <p>{loadError}</p>
+            <button type="button" onClick={() => void load()}>
+              {t.workspace.tryAgain}
+            </button>
+          </div>
+        </div>
+      </AppShell>
     );
   }
-  if (!working) return <main class="page muted">Opening {repo.fullName}…</main>;
+  if (!working) {
+    return (
+      <AppShell shell={screenShell} active="paper" crumbs={[repo.fullName]} mainClass="workspace-main">
+        <div class="workspace">
+          <Skeleton variant="pane" lines={12} label={t.workspace.opening(repo.fullName)} />
+        </div>
+      </AppShell>
+    );
+  }
 
   const open = openPath ? buffers[openPath] : undefined;
+  const dismiss = () => setStatus({ kind: 'idle' });
   return (
-    <main class="workspace" data-view={view}>
-      <aside>
-        <ViewNotice
-          admin={admin}
-          state={project.kind}
-          repoName={repo.fullName}
-          visibleCount={visibleFiles(working.files, project, false).length}
-          problems={project.kind === 'missing' ? [] : project.problems}
-          onSettings={openSettings}
-        />
-        {working.truncated && <p class="muted">Some files are not listed because the repository is very large.</p>}
-        <FileTree paths={visible} openPath={openPath} dirty={new Set(dirty)} onOpen={(p) => void openFile(p)} />
-      </aside>
-      <section class="editor-pane">
-        <button type="button" class="view-toggle" onClick={() => setView('preview')}>
-          Show preview
-        </button>
-        <StatusBanner status={status} onReload={() => void reload()} onDismiss={() => setStatus({ kind: 'idle' })} />
-        {fileError && (
-          <p class="banner banner-error" role="alert">
-            {fileError}
-          </p>
-        )}
-        <SaveBar
-          dirtyCount={dirty.length}
-          message={message}
-          placeholder={hasDirty ? defaultMessage(dirty) : "Describe your changes"}
-          saving={status.kind === 'saving'}
-          onMessage={setMessage}
-          onSave={() => void save()}
-        />
-        {settingsOpen && admin && settings ? (
-          <settings.ProjectSettings
+    <AppShell
+      shell={screenShell}
+      active={settingsOpen ? 'settings' : 'paper'}
+      crumbs={crumbs}
+      mainClass="workspace-main"
+      actions={
+        <>
+          <ViewSwitch view={view} onView={setView} />
+          <SaveControl
+            dirtyCount={dirty.length}
+            message={message}
+            placeholder={hasDirty ? defaultMessage(dirty) : t.save.describe}
+            saving={status.kind === 'saving'}
+            onMessage={setMessage}
+            onSave={() => void save()}
+          />
+        </>
+      }
+      panels={{
+        paper: (
+          <Outline
+            main={main}
+            openPath={openPath}
+            items={outline}
+            label={label}
+            onOpenFile={(p) => void openFile(p)}
+            onHeading={goToHeading}
+          />
+        ),
+        files: (
+          <>
+            {admin && <ViewAsSwitch mode={viewAs} onMode={changeViewAs} />}
+            <ViewNotice
+              admin={admin}
+              state={project.kind}
+              repoName={repo.fullName}
+              visibleCount={visibleFiles(working.files, project, false).length}
+              problems={project.kind === 'missing' ? [] : project.problems}
+              onSettings={openSettings}
+            />
+            {working.truncated && <p class="muted panel-note">{t.workspace.truncated}</p>}
+            <FileTree paths={visible} openPath={openPath} dirty={new Set(dirty)} labels={labels} onOpen={(p) => void openFile(p)} />
+          </>
+        ),
+      }}
+      toasts={
+        <>
+          {status.kind !== 'idle' && status.kind !== 'saving' && (
+            <Toast
+              tone={status.kind === 'saved' ? (status.pullRequestUrl ? 'ok' : 'warn') : 'danger'}
+              onDismiss={status.kind === 'conflict' ? undefined : dismiss}
+            >
+              <StatusBanner status={status} onReload={() => void reload()} onDismiss={dismiss} />
+            </Toast>
+          )}
+          {fileError && (
+            <Toast tone="danger" onDismiss={() => setFileError(undefined)}>
+              <p role="alert">{fileError}</p>
+            </Toast>
+          )}
+        </>
+      }
+    >
+      <div class="workspace" data-view={view}>
+        <section class="editor-pane" aria-label={t.workspace.editorRegion} data-tour="editor">
+          {settingsOpen && admin && settings ? (
+            <div class="pane-scroll">
+              <settings.ProjectSettings
+                gateway={gateway}
+                repo={repo}
+                working={working}
+                project={project}
+                onSaved={configSaved}
+                onCancel={() => setSettingsOpen(false)}
+                onAuthRequired={() => onAuthRequired(unsavedChanges(buffersRef.current))}
+              />
+            </div>
+          ) : settingsOpen && admin ? (
+            <Skeleton lines={6} label={t.workspace.loadingSettings} />
+          ) : openPath && open ? (
+            <Editor
+              key={openPath}
+              path={openPath}
+              doc={open.text}
+              jumpTo={jump}
+              onChange={(text) => setBuffers((b) => ({ ...b, [openPath]: { base: b[openPath]?.base ?? '', text } }))}
+            />
+          ) : (
+            <p class="muted pane-empty">{t.workspace.chooseFile}</p>
+          )}
+        </section>
+        <section class="preview-pane" aria-label={t.workspace.previewRegion} data-tour="preview">
+          <Preview
             gateway={gateway}
             repo={repo}
-            working={working}
-            project={project}
-            onSaved={configSaved}
-            onCancel={() => setSettingsOpen(false)}
-            onAuthRequired={() => onAuthRequired(unsavedChanges(buffersRef.current))}
+            headSha={working.headSha}
+            files={working.files}
+            buffers={buffers}
+            entry={entry}
+            autoCompileDefault={project.kind === 'valid' && project.config.preview.autoCompile}
+            scrollTo={jump}
           />
-        ) : settingsOpen && admin ? (
-          <p class="muted">Loading project settings…</p>
-        ) : openPath && open ? (
-          <Editor
-            key={openPath}
-            path={openPath}
-            doc={open.text}
-            onChange={(text) => setBuffers((b) => ({ ...b, [openPath]: { base: b[openPath]?.base ?? '', text } }))}
-          />
-        ) : (
-          <p class="muted">Choose a file to edit.</p>
-        )}
-      </section>
-      <section class="preview-pane" aria-label="Preview">
-        <button type="button" class="view-toggle" onClick={() => setView('edit')}>
-          Show editor
-        </button>
-        <Preview
-          gateway={gateway}
-          repo={repo}
-          headSha={working.headSha}
-          files={working.files}
-          buffers={buffers}
-          entry={project.kind === 'valid' ? project.config.entry : undefined}
-          autoCompileDefault={project.kind === 'valid' && project.config.preview.autoCompile}
-        />
-      </section>
-    </main>
+        </section>
+      </div>
+    </AppShell>
   );
 }

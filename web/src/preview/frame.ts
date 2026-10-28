@@ -1,7 +1,7 @@
 import DOMPurify, { type Config } from 'dompurify';
 import 'katex/dist/katex.min.css';
 import './preview.css';
-import { FRAME_READY, parseRenderMessage, type ReadyMessage } from './protocol';
+import { FRAME_READY, parseRenderMessage, parseScrollMessage, type ReadyMessage } from './protocol';
 
 // Runs inside <iframe sandbox="allow-scripts">: the document has an opaque
 // origin, so it cannot read galley's storage, cookies or DOM, and its CSP
@@ -57,8 +57,24 @@ function show(html: string, assets: { id: string; type: string; bytes: Uint8Arra
   urls = [...next.values()];
 }
 
+/** Lower case, single spaces, without the characters Markdown uses for emphasis and code. */
+const normalize = (text: string) => text.replace(/[*_`$\\]/g, '').replace(/\s+/g, ' ').trim().toLowerCase();
+
+/** Scrolls to a heading of the outline: by id, else the first heading whose text ends with it. */
+function scrollToHeading(id: string, text: string) {
+  if (!page) return;
+  let target: Element | null = id ? document.getElementById(id) : null;
+  if (!target && text) {
+    const wanted = normalize(text);
+    target = [...page.querySelectorAll('h1, h2, h3, h4, h5, h6')].find((h) => normalize(h.textContent ?? '').endsWith(wanted)) ?? null;
+  }
+  target?.scrollIntoView({ block: 'start' });
+}
+
 window.addEventListener('message', (event) => {
   if (event.source !== window.parent || event.origin !== galleyOrigin) return;
+  const scroll = parseScrollMessage(event.data);
+  if (scroll) return scrollToHeading(scroll.id, scroll.text);
   const message = parseRenderMessage(event.data);
   if (!message || message.seq <= lastSeq) return;
   lastSeq = message.seq;

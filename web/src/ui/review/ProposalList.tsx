@@ -1,6 +1,8 @@
 import type { ProposalSummary } from '../../domain';
+import { useT } from '../../i18n';
 import { OVERALL_LABEL } from '../../review/labels';
 import type { OverallReview } from '../../review/status';
+import { Icon } from '../shell/icons';
 import { formatDate, GitHubLink } from './GitHubLink';
 
 export interface ProposalRow {
@@ -13,26 +15,51 @@ export interface ProposalRow {
 export interface ProposalListProps {
   rows: ProposalRow[];
   onOpen: (number: number) => void;
+  /** The one action of the empty state. */
+  onEmptyAction?: () => void;
 }
 
-export function ProposalList({ rows, onOpen }: ProposalListProps) {
-  if (rows.length === 0) return <p class="muted">There are no open proposals in this repository.</p>;
-  return (
-    <ul class="proposal-list">
-      {rows.map(({ summary, overall, merge }) => (
-        <li key={summary.number} class="proposal-row">
-          <button type="button" class="proposal-title" onClick={() => onOpen(summary.number)}>
-            {summary.title}
+const TONE: Record<OverallReview, string> = {
+  approved: 'chip chip-ok',
+  changes_requested: 'chip chip-danger',
+  pending: 'chip chip-warn',
+  commented: 'chip',
+  none: 'chip',
+};
+
+export function ProposalList({ rows, onOpen, onEmptyAction }: ProposalListProps) {
+  const t = useT();
+  const m = t.proposals;
+  if (rows.length === 0) {
+    return (
+      <div class="empty">
+        <Icon name="proposals" class="empty-icon" />
+        <h2>{m.emptyTitle}</h2>
+        <p>{m.emptyBody}</p>
+        {onEmptyAction && (
+          <button type="button" class="primary" onClick={onEmptyAction}>
+            {m.emptyAction}
           </button>
-          <span class="muted">
+        )}
+      </div>
+    );
+  }
+  return (
+    <ul class="row-list proposal-list">
+      {rows.map(({ summary, overall, merge }) => (
+        <li key={summary.number} class="row proposal-row">
+          <button type="button" class="row-main proposal-title" onClick={() => onOpen(summary.number)}>
+            <span class="row-title">{summary.title}</span>
+          </button>
+          <span class="muted row-meta">
             #{summary.number}
-            {summary.author && ` by ${summary.author.login}`}
-            {summary.updatedAt && `, updated ${formatDate(summary.updatedAt)}`}
-            {summary.draft && ' (draft)'}
+            {summary.author && ` ${m.by(summary.author.login)}`}
+            {summary.updatedAt && `, ${m.updated(formatDate(summary.updatedAt))}`}
           </span>
           <span class="proposal-state">
-            {overall ? OVERALL_LABEL[overall] : '…'}
-            {merge && ` · ${merge}`}
+            {summary.draft && <span class="chip">{m.draft}</span>}
+            {overall ? <span class={TONE[overall]}>{OVERALL_LABEL[overall]}</span> : <span class="chip chip-loading">{m.loadingState}</span>}
+            {merge && <span class="muted">{merge}</span>}
           </span>
           <GitHubLink href={summary.htmlUrl} />
         </li>
