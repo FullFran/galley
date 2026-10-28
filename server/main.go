@@ -14,6 +14,7 @@ import (
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/core"
 
+	"github.com/FullFran/galley/server/internal/admin"
 	"github.com/FullFran/galley/server/internal/auth"
 	"github.com/FullFran/galley/server/internal/chat"
 	"github.com/FullFran/galley/server/internal/comments"
@@ -93,10 +94,26 @@ func newDeps(app core.App) (httpapi.Deps, *chat.Service, error) {
 		Repos: gh,
 		TTL:   accessTTL,
 	})
+	// Every repository-scoped galley API goes through the guard: it records
+	// per-repository activity (throttled) and enforces the repository's
+	// allowlist on top of the GitHub permission.
+	adminStore := pbstore.NewAdminStore(app)
+	guard, err := admin.NewGuard(admin.GuardConfig{
+		Inner: access,
+		Store: adminStore,
+		Users: func(ctx context.Context, userID string) (admin.Identity, error) {
+			u, err := store.UserByID(ctx, userID)
+			return admin.Identity{GitHubID: u.GitHubID, Login: u.Login}, err
+		},
+		Logger: app.Logger(),
+	})
+	if err != nil {
+		return httpapi.Deps{}, nil, err
+	}
 
 	draftSvc, err := drafts.NewService(drafts.Config{
 		Store:  pbstore.NewDraftStore(app),
-		Access: access,
+		Access: guard,
 		Sealer: dataSealer,
 		Logger: app.Logger(),
 	})
@@ -108,7 +125,7 @@ func newDeps(app core.App) (httpapi.Deps, *chat.Service, error) {
 	}
 	chatSvc, err := chat.NewService(chat.Config{
 		Store:  pbstore.NewChatStore(app),
-		Access: access,
+		Access: guard,
 		Sealer: dataSealer,
 	})
 	if err != nil {
@@ -146,14 +163,30 @@ func newDeps(app core.App) (httpapi.Deps, *chat.Service, error) {
 	}
 	commentSvc, err := comments.NewService(comments.Config{
 		Store:  pbstore.NewCommentStore(app),
-		Access: access,
+		Access: guard,
 		Sealer: dataSealer,
+	})
+	if err != nil {
+		return httpapi.Deps{}, nil, err
+	}
+	adminSvc, err := admin.NewService(admin.Config{
+		Guard:  guard,
+		Store:  adminStore,
+		Drafts: draftSvc,
+		// Only galley sessions go; the user's GitHub authorization and
+		// tokens are untouched, and open chat streams end at once.
+		DeleteSessions: func(ctx context.Context, userID string) error {
+			chatSvc.CloseUser(userID)
+			return store.DeleteUserSessions(ctx, userID)
+		},
+		Logger: logger,
 	})
 	if err != nil {
 		return httpapi.Deps{}, nil, err
 	}
 	return httpapi.Deps{
 		Auth:           svc,
+		Admin:          adminSvc,
 		Comments:       commentSvc,
 		Drafts:         draftSvc,
 		Chat:           httpapi.ChatAdapter(chatSvc),

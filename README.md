@@ -212,7 +212,8 @@ logged.
 Server-side drafts: one working copy per user, repository and path, so an
 edit started on one device can continue on another. Drafts are private to
 their owner: nobody else can read, list or delete them (repository admins
-neither; another user's draft answers 404). Access also needs `pull` on a
+neither, unless the owner shares one: see the admin API; another user's draft
+answers 404). Access also needs `pull` on a
 repository where the galley app is installed (the same check as comments).
 `{path...}` is the repository-relative file path, with the comment path rules.
 
@@ -317,6 +318,74 @@ configuration; do not put a buffering or compression middleware in front of
 `/api/galley/repos/*/chat/stream`. The heartbeat keeps idle streams under the
 usual 60-second proxy timeouts, and the stream lifts PocketBase's 5-minute
 server write and read timeouts (per-write deadline, read deadline cleared).
+
+### Admin API
+
+Repository admins (GitHub's `admin` permission on the repository, read with
+the same cached check as comments) can see who uses galley on the repository,
+end a user's galley sessions, restrict galley to an allowlist, and read drafts
+their owners chose to share. Every route is scoped to one repository the caller
+administers, behind the same middleware as the other repository routes (exact
+`Origin`, `X-Galley-CSRF: 1` on writes, session cookie, `no-store`). Without
+access to the repository the answer is 404; with access but without admin, 403.
+Listings use the cached permission (up to 5 minutes old); changes (revoking
+sessions, allowlist edits) and reading a shared draft re-ask GitHub first,
+bypassing the cache (still rate limited), so an admin demoted on GitHub loses
+those powers at once.
+
+An admin never acts as another user on GitHub: galley holds no way to hand an
+admin someone else's token, and these routes only change galley's own data
+(sessions, allowlist, share grants). Every admin call that passes the check is
+audited: allowlist and share changes write their audit row in the same
+transaction as the change (and only when the change happens); views and
+session revocation write it before acting or returning data, and fail (503)
+when it cannot be written.
+
+| Route | Purpose |
+| --- | --- |
+| `GET /api/galley/repos/{repo_id}/admin/people` | Users who used galley on this repository: `{"people": [{"user_id", "login", "github_id", "permission", "first_seen", "last_seen", "blocked", "drafts": {"count", "bytes", "oldest_updated_at", "newest_updated_at"}}]}`, most recent first (at most 1,000). `permission` (`read`, `write`, `admin`) is as last seen. Draft figures are metadata only; content is never returned. |
+| `POST /api/galley/repos/{repo_id}/admin/people/{user_id}/revoke-sessions` | Deletes every galley session of the user and ends their chat streams (sessions are global, not per repository). Only for users who used galley on this repository in the last 180 days (404 otherwise). Revoking your own sessions needs `{"confirm_self": true}` (422 `confirm_self` without it). GitHub authorization and tokens are untouched; the user can sign in again. Returns 204. |
+| `GET /api/galley/repos/{repo_id}/admin/allowlist` | `{"entries": [{"id", "github_id", "login", "created_at"}]}`. |
+| `POST /api/galley/repos/{repo_id}/admin/allowlist` | Adds `{"github_id"}`, `{"login"}` or both (409 for a duplicate, at most 1,000 entries). When `github_id` is set it decides the match and the login is a label; prefer it, since logins can be renamed and reclaimed. Returns 201. |
+| `DELETE /api/galley/repos/{repo_id}/admin/allowlist/{id}` | Removes an entry. Returns 204. |
+| `GET /api/galley/repos/{repo_id}/admin/shared-drafts` | Active share grants: `{"shared_drafts": [{"id", "repo_id", "path", "owner": {"user_id", "login"}, "created_at", "expires_at", "size", "updated_at"}]}`. |
+| `GET /api/galley/repos/{repo_id}/admin/shared-drafts/{id}` | A shared draft with its `content` (`read_only: true`). |
+| `GET /api/galley/repos/{repo_id}/admin/audit` | The last 200 audit entries, newest first: `{"entries": [{"id", "actor": {"user_id", "login"}, "action", "target", "at"}]}`. This view is itself recorded. |
+
+**Allowlist.** It restricts galley features, not GitHub access: when a
+repository's allowlist is not empty, users who are not on it get 403 on that
+repository's comments, drafts and chat (and cannot share drafts), while
+GitHub, and galley on other repositories, work as before. Repository admins
+are never blocked, so an admin cannot lock themselves out. The people listing
+marks blocked users. Changes apply at once on this server; the allowlist is
+otherwise cached for 30 seconds.
+
+**Activity.** Every repository-scoped call (comments, drafts, chat, admin)
+by a user with `pull` records `first_seen`, `last_seen` and the permission in
+`galley_repo_activity`, written at most once every 5 minutes per user and
+repository (or at once when the permission changes).
+
+**Draft sharing.** Sharing is the owner's choice and read-only:
+
+| Route | Purpose |
+| --- | --- |
+| `POST /api/galley/repos/{repo_id}/draft-shares/{path...}` | Shares your draft at `path` with the repository's admins for 24 hours. Sharing again renews the grant. Needs the same access as drafts. Returns 201 and `{"id", "repo_id", "path", "owner", "created_at", "expires_at"}`. |
+| `DELETE /api/galley/repos/{repo_id}/draft-shares/{path...}` | Revokes your active grants on that draft at once (no repository access needed, so consent can always be withdrawn). Returns 204, or 404 when none was active. |
+| `GET /api/galley/repos/{repo_id}/draft-shares` | Your active grants on the repository: `{"shares": [...]}`. |
+
+(Sharing has its own prefix because a `{path...}` wildcard cannot be followed
+by `/share`.) While a grant is active, admins read the draft's **current**
+version, including edits made after sharing; they never see it after the
+grant expires or is revoked. A grant covers one draft record: when the draft
+is deleted (after a save, by retention or by revocation) the grant goes with
+it, and a new draft at the same path is not covered. Creating, renewing and
+revoking a grant are audited too.
+
+Storage: `galley_repo_activity`, `galley_repo_allowlist`,
+`galley_draft_shares` and `galley_audit`, all with superuser-only API rules.
+None holds content or free text (ids, logins, paths, actions and times), so
+nothing in them is sealed; the audit `target` is `repo`, `user:<id>`,
+`allow:<id>` or `share:<id>`.
 
 ## Project configuration
 

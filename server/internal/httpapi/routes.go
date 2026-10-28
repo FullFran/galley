@@ -29,6 +29,8 @@ type Deps struct {
 	Drafts DraftsService
 	// Chat enables the chat routes when set (see ChatAdapter).
 	Chat ChatService
+	// Admin enables the admin and draft-sharing routes when set.
+	Admin AdminService
 	// ChatHeartbeat is how often a chat stream sends a heartbeat comment and
 	// re-checks the session and repository access; defaults to
 	// DefaultChatHeartbeat.
@@ -46,11 +48,11 @@ func Register(r *router.Router[*core.RequestEvent], d Deps) {
 	}
 	r.GET(HealthPath, health)
 	registerAuth(r, d)
-	if d.Comments == nil && d.Drafts == nil && d.Chat == nil {
+	if d.Comments == nil && d.Drafts == nil && d.Chat == nil && d.Admin == nil {
 		return
 	}
 	// One group per prefix: its CORS middleware and OPTIONS route are shared
-	// by comments, drafts and chat.
+	// by comments, drafts, chat and admin.
 	repos := credentialedGroup(r, ReposPrefix, d.FrontendOrigin, credentialedMethods)
 	if d.Comments != nil {
 		registerComments(r, repos, d)
@@ -60,6 +62,9 @@ func Register(r *router.Router[*core.RequestEvent], d Deps) {
 	}
 	if d.Chat != nil {
 		registerChat(repos, d)
+	}
+	if d.Admin != nil {
+		registerAdmin(repos, d)
 	}
 }
 

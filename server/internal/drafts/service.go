@@ -254,6 +254,36 @@ func (s *Service) DeleteAll(ctx context.Context, a comments.Actor, repoID int64)
 	return n, storeErr(err)
 }
 
+// Lookup returns the id and metadata (no content) of the owner's draft. It
+// does not check repository access: callers (draft sharing) do.
+func (s *Service) Lookup(ctx context.Context, owner string, repoID int64, path string) (string, Draft, error) {
+	if owner == "" || repoID <= 0 || !comments.ValidPath(path) {
+		return "", Draft{}, comments.ErrNotFound
+	}
+	r, err := s.cfg.Store.Draft(ctx, owner, repoID, path)
+	if err != nil {
+		return "", Draft{}, storeErr(err)
+	}
+	return r.ID, meta(r), nil
+}
+
+// OpenByID returns the owner's draft at path with its content, only when it
+// is still the draft with id (a draft deleted and recreated gets a new id).
+// It does not check repository access: callers (draft sharing) do.
+func (s *Service) OpenByID(ctx context.Context, owner string, repoID int64, path, id string) (Draft, error) {
+	if owner == "" || id == "" || repoID <= 0 || !comments.ValidPath(path) {
+		return Draft{}, comments.ErrNotFound
+	}
+	r, err := s.cfg.Store.Draft(ctx, owner, repoID, path)
+	if err != nil {
+		return Draft{}, storeErr(err)
+	}
+	if r.ID != id {
+		return Draft{}, comments.ErrNotFound
+	}
+	return s.open(r)
+}
+
 // PurgeIdle deletes drafts untouched for longer than the retention.
 func (s *Service) PurgeIdle(ctx context.Context) (int, error) {
 	n, err := s.cfg.Store.DeleteIdle(ctx, s.cfg.Clock.Now().UTC().Add(-s.cfg.Retention))
