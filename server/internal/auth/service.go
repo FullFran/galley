@@ -32,6 +32,17 @@ type Config struct {
 	RefreshTimeout time.Duration
 	// Now defaults to time.Now.
 	Now func() time.Time
+	// OnRevoke, when set, is called with the galley user id whenever the
+	// user's GitHub authorization is gone (revocation webhook, rejected,
+	// expired or unreadable refresh token), so caches of the user's GitHub
+	// permissions can be dropped. It must not block.
+	OnRevoke func(userID string)
+	// OnTokenIssued, when set, is called after every successful refresh with
+	// the new access token and the repository hint it was requested with, so
+	// a server-side token cache can follow rotations made by the browser. It
+	// runs under the user's lock and must not block or call back into the
+	// Service.
+	OnTokenIssued func(userID string, tok AccessToken, repositoryID int64)
 }
 
 // Service runs the sign-in use cases.
@@ -178,11 +189,37 @@ func (s *Service) IssueToken(ctx context.Context, sessionToken string, repositor
 	if err != nil {
 		return AccessToken{}, err
 	}
+	return s.UserAccessToken(ctx, sess.UserID, repositoryID)
+}
 
-	unlock := s.locks.lock(sess.UserID)
+// Authenticate resolves a session token to its user without touching GitHub.
+func (s *Service) Authenticate(ctx context.Context, sessionToken string) (User, error) {
+	sess, err := s.session(ctx, sessionToken)
+	if err != nil {
+		return User{}, err
+	}
+	u, err := s.cfg.Users.UserByID(ctx, sess.UserID)
+	if errors.Is(err, ErrNotFound) {
+		return User{}, ErrUnauthenticated
+	}
+	if err != nil {
+		return User{}, fmt.Errorf("auth: load user: %w", err)
+	}
+	return u, nil
+}
+
+// UserAccessToken refreshes the stored token pair of userID and returns a
+// new access token, for server-side calls made on the user's behalf. It
+// shares the per-user lock with IssueToken. ErrUnauthenticated means the user
+// must sign in again.
+func (s *Service) UserAccessToken(ctx context.Context, userID string, repositoryID int64) (AccessToken, error) {
+	if userID == "" {
+		return AccessToken{}, ErrUnauthenticated
+	}
+	unlock := s.locks.lock(userID)
 	defer unlock()
 
-	stored, err := s.cfg.Users.LoadRefreshToken(ctx, sess.UserID)
+	stored, err := s.cfg.Users.LoadRefreshToken(ctx, userID)
 	if errors.Is(err, ErrNotFound) {
 		return AccessToken{}, ErrUnauthenticated
 	}
@@ -190,13 +227,15 @@ func (s *Service) IssueToken(ctx context.Context, sessionToken string, repositor
 		return AccessToken{}, fmt.Errorf("auth: load refresh token: %w", err)
 	}
 	if !stored.ExpiresAt.IsZero() && !s.cfg.Now().Before(stored.ExpiresAt) {
-		_ = s.cfg.Users.DeleteRefreshToken(ctx, sess.UserID)
+		_ = s.cfg.Users.DeleteRefreshToken(ctx, userID)
+		s.notifyRevoked(userID)
 		return AccessToken{}, ErrUnauthenticated
 	}
-	refresh, err := s.cfg.Sealer.Open(stored.Ciphertext, []byte(sess.UserID))
+	refresh, err := s.cfg.Sealer.Open(stored.Ciphertext, []byte(userID))
 	if err != nil {
 		// Unreadable (for example after a key change): it can never be used.
-		_ = s.cfg.Users.DeleteRefreshToken(ctx, sess.UserID)
+		_ = s.cfg.Users.DeleteRefreshToken(ctx, userID)
+		s.notifyRevoked(userID)
 		return AccessToken{}, ErrUnauthenticated
 	}
 
@@ -209,7 +248,8 @@ func (s *Service) IssueToken(ctx context.Context, sessionToken string, repositor
 
 	tokens, err := s.cfg.Provider.Refresh(dctx, string(refresh), repositoryID)
 	if errors.Is(err, ErrTokenRevoked) {
-		if delErr := s.cfg.Users.DeleteRefreshToken(dctx, sess.UserID); delErr != nil {
+		s.notifyRevoked(userID)
+		if delErr := s.cfg.Users.DeleteRefreshToken(dctx, userID); delErr != nil {
 			return AccessToken{}, fmt.Errorf("auth: delete rejected refresh token: %w", delErr)
 		}
 		return AccessToken{}, ErrUnauthenticated
@@ -217,12 +257,16 @@ func (s *Service) IssueToken(ctx context.Context, sessionToken string, repositor
 	if err != nil {
 		return AccessToken{}, fmt.Errorf("auth: refresh: %w", err)
 	}
-	if err := s.saveRefresh(dctx, sess.UserID, tokens); err != nil {
-		if err = s.saveRefresh(dctx, sess.UserID, tokens); err != nil {
+	if err := s.saveRefresh(dctx, userID, tokens); err != nil {
+		if err = s.saveRefresh(dctx, userID, tokens); err != nil {
 			return AccessToken{}, err
 		}
 	}
-	return AccessToken{Token: tokens.AccessToken, ExpiresAt: tokens.AccessExpiresAt}, nil
+	tok := AccessToken{Token: tokens.AccessToken, ExpiresAt: tokens.AccessExpiresAt}
+	if s.cfg.OnTokenIssued != nil {
+		s.cfg.OnTokenIssued(userID, tok, repositoryID)
+	}
+	return tok, nil
 }
 
 // Logout deletes the session. Unknown sessions are not an error.
@@ -252,10 +296,17 @@ func (s *Service) Revoke(ctx context.Context, githubID int64) error {
 	if err := s.cfg.Users.DeleteRefreshToken(ctx, user.ID); err != nil && !errors.Is(err, ErrNotFound) {
 		return fmt.Errorf("auth: delete refresh token: %w", err)
 	}
+	s.notifyRevoked(user.ID)
 	if err := s.cfg.Sessions.DeleteUserSessions(ctx, user.ID); err != nil {
 		return fmt.Errorf("auth: delete sessions: %w", err)
 	}
 	return nil
+}
+
+func (s *Service) notifyRevoked(userID string) {
+	if s.cfg.OnRevoke != nil {
+		s.cfg.OnRevoke(userID)
+	}
 }
 
 func (s *Service) session(ctx context.Context, token string) (Session, error) {

@@ -13,12 +13,19 @@ import (
 // CallbackPath is the OAuth callback route, relative to PublicURL.
 const CallbackPath = "/api/galley/auth/callback"
 
+// DataKeyPurpose is the HKDF purpose of the data-at-rest key. Changing it, or
+// GALLEY_TOKEN_KEY, makes every stored comment unreadable.
+const DataKeyPurpose = "galley-data-at-rest-v1"
+
 // Config holds the server settings. Secrets are never printed.
 type Config struct {
 	GitHubClientID     string
 	GitHubClientSecret string
 	TokenKey           []byte
-	WebhookSecret      string
+	// DataKey seals data at rest (comments). It is derived from TokenKey with
+	// HKDF for purpose DataKeyPurpose, so it needs no extra variable.
+	DataKey       []byte
+	WebhookSecret string
 	// FrontendOrigin is the exact browser origin allowed to call the API.
 	FrontendOrigin string
 	// PublicURL is the API base URL as seen by browsers and GitHub.
@@ -55,6 +62,9 @@ func Load(getenv func(string) string) (Config, error) {
 
 	if c.TokenKey, err = secret.DecodeKey(key); err != nil {
 		return Config{}, fmt.Errorf("config: GALLEY_TOKEN_KEY must be base64 of %d bytes", secret.KeySize)
+	}
+	if c.DataKey, err = secret.DeriveKey(c.TokenKey, DataKeyPurpose); err != nil {
+		return Config{}, fmt.Errorf("config: GALLEY_TOKEN_KEY: %w", err)
 	}
 	if c.FrontendOrigin, err = parseOrigin(origin, false); err != nil {
 		return Config{}, fmt.Errorf("config: GALLEY_FRONTEND_ORIGIN %w", err)

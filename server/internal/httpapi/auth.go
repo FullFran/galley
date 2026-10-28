@@ -48,6 +48,7 @@ type AuthService interface {
 	IssueToken(ctx context.Context, sessionToken string, repositoryID int64) (auth.AccessToken, error)
 	Logout(ctx context.Context, sessionToken string) error
 	Revoke(ctx context.Context, githubID int64) error
+	Authenticate(ctx context.Context, sessionToken string) (auth.User, error)
 }
 
 var _ AuthService = (*auth.Service)(nil)
@@ -177,6 +178,19 @@ func (h authHandlers) logout(e *core.RequestEvent) error {
 	return e.NoContent(http.StatusNoContent)
 }
 
+// accessEvents are webhook events that can change who may pull or push a
+// repository. Their payloads are not inspected: the whole permission cache is
+// dropped, which is cheap and always safe.
+var accessEvents = map[string]bool{
+	"installation":              true,
+	"installation_repositories": true,
+	"member":                    true,
+	"membership":                true,
+	"organization":              true,
+	"team":                      true,
+	"repository":                true,
+}
+
 func (h authHandlers) webhook(e *core.RequestEvent) error {
 	body, err := io.ReadAll(io.LimitReader(e.Request.Body, maxWebhookBody+1))
 	if err != nil || len(body) > maxWebhookBody {
@@ -185,7 +199,14 @@ func (h authHandlers) webhook(e *core.RequestEvent) error {
 	if !validSignature(h.WebhookSecret, body, e.Request.Header.Get("X-Hub-Signature-256")) {
 		return errorJSON(e, http.StatusUnauthorized)
 	}
-	if e.Request.Header.Get("X-GitHub-Event") != "github_app_authorization" {
+	event := e.Request.Header.Get("X-GitHub-Event")
+	if accessEvents[event] {
+		if h.OnAccessChange != nil {
+			h.OnAccessChange()
+		}
+		return e.NoContent(http.StatusNoContent)
+	}
+	if event != "github_app_authorization" {
 		return e.NoContent(http.StatusNoContent)
 	}
 
