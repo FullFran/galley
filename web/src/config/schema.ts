@@ -1,6 +1,7 @@
 import { dump, load } from 'js-yaml';
 import { globError, isPlainPath } from './glob';
 import { CONFIG_PATH } from './project';
+import { SECTION_STATUSES, type SectionStatus } from '../team/sections';
 
 // `.galley.yml`: galley's project configuration, versioned in the paper
 // repository. Anyone with write access can change it on GitHub, so it is
@@ -44,7 +45,12 @@ export interface GalleyConfig {
   editor?: { defaultMode?: EditorMode };
   /** Who may add sections and subsections in galley; undefined means `write`. */
   structure?: StructureRole;
+  /** Review status of each section file, keyed by path; shown as outline badges. */
+  sections?: Record<string, { status: SectionStatus }>;
 }
+
+export type { SectionStatus };
+export const MAX_SECTIONS = 500;
 
 export type StructureRole = 'admin' | 'write';
 
@@ -64,7 +70,7 @@ export interface ParsedConfig {
 type Record_ = Record<string, unknown>;
 const isRecord = (v: unknown): v is Record_ => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-const TOP_KEYS = ['version', 'title', 'entry', 'editable', 'uploads', 'labels', 'preview', 'editor', 'structure'];
+const TOP_KEYS = ['version', 'title', 'entry', 'editable', 'uploads', 'labels', 'preview', 'editor', 'structure', 'sections'];
 const UPLOAD_KEYS = ['folder', 'accept', 'max_size_mb'];
 const PREVIEW_KEYS = ['auto_compile'];
 const EDITOR_KEYS = ['default_mode'];
@@ -192,7 +198,34 @@ export function parseConfig(text: string): ParsedConfig {
     else config.structure = doc.structure;
   }
 
+  if (doc.sections !== undefined) parseSections(doc.sections, config, error, warn);
+
   return problems.some((p) => p.severity === 'error') ? { problems } : { config, problems };
+}
+
+function parseSections(value: unknown, config: GalleyConfig, error: (m: string) => void, warn: (m: string) => void): void {
+  if (!isRecord(value)) return void error('"sections" must map section files to their status.');
+  if (Object.keys(value).length > MAX_SECTIONS) return void error(`"sections" has more than ${MAX_SECTIONS} entries.`);
+  const sections: Record<string, { status: SectionStatus }> = {};
+  for (const [path, entry] of Object.entries(value)) {
+    const problem = globError(path) ?? (isPlainPath(path) ? undefined : 'must be one file, without wildcards.');
+    if (problem) {
+      error(`"sections" key (${path}) ${problem}`);
+      continue;
+    }
+    if (!isRecord(entry)) {
+      error(`"sections" entry for ${path} must be a mapping with a "status".`);
+      continue;
+    }
+    for (const key of Object.keys(entry)) if (key !== 'status') warn(`sections.${path}: unknown setting "${key}" is ignored.`);
+    const status = entry.status;
+    if (typeof status !== 'string' || !(SECTION_STATUSES as readonly string[]).includes(status)) {
+      error(`"sections" status for ${path} must be draft, in_review or approved.`);
+      continue;
+    }
+    sections[path] = { status: status as SectionStatus };
+  }
+  config.sections = sections;
 }
 
 function parseUpload(
@@ -258,5 +291,7 @@ export function serializeConfig(config: GalleyConfig): string {
   out.preview = { auto_compile: config.preview.autoCompile };
   if (config.editor?.defaultMode) out.editor = { default_mode: config.editor.defaultMode };
   if (config.structure === 'admin') out.structure = 'admin';
+  const sections = Object.keys(config.sections ?? {}).sort();
+  if (sections.length > 0) out.sections = Object.fromEntries(sections.map((k) => [k, { status: config.sections?.[k]?.status }]));
   return dump(out, { lineWidth: -1, noRefs: true });
 }

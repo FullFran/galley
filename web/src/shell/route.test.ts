@@ -26,6 +26,7 @@ describe('hash routes', () => {
     ['#/r/o/paper/proposals/by/ana-b', { name: 'proposals', owner: 'o', repo: 'paper', author: 'ana-b' }],
     ['#/r/Org-1/my.repo_2', { name: 'workspace', owner: 'Org-1', repo: 'my.repo_2' }],
     ['#/r/o/paper/history', { name: 'history', owner: 'o', repo: 'paper' }],
+    ['#/r/o/paper/asks', { name: 'asks', owner: 'o', repo: 'paper' }],
     ['#/r/o/paper/history/compare/abc1234...def5678', { name: 'history', owner: 'o', repo: 'paper', compare: { base: 'abc1234', head: 'def5678', since: false } }],
     ['#/r/o/paper/history/since/abc1234...def5678', { name: 'history', owner: 'o', repo: 'paper', compare: { base: 'abc1234', head: 'def5678', since: true } }],
   ];

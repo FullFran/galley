@@ -65,6 +65,7 @@ import { useChat } from './Chat';
 import type { HistoryGateway } from '../github/history';
 import { prepareRestore, type RestoreChange } from '../history/restore';
 import { LastVisitBannerView, useLastVisit, useRestore } from './useHistory';
+import { useTeam } from './useTeam';
 
 // The YAML parser, the wizard and the settings form load on demand.
 type SettingsModule = typeof import('./ProjectSettings');
@@ -75,6 +76,11 @@ const loadPanels = () => import('../ui/admin/AdminPanels');
 // The History screen loads on demand too.
 type HistoryModule = typeof import('./History');
 const loadHistory = () => import('./History');
+// My asks and Team activity load on demand too.
+type AsksModule = typeof import('./MyAsks');
+const loadAsks = () => import('./MyAsks');
+type TeamActivityModule = typeof import('./TeamActivity');
+const loadTeamActivity = () => import('./TeamActivity');
 
 export interface WorkspaceProps {
   gateway: RepoGateway;
@@ -83,7 +89,7 @@ export interface WorkspaceProps {
   access: (repo: Repository) => Promise<RepoAccess>;
   shell: ShellContext;
   /** Where the URL points inside this repository: a file, or an admin tab. */
-  route: Extract<RepoRoute, { name: 'workspace' | 'admin' | 'history' }>;
+  route: Extract<RepoRoute, { name: 'workspace' | 'admin' | 'history' | 'asks' }>;
   /** Moves to another route (App keeps the URL and the unsaved-changes guard). */
   onRoute: (route: RepoRoute) => void;
   /** Called with the edits that are not saved yet, so they can stay visible. */
@@ -133,6 +139,9 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   const [noteRequest, setNoteRequest] = useState(0);
   const adminTab: AdminTabId | undefined = route.name === 'admin' ? route.tab : undefined;
   const historyRoute = route.name === 'history' ? route : undefined;
+  const asksRoute = route.name === 'asks';
+  const [asksModule, setAsksModule] = useState<AsksModule>();
+  const [teamActivity, setTeamActivity] = useState<TeamActivityModule>();
   const [historyModule, setHistoryModule] = useState<HistoryModule>();
   // Files restored from History, waiting for the next save.
   const restored = useRestore();
@@ -267,6 +276,20 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   const main = mainDocument(visible.filter((p) => fileKind(p) !== 'binary'), entry);
   const openText = openPath ? buffers[openPath]?.text : undefined;
   const outline = useMemo(() => (openText === undefined ? [] : extractOutline(openText)), [openText]);
+  const team = useTeam({
+    team: shell.team,
+    gateway,
+    repo,
+    working,
+    project,
+    admin,
+    me: shell.user?.login,
+    buffers,
+    setBuffers,
+    onReplaced: (path) => path === openPathRef.current && setEditorRev((n) => n + 1),
+    notify: setNotice,
+    onAuthRequired: () => onAuthRequired(unsavedChanges(buffersRef.current)),
+  });
 
   const showFile = (path: string, follow: boolean) => {
     setOpenPath(path);
@@ -611,6 +634,15 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
     loadHistory().then(setHistoryModule, (err: unknown) => fail(err, setFileError));
   }, [historyRoute !== undefined, historyModule, fail]);
 
+  useEffect(() => {
+    if (!asksRoute || asksModule) return;
+    loadAsks().then(setAsksModule, (err: unknown) => fail(err, setFileError));
+  }, [asksRoute, asksModule, fail]);
+  useEffect(() => {
+    if (!admin || adminTab !== 'team' || teamActivity) return;
+    loadTeamActivity().then(setTeamActivity, (err: unknown) => fail(err, setFileError));
+  }, [admin, adminTab, teamActivity, fail]);
+
   /** Restored files become unsaved changes (never a commit); then back to the editor. */
   const restoreFromHistory = async (changes: RestoreChange[], when: string) => {
     if (!working) return;
@@ -648,16 +680,17 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   const navigate = (id: NavId) => {
     if (id === 'admin') return openSettings();
     if (id === 'history') return onRoute({ name: 'history', ...base });
+    if (id === 'asks') return onRoute({ name: 'asks', ...base });
     if (id === 'comments' && comments.enabled) {
-      if (adminTab || historyRoute) toEditor();
+      if (adminTab || historyRoute || asksRoute) toEditor();
       return comments.toggle();
     }
     if (id === 'chat' && chat.enabled) {
-      if (adminTab || historyRoute) toEditor();
+      if (adminTab || historyRoute || asksRoute) toEditor();
       return chat.toggle();
     }
     if (id === 'contents') {
-      if (adminTab || historyRoute) toEditor();
+      if (adminTab || historyRoute || asksRoute) toEditor();
       return;
     }
     shell.onNavigate(id);
@@ -683,11 +716,11 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   };
   const crumbs: (string | Crumb)[] = [
     repoCrumb,
-    ...(adminTab ? [t.admin.title, t.admin[adminTab]] : historyRoute ? [t.history.title] : openPath ? fileCrumbs(openPath) : []),
+    ...(adminTab ? [t.admin.title, t.admin[adminTab]] : historyRoute ? [t.history.title] : asksRoute ? [t.team.asksTitle] : openPath ? fileCrumbs(openPath) : []),
   ];
-  const active: NavId = adminTab ? 'admin' : historyRoute ? 'history' : 'contents';
+  const active: NavId = adminTab ? 'admin' : historyRoute ? 'history' : asksRoute ? 'asks' : 'contents';
   // Admin and History replace the editor: no editor actions in the header.
-  const away = adminTab !== undefined || historyRoute !== undefined;
+  const away = adminTab !== undefined || historyRoute !== undefined || asksRoute;
 
   if (loadError) {
     return (
@@ -843,6 +876,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
               onOpenFile={(p) => void openFile(p)}
               onHeading={goToHeading}
               structure={authoring.structure}
+              team={team.outline}
             />
           }
           files={
@@ -894,6 +928,13 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
           coauthorView={viewAs === 'coauthor'}
           onCoauthorView={(on) => changeViewAs(on ? 'coauthor' : 'all')}
           coauthorCount={visibleFiles(working.files, project, false).length}
+          team={
+            shell.team && teamActivity ? (
+              <teamActivity.TeamActivity team={shell.team} repo={repo} onAuthRequired={() => onAuthRequired(unsavedChanges(buffersRef.current))} />
+            ) : (
+              <Skeleton lines={6} label={t.team.activityLoading} />
+            )
+          }
           panel={
             admin && adminPanels && isPanelTab(adminTab) ? (
               <adminPanels.AdminPanels
@@ -924,6 +965,12 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
             )
           }
         />
+      ) : asksRoute ? (
+        shell.team && asksModule ? (
+          <asksModule.MyAsks team={shell.team} repo={repo} me={shell.user?.login} onAuthRequired={() => onAuthRequired(unsavedChanges(buffersRef.current))} />
+        ) : (
+          <Skeleton lines={6} label={t.team.asksLoading} />
+        )
       ) : historyRoute ? (
         history && historyModule ? (
           <historyModule.History
@@ -1000,6 +1047,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
         </div>
       )}
       {authoring.dialogs}
+      {team.dialogs}
       <FigureLightbox path={figure?.path} state={figure?.state ?? { kind: 'loading' }} onClose={() => setFigure(undefined)} />
     </AppShell>
   );

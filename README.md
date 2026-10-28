@@ -889,6 +889,50 @@ The port is `HistoryGateway` in `web/src/github/history.ts`; version and
 label mapping, label name rules, the restore plan and the last-visit store are
 plain functions in `web/src/history/`.
 
+## Team
+
+Team features (roadmap item 14) use GitHub itself; galley stores nothing new.
+
+- **Section owners** from `CODEOWNERS` (`web/src/team/codeowners.ts`: the first
+  of `.github/`, root, `docs/`; gitignore-like patterns, last match wins):
+  initials next to each section in the outline, login in the tooltip. On a
+  proposal, a "Section owners" box lists "Owner: @x" for each changed file
+  (CODEOWNERS of the default branch) and "Ask owners to review" requests the
+  user owners (not teams or emails, not the author) as reviewers. Admins edit
+  owners from a section's ⋯ menu; the CODEOWNERS change is a pending edit,
+  saved for review. Owners need write access or GitHub skips them.
+- **Section status** (`draft`, `in_review`, `approved`) in `.galley.yml`
+  `sections` (see `docs/galley-yml.md`): outline badges; admins and the
+  section's owners change it from the ⋯ menu as a pending `.galley.yml` edit.
+- **Asks with due dates**: "Ask someone to review…" (section ⋯ menu, or the
+  proposal's Section owners box) creates a GitHub issue "Review: {name}" with
+  links to galley and GitHub, label `galley-ask` (created if missing), the
+  person as assignee and a milestone "Due YYYY-MM-DD" (created or reused,
+  `due_on` at 12:00 UTC so the day survives time zones). **My asks** (sidebar,
+  Review group; `#/r/{o}/{r}/asks`, a lazy chunk) lists open `galley-ask`
+  issues assigned to you or opened by you, soonest due first, overdue
+  highlighted, with "Comment on GitHub" and "Done" (closes the issue as
+  completed). GitHub keeps the assignee and milestone of a new issue only when
+  the creator has push access.
+- **Team activity** (Admin → Team activity, next to Activity log; lazy): per
+  person, alphabetical, the last 7 days: saves (commits on `galley/*` branches
+  and the default branch, de-duplicated, at most 30 branches), proposals
+  opened and merged (the 100 most recently updated), reviews and comments.
+  Bots are left out; no totals or rankings.
+
+| Endpoint | Permission (GitHub App, user token) |
+| --- | --- |
+| `GET labels/{name}`, `GET milestones`, `GET issues`, `GET assignees`, `GET issues/comments` | Issues: read |
+| `POST labels`, `POST milestones`, `POST issues`, `PATCH issues/{n}` | Issues: write |
+| `GET branches`, `GET commits` | Contents: read |
+| `GET pulls`, `GET pulls/comments`, `GET pulls/{n}/reviews` | Pull requests: read |
+| `POST pulls/{n}/requested_reviewers` | Pull requests: write |
+
+Checked against docs.github.com "Permissions required for GitHub Apps" and
+"About code owners" (2026-10-28). The port is `TeamGateway` in
+`web/src/github/team.ts`; parsing, mapping and aggregation are plain
+functions in `web/src/team/`.
+
 ## Comments in the editor and the preview
 
 Comments anywhere (not only on changed lines), stored by the galley backend

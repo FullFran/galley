@@ -35,6 +35,9 @@ preview:
 editor:
   default_mode: writing
 structure: write
+sections:
+  sections/01-introduction.qmd:
+    status: in_review
 ```
 
 ## Fields
@@ -53,6 +56,8 @@ structure: write
 | `preview.auto_compile` | no | `true` or `false` | `false` | Default for people who have not chosen; each person can toggle it. |
 | `editor.default_mode` | no | `writing` or `code` | Writing for co-authors, Code for admins | Editor mode for people who have not chosen one. |
 | `structure` | no | `admin` or `write` | `write` | Who may add sections and subsections in galley: everyone with write access, or only admins. |
+| `sections` | no | map of section file to settings, at most 500 | none | Per-section settings, keyed by plain path (no wildcards). |
+| `sections.<path>.status` | yes (per entry) | `draft`, `in_review` or `approved` | | Review status, shown as a badge in the outline. |
 
 ## Uploads
 
@@ -124,6 +129,33 @@ Advanced.
   `editable` blocks are in block style; otherwise galley rewrites the file in
   its fixed key order.
 
+## Section status and owners
+
+`sections` gives each section file (the main file or a file it includes) a
+review status: `draft`, `in_review` or `approved`. galley shows it as a badge
+next to the section in the outline (Contents → Outline). An unknown status,
+a wildcard key or a value that is not a mapping with `status` is an error;
+other keys inside an entry are warnings.
+
+Who changes a status from galley (decided 2026-10-28): **admins, and the
+owners of that section** (a user owner named in CODEOWNERS, matched by login;
+team membership is not looked up). Others see the badges only. A change is a
+pending edit to `.galley.yml` in the person's own copy, saved for review like
+any edit, so it reaches the default branch through a proposal. galley changes
+the one `status:` line (or adds the entry or the `sections:` block) and keeps
+comments; for flow-style YAML (`sections: {}`) it rewrites the whole file, as
+Project settings does.
+
+Section owners come from `CODEOWNERS`, not from this file: GitHub uses the
+first of `.github/CODEOWNERS`, `CODEOWNERS` and `docs/CODEOWNERS`; patterns
+follow gitignore rules (no `!`, `[ ]` or `\#`), the last matching rule wins,
+and a line with invalid syntax is skipped. Owners appear as initials next to
+each section (login in the tooltip). Admins can change the owners of a section
+from its ⋯ menu: galley writes a `/path @owner …` rule (replacing the exact
+rule for that file, or appending one at the end so it wins), or creates
+`.github/CODEOWNERS`; again a pending edit, saved for review. Owners need
+explicit write access to the repository, or GitHub ignores them.
+
 ## Patterns
 
 Paths are relative to the repository root and use `/` between folders.
@@ -150,7 +182,7 @@ Paths are relative to the repository root and use `/` between folders.
   defaults: co-authors see the paper's text files (`.qmd`, `.md`, `.bib`, no
   hidden folders), and admins see the errors on the workspace and settings
   screens.
-- **Warnings** (unknown keys) are shown to admins; the rest of the file still
+- **Warnings** (unknown keys, also inside a `sections` entry) are shown to admins; the rest of the file still
   applies.
 - The file may be at most 64 KB.
 
