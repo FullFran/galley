@@ -445,6 +445,48 @@ label {
   color: var(--danger-fg);
 }
 
+/* CI build chip (a link to the run) and the compiled-PDF download links. */
+a.ci-chip,
+.row a.ci-chip {
+  font-size: var(--text-xs);
+  text-decoration: none;
+}
+
+a.ci-chip:hover {
+  text-decoration: underline;
+}
+
+.ci-download-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2) !important;
+}
+
+a.button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+a.button:hover {
+  background: var(--hover);
+}
+
+a.button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
 .badge {
   margin-left: auto;
   min-width: 1.5rem;

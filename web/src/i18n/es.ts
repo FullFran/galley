@@ -18,6 +18,27 @@ export const es: Messages = {
   meta: {
     lang: 'es',
   },
+  /** CI builds of the paper (GitHub Actions): status chips and the compiled PDF. */
+  ci: {
+    running: 'Compilando…',
+    success: 'Compilado',
+    failure: 'Falló',
+    runTitle: 'Ver la compilación en GitHub',
+    downloadLatest: 'Descargar el último PDF',
+    downloadProposal: 'Descargar el PDF de esta propuesta',
+    fetching: 'Obteniendo el PDF compilado de GitHub…',
+    ready: 'El PDF compilado está listo.',
+    downloadPdf: 'Descargar PDF',
+    downloadDocx: 'Descargar DOCX',
+    downloadDiff: 'Descargar el PDF de cambios',
+    openPdf: 'Abrir PDF',
+    expired: 'Este PDF compilado ha caducado: GitHub guarda los archivos de compilación durante un tiempo limitado. Vuelve a compilar para obtener uno nuevo.',
+    stillRunning: 'Todavía se está compilando. Vuelve a intentarlo en unos minutos.',
+    none: 'Todavía no hay ningún PDF compilado.',
+    empty: 'La compilación terminó sin PDF.',
+    failed: 'No se pudo obtener el PDF compilado. Vuelve a intentarlo o descárgalo desde GitHub.',
+    openRun: 'Abrir la compilación en GitHub',
+  },
   app: {
     name: 'galley',
     loading: 'Cargando…',

@@ -73,7 +73,8 @@ func repo(id int64, name string, push, pull bool) string {
 func TestInstalledRepos(t *testing.T) {
 	c := newClient(t, installations(t, map[string][]string{
 		"11": {repo(1, "o/a", true, true), repo(2, "o/b", false, true), repo(3, "o/c", false, true)},
-		"12": {repo(4, "p/d", false, false), `{"id":5,"full_name":"p/e","permissions":{"maintain":true}}`},
+		"12": {repo(4, "p/d", false, false), `{"id":5,"full_name":"p/e","permissions":{"maintain":true}}`,
+			`{"id":6,"full_name":"p/f","permissions":{"admin":true}}`},
 	}, 0))
 	got, err := c.InstalledRepos(context.Background(), "ghu_user")
 	if err != nil {
@@ -85,6 +86,7 @@ func TestInstalledRepos(t *testing.T) {
 		3: {FullName: "o/c", Pull: true},
 		4: {FullName: "p/d"},
 		5: {FullName: "p/e", Pull: true, Push: true},
+		6: {FullName: "p/f", Pull: true, Push: true, Admin: true},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %d repos: %+v", len(got), got)

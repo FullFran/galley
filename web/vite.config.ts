@@ -8,7 +8,12 @@ const APP_CSP = [
   "style-src 'self'",
   // blob: for the upload preview (an <img> of the chosen file, created in this page).
   "img-src 'self' data: blob:",
-  "connect-src 'self' https://api.github.com https://galley-api.fullfran.com",
+  // *.blob.core.windows.net: GitHub Actions artifact zips. api.github.com answers
+  // the download with a redirect to a short-lived signed URL there (for example
+  // productionresultssaNN.blob.core.windows.net, CORS `*`); CSP host wildcards
+  // only cover a whole leftmost label. github/client.ts allows that redirect
+  // for the artifact zip endpoint alone.
+  "connect-src 'self' https://api.github.com https://galley-api.fullfran.com https://*.blob.core.windows.net",
   "frame-src 'self'",
   "worker-src 'self'",
   "object-src 'none'",

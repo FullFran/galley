@@ -1,6 +1,7 @@
 import { render } from 'preact';
 import { App } from './App';
 import { createSession } from './auth/session';
+import { createGitHubCiGateway } from './github/ci';
 import { createGitHubGateway } from './github/gateway';
 import { createGitHubReviewGateway } from './github/review';
 import { createHttpCommentsGateway } from './comments/http';
@@ -19,9 +20,10 @@ const reviews = createGitHubReviewGateway({ tokens: session });
 const comments = createHttpCommentsGateway();
 const drafts = createHttpDraftsGateway();
 const chat = createHttpChatGateway();
+const ci = createGitHubCiGateway({ tokens: session });
 render(
   <LocaleProvider>
-    <App session={session} gateway={gateway} reviews={reviews} comments={comments} drafts={drafts} chat={chat} />
+    <App session={session} gateway={gateway} reviews={reviews} comments={comments} drafts={drafts} chat={chat} ci={ci} />
   </LocaleProvider>,
   root,
 );

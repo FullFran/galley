@@ -1,11 +1,13 @@
 import { createContext, type ComponentChildren } from 'preact';
 import { useContext, useEffect, useState } from 'preact/hooks';
 import type { Person, Repository } from '../../domain';
+import type { CiGateway } from '../../github/ci';
 import { useT } from '../../i18n';
 import { navLabel, visibleNav, type GroupId, type NavId, type NavItem } from '../../shell/nav';
 import { autoOpen, groupKeyAction, isGroupOpen, readGroups, toggleGroup, writeGroups, type SidebarMode } from '../../shell/navGroups';
 import { matchShortcut, typingAt } from '../../shell/shortcuts';
 import type { SidebarControl } from '../../shell/useSidebar';
+import { usePdfDownload } from '../ci/PdfDownload';
 import { AboutDialog } from './AboutDialog';
 import { AccountMenu } from './AccountMenu';
 import { Icon } from './icons';
@@ -32,6 +34,8 @@ export interface ShellContext {
   /** The repository switcher (the repository list). */
   onRepos: () => void;
   onSignOut: () => void;
+  /** CI builds (status chips, compiled PDF); absent without the Actions/Checks permissions wired in. */
+  ci?: CiGateway;
 }
 
 /** A breadcrumb segment; with `onSelect` it is a button. */
@@ -65,7 +69,7 @@ export interface AppShellProps {
   children: ComponentChildren;
 }
 
-const UiContext = createContext<{ openShortcuts: () => void }>({ openShortcuts: () => undefined });
+const UiContext = createContext<{ openShortcuts: () => void; downloadLatestPdf?: () => void }>({ openShortcuts: () => undefined });
 
 function storage(): Storage | undefined {
   try {
@@ -78,7 +82,7 @@ function storage(): Storage | undefined {
 /** The header ⋯ menu: the screen's own actions, then Keyboard shortcuts. */
 export function MoreMenu({ items = [] }: { items?: MoreItem[] }) {
   const t = useT();
-  const { openShortcuts } = useContext(UiContext);
+  const { openShortcuts, downloadLatestPdf } = useContext(UiContext);
   return (
     <Menu id="more-menu" label={t.shell.more} buttonClass="icon-button more-button" tooltip={t.shell.more} buttonContent={<Icon name="dots" />}>
       {items.map((item) => (
@@ -86,6 +90,7 @@ export function MoreMenu({ items = [] }: { items?: MoreItem[] }) {
           {item.label}
         </MenuItem>
       ))}
+      {downloadLatestPdf && <MenuItem onSelect={downloadLatestPdf}>{t.ci.downloadLatest}</MenuItem>}
       <MenuItem onSelect={openShortcuts} kbd="?">
         {t.shell.shortcuts}
       </MenuItem>
@@ -109,6 +114,10 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
   const [shortcuts, setShortcuts] = useState(false);
   const [prefs, setPrefs] = useState(false);
   const [theme, setTheme] = useTheme();
+  // The default branch's latest compiled PDF, from the ⋯ menu of every repository screen.
+  const latestPdf = usePdfDownload(shell.ci);
+  const repo = shell.repo;
+  const downloadLatestPdf = latestPdf.start && repo ? () => latestPdf.start?.(repo, { branch: repo.defaultBranch }) : undefined;
   const [groupState, setGroupState] = useState(() => autoOpen(readGroups(storage()), active));
   const narrow = state.viewport === 'narrow';
   const collapsed = state.collapsed && !narrow;
@@ -165,7 +174,7 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
           : navLabel(item.id, t);
 
   return (
-    <UiContext.Provider value={{ openShortcuts: () => setShortcuts(true) }}>
+    <UiContext.Provider value={{ openShortcuts: () => setShortcuts(true), downloadLatestPdf }}>
       <div class="shell" data-collapsed={collapsed ? 'true' : undefined} data-drawer={state.drawerOpen ? 'open' : undefined}>
         <a
           class="skip-link"
@@ -362,6 +371,7 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
             </Toast>
           )}
           {toasts}
+          {latestPdf.toast}
         </Toasts>
         <AboutDialog open={about} onClose={() => setAbout(false)} />
         <ShortcutsDialog open={shortcuts} onClose={() => setShortcuts(false)} />

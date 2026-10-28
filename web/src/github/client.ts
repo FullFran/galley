@@ -50,6 +50,8 @@ export class GitHubClient {
       res = await this.send(url, options);
       if (res.status === 401) throw new AuthRequiredError('GitHub rejected the access token');
     }
+    // fetch follows redirects (renamed repositories answer 301); the answer must still come from GitHub's API.
+    if (res.url && new URL(res.url).origin !== GITHUB_API) throw new GatewayError('GitHub redirected off api.github.com');
     if (!res.ok && !options.allow?.includes(res.status)) throw await toError(res);
     let data: T;
     try {
@@ -97,6 +99,46 @@ export class GitHubClient {
     return all;
   }
 
+  /**
+   * Downloads an Actions artifact zip. The only request allowed to leave
+   * api.github.com: GitHub answers 302/303 with a short-lived signed URL on
+   * Azure blob storage, which fetch follows (dropping Authorization on the
+   * cross-origin hop). Any other path is refused before sending, and a
+   * redirect anywhere but blob storage is refused before reading. 410 means
+   * the artifact expired.
+   */
+  async downloadArtifact(path: string, repositoryId?: number): Promise<{ kind: 'ok'; bytes: Uint8Array } | { kind: 'expired' }> {
+    const url = new URL(toGitHubUrl(path));
+    if (!isArtifactZipPath(url)) throw new GatewayError(`not an artifact download: ${url.pathname}`);
+    const get = async () => {
+      const token = await this.tokens.getAccessToken(repositoryId);
+      try {
+        // Only CORS-safelisted headers besides Authorization, so the redirected
+        // request (without Authorization) needs no preflight at the blob host.
+        return await this.fetch(url.href, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' }, redirect: 'follow' });
+      } catch {
+        throw new TransientError('artifact download failed');
+      }
+    };
+    let res = await get();
+    if (res.status === 401) {
+      this.tokens.invalidate();
+      res = await get();
+      if (res.status === 401) throw new AuthRequiredError('GitHub rejected the access token');
+    }
+    if (res.url) {
+      const landed = new URL(res.url);
+      if (landed.origin !== GITHUB_API && !isArtifactHost(landed)) throw new GatewayError(`unexpected artifact host ${landed.host}`);
+    }
+    if (res.status === 410) return { kind: 'expired' };
+    if (!res.ok) throw await toError(res);
+    try {
+      return { kind: 'ok', bytes: new Uint8Array(await res.arrayBuffer()) };
+    } catch {
+      throw new TransientError('artifact download interrupted');
+    }
+  }
+
   private async send(url: string, options: RequestOptions): Promise<Response> {
     const token = await this.tokens.getAccessToken(options.repositoryId);
     const headers: Record<string, string> = {
@@ -121,6 +163,19 @@ function toGitHubUrl(pathOrUrl: string): string {
   const url = new URL(pathOrUrl, GITHUB_API);
   if (url.origin !== GITHUB_API) throw new GatewayError(`unexpected host ${url.host}`);
   return url.href;
+}
+
+/** `/repos/{owner}/{repo}/actions/artifacts/{id}/zip` on api.github.com, nothing else. */
+export function isArtifactZipPath(url: URL): boolean {
+  return url.origin === GITHUB_API && /^\/repos\/[^/]+\/[^/]+\/actions\/artifacts\/\d+\/zip$/.test(url.pathname);
+}
+
+/**
+ * Where GitHub stores artifacts (for example productionresultssa12.blob.core.windows.net).
+ * Must match the CSP `connect-src` entry in vite.config.ts.
+ */
+export function isArtifactHost(url: URL): boolean {
+  return url.protocol === 'https:' && /^[a-z0-9-]+\.blob\.core\.windows\.net$/.test(url.hostname) && url.port === '';
 }
 
 function nextLink(header: string | null): string | undefined {

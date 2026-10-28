@@ -193,11 +193,13 @@ type ListFilter struct {
 	At string
 }
 
-// RepoPermission is what a user may do on a repository.
+// RepoPermission is what a user may do on a repository. Admin is GitHub's
+// admin permission on the repository (it implies Push and Pull).
 type RepoPermission struct {
 	FullName string
 	Pull     bool
 	Push     bool
+	Admin    bool
 }
 
 // RepoAccess answers the user's permission on a repository, by GitHub

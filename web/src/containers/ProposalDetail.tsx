@@ -28,7 +28,9 @@ import { GitHubLink } from '../ui/review/GitHubLink';
 import { MergeBox, People, ReviewForm } from '../ui/review/SidePanel';
 import { StaleComments } from '../ui/review/StaleComments';
 import { useT, useTRef } from '../i18n';
-import { AppShell, type ShellContext } from '../ui/shell/AppShell';
+import { CiChip, useCiStatus } from '../ui/ci/CiChip';
+import { usePdfDownload } from '../ui/ci/PdfDownload';
+import { AppShell, MoreMenu, type ShellContext } from '../ui/shell/AppShell';
 import { Skeleton } from '../ui/shell/Skeleton';
 import { Toast } from '../ui/shell/Toasts';
 import { Preview } from './Preview';
@@ -122,6 +124,9 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
   // When the head moves (a suggestion was applied, someone pushed), drafts written
   // against the old head are not sent: their line numbers may point elsewhere.
   const head = data?.proposal.headSha;
+  // CI of the head commit: chip in the header line, PDF from the ⋯ menu.
+  const ciStatus = useCiStatus(shell.ci, repo, head);
+  const proposalPdf = usePdfDownload(shell.ci, onAuthRequired);
   useEffect(() => {
     if (!head) return;
     const split = splitByHead(pending, head);
@@ -292,13 +297,22 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
   const people = (fn: (logins: string[]) => Promise<void>, done: string) => (login: string) =>
     void act(() => fn([login]), done);
 
+  const pdfToast = proposalPdf.toast;
   const toasts = notice && (
     <Toast tone={notice.kind === 'error' ? 'danger' : 'ok'} onDismiss={() => setNotice(undefined)}>
       <p role={notice.kind === 'error' ? 'alert' : 'status'}>{notice.text}</p>
     </Toast>
   );
   return (
-    <AppShell shell={shell} active="proposals" crumbs={crumbs} toasts={toasts}>
+    <AppShell
+      shell={shell}
+      active="proposals"
+      crumbs={crumbs}
+      toasts={[toasts, pdfToast]}
+      actions={
+        <MoreMenu items={proposalPdf.start ? [{ label: t.ci.downloadProposal, onSelect: () => proposalPdf.start?.(repo, { sha: proposal.headSha }) }] : []} />
+      }
+    >
     <div class="proposal">
       <div class="proposal-main">
         <p>
@@ -310,7 +324,7 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
         <p class="muted">
           #{proposal.number}
           {proposal.author && m.by(proposal.author.login)} · {m.state[proposal.state]}{' '}
-          <GitHubLink href={proposal.htmlUrl} />
+          <GitHubLink href={proposal.htmlUrl} /> <CiChip status={ciStatus} />
         </p>
         {proposal.body && <p class="comment-body">{proposal.body}</p>}
         <StaleComments comments={stale} onDismiss={() => setStale([])} />
