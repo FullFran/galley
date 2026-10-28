@@ -12,12 +12,12 @@ import (
 	"github.com/FullFran/galley/server/internal/httpapi"
 )
 
-func newTestHandler(t *testing.T) http.Handler {
+func newTestHandler(t *testing.T, deps httpapi.Deps) http.Handler {
 	t.Helper()
 	r := router.NewRouter(func(w http.ResponseWriter, req *http.Request) (*core.RequestEvent, router.EventCleanupFunc) {
 		return &core.RequestEvent{Event: router.Event{Response: w, Request: req}}, nil
 	})
-	httpapi.Register(r)
+	httpapi.Register(r, deps)
 	mux, err := r.BuildMux()
 	if err != nil {
 		t.Fatalf("build mux: %v", err)
@@ -36,7 +36,7 @@ func TestHealth(t *testing.T) {
 		{name: "POST is not routed", method: http.MethodPost, wantStatus: http.StatusNotFound},
 	}
 
-	handler := newTestHandler(t)
+	handler := newTestHandler(t, testDeps(&fakeAuth{}))
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			rec := httptest.NewRecorder()
