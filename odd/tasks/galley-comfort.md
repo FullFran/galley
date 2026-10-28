@@ -168,7 +168,8 @@ edit it, but anyone with write access could still change it on GitHub).
 - [ ] C5 Changed since last visit.
 - [ ] C6 Admin panel.
 - [ ] C7 Writing aids.
-- [ ] C8 PR/CI status.
+- [x] C8 PR/CI status and CI PDF (`feat/ci-pdf`). Route: delegated (2+ files).
+  Assessed tier and review outcome: pending (not committed by the writer).
 
 ## Progress and evidence
 
@@ -572,6 +573,28 @@ edit it, but anyone with write access could still change it on GitHub).
   - Bundle: main 278.0 → 308.6 kB (gzip 95.4 → 106.9; about half is the new
     en + es copy); the plan module with js-yaml edits is a lazy 6 kB chunk.
 
+- C8 implemented (delegated writer, `feat/ci-pdf` on `1b8257e`): CI chip per
+  proposal (list and detail) from `commits/{sha}/check-runs`, polled every
+  20 s only while running and visible; "Download PDF of this proposal" and
+  "Download latest PDF" (default branch, successful push/dispatch runs) via
+  `actions/runs` → `artifacts` → `artifacts/{id}/zip`, unzipped with `fflate`
+  0.8.3 (lazy). The GitHub client allows leaving api.github.com only for the
+  artifact zip endpoint and only to `*.blob.core.windows.net`; CSP
+  `connect-src` adds `https://*.blob.core.windows.net`.
+  - CORS (real artifact `paper-pdf-docx`, owner's token, read-only): the zip
+    endpoint answers 303 to `productionresultssa12.blob.core.windows.net` with
+    `Access-Control-Allow-Origin: *`; the blob answers `*` on GET and allows
+    preflights. Headless Chromium against the build fetched a real artifact
+    through the redirect and produced a 430 kB PDF blob.
+  - Tests first (RED: modules missing, `downloadArtifact` not a function), then
+    GREEN: status mapping, run and artifact choice (latest successful for the
+    SHA, expired), redirect allowance limited to the zip endpoint and blob
+    hosts, unzip picks the paper PDF. Lint, typecheck, 73 files / 702 tests,
+    build. Headless check (`pw/ci-check.mjs`, `shots-ci/`): 15 checks, 0
+    failed, no CSP violations, no page errors.
+  - Bundle: main 118.2 → 121.7 kB gzip (+3.4); fflate chunk 2.7 kB gzip.
+
 ## Next step
 
-Review, commit and open the CX2b pull request.
+Review, commit and open the C8 pull request; the org must have approved the
+Actions (read) and Checks (read) permissions (verified 2026-10-28).
