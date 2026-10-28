@@ -2,6 +2,7 @@ import type { ChangedFile, DiffSide, NewComment, ReviewComment } from '../../dom
 import { anchorOf, parsePatch, type DiffLine } from '../../review/diff';
 import { parseSuggestion, withoutSuggestion } from '../../review/suggestion';
 import { placeThreads, type Thread } from '../../review/threads';
+import { useT, type Messages } from '../../i18n';
 import { formatDate, GitHubLink } from './GitHubLink';
 
 /** A line comment being written. `startLine` is kept as typed until it is sent. */
@@ -105,11 +106,21 @@ export function FileDiff(props: FileDiffProps) {
   );
 }
 
+/** "Lines 5–9" for a hunk header such as `@@ -5,4 +5,5 @@`, instead of the raw header. */
+export function hunkLabel(text: string, t: Messages): string {
+  const m = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(text);
+  if (!m) return '';
+  const from = Number(m[1]);
+  const count = m[2] === undefined ? 1 : Number(m[2]);
+  return count === 0 ? '' : t.review.lines(from, from + count - 1);
+}
+
 function DiffRow({ line, onComment }: { line: DiffLine; onComment?: () => void }) {
+  const t = useT();
   if (line.kind === 'hunk' || line.kind === 'meta') {
     return (
       <div class="diff-row diff-hunk" role="row">
-        <code>{line.text}</code>
+        <span class="diff-gap">{line.kind === 'hunk' ? hunkLabel(line.text, t) : line.text}</span>
       </div>
     );
   }

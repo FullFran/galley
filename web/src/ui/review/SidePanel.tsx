@@ -1,6 +1,7 @@
 import type { MergeMethod, Person, Proposal, RepoAccess, ReviewEvent } from '../../domain';
 import { mergeLabel, METHOD_LABEL, REVIEWER_LABEL } from '../../review/labels';
 import { canMerge, type ReviewerRow } from '../../review/status';
+import { useT, type Messages } from '../../i18n';
 
 export interface PeopleProps {
   reviewers: ReviewerRow[];
@@ -103,19 +104,24 @@ export interface ReviewFormProps {
   onSubmit: () => void;
 }
 
-const EVENTS: { value: ReviewEvent; label: string }[] = [
-  { value: 'COMMENT', label: 'Comment' },
-  { value: 'APPROVE', label: 'Approve' },
-  { value: 'REQUEST_CHANGES', label: 'Ask for changes' },
+// Approving or asking for changes is what a review is for, so they come first;
+// the send button says what will happen.
+const events = (t: Messages): { value: ReviewEvent; label: string; send: string }[] => [
+  { value: 'APPROVE', label: t.review.approve, send: t.review.approve },
+  { value: 'REQUEST_CHANGES', label: t.review.askChanges, send: t.review.askChanges },
+  { value: 'COMMENT', label: t.review.commentOnly, send: t.review.sendComment },
 ];
 
 export function ReviewForm(props: ReviewFormProps) {
+  const t = useT();
+  const EVENTS = events(t);
   const { event, body, pendingCount, ownProposal, busy } = props;
   const needsBody = event === 'REQUEST_CHANGES' || (event === 'COMMENT' && pendingCount === 0);
   return (
-    <section class="side-block" aria-label="Your review">
+    <section class="side-block" aria-label="Your review" id="your-review" tabIndex={-1}>
       <h3>Your review</h3>
-      <fieldset class="review-events">
+      <fieldset class="segmented review-events">
+        <legend class="visually-hidden">{t.review.decision}</legend>
         {EVENTS.map((e) => (
           <label key={e.value}>
             <input
@@ -140,7 +146,7 @@ export function ReviewForm(props: ReviewFormProps) {
         </p>
       )}
       <button type="button" class="primary" disabled={busy || (needsBody && body.trim() === '')} onClick={props.onSubmit}>
-        Send review
+        {EVENTS.find((e) => e.value === event)?.send ?? 'Send review'}
       </button>
     </section>
   );
@@ -156,8 +162,9 @@ export interface MergeBoxProps {
 }
 
 export function MergeBox({ proposal, access, method, busy, onMethod, onMerge }: MergeBoxProps) {
-  if (proposal.state === 'merged') return <p class="banner banner-ok">This proposal has been merged.</p>;
-  if (proposal.state === 'closed') return <p class="banner">This proposal is closed.</p>;
+  const t = useT();
+  if (proposal.state === 'merged') return <p class="notice notice-ok">This proposal has been merged.</p>;
+  if (proposal.state === 'closed') return <p class="notice">This proposal is closed.</p>;
   const allowed = canMerge(proposal, access);
   return (
     <section class="side-block" aria-label="Merge">
@@ -169,21 +176,24 @@ export function MergeBox({ proposal, access, method, busy, onMethod, onMerge }: 
       )}
       {allowed && (
         <>
-          {access.mergeMethods.length > 1 && (
-            <label>
-              How to merge
-              <select value={method} onChange={(e) => onMethod((e.target as HTMLSelectElement).value as MergeMethod)}>
-                {access.mergeMethods.map((m) => (
-                  <option key={m} value={m}>
-                    {METHOD_LABEL[m]}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
           <button type="button" class="primary" disabled={busy} onClick={onMerge}>
             Merge
           </button>
+          {access.mergeMethods.length > 1 && (
+            <details class="merge-options">
+              <summary>{t.review.mergeOptions}</summary>
+              <label>
+                How to merge
+                <select value={method} onChange={(e) => onMethod((e.target as HTMLSelectElement).value as MergeMethod)}>
+                  {access.mergeMethods.map((m) => (
+                    <option key={m} value={m}>
+                      {METHOD_LABEL[m]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </details>
+          )}
         </>
       )}
     </section>

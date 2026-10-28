@@ -12,6 +12,8 @@ export interface EditorProps {
   /** Initial text; later changes are ignored, so render with `key={path}`. */
   doc: string;
   onChange: (text: string) => void;
+  /** Moves the cursor to this line and scrolls it to the top; `seq` changes for every jump. */
+  jumpTo?: { line: number; seq: number };
 }
 
 function language(path: string): Extension {
@@ -25,15 +27,24 @@ function language(path: string): Extension {
 // 'self'`) blocks. Inside a shadow root it uses a constructed stylesheet
 // (adoptedStyleSheets) instead, which CSP does not restrict. So the editor
 // lives in a shadow root, and its own styling goes through EditorView.theme.
+// Colours are the app's CSS custom properties, which inherit into the shadow
+// root, so the editor follows the light and dark themes.
 const theme = EditorView.theme({
-  '&': { flex: '1 1 auto', minWidth: '0', fontSize: '0.95rem' },
-  '.cm-scroller': { fontFamily: 'ui-monospace, monospace', lineHeight: '1.5' },
-  '.cm-content': { padding: '0.5rem 0' },
+  '&': { flex: '1 1 auto', minWidth: '0', height: '100%', fontSize: '0.9375rem', color: 'var(--fg)', backgroundColor: 'var(--surface)' },
+  '&.cm-focused': { outline: 'none' },
+  '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.6', overflow: 'auto' },
+  '.cm-content': { padding: '0.75rem 0', caretColor: 'var(--fg)' },
+  '.cm-cursor': { borderLeftColor: 'var(--fg)' },
+  '.cm-gutters': { backgroundColor: 'var(--surface)', color: 'var(--fg-muted)', borderRight: '1px solid var(--border)' },
+  '.cm-activeLine': { backgroundColor: 'var(--active-line)' },
+  '.cm-activeLineGutter': { backgroundColor: 'var(--active-line)' },
+  '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': { backgroundColor: 'var(--selection)' },
 });
 
 /** CodeMirror 6 editor. Owns the EditorView for its lifetime. */
-export function Editor({ path, doc, onChange }: EditorProps) {
+export function Editor({ path, doc, onChange, jumpTo }: EditorProps) {
   const host = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<EditorView>(undefined);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
@@ -62,9 +73,21 @@ export function Editor({ path, doc, onChange }: EditorProps) {
         ],
       }),
     });
-    return () => view.destroy();
+    viewRef.current = view;
+    return () => {
+      viewRef.current = undefined;
+      view.destroy();
+    };
     // The view is created once per mount; the parent remounts it per file.
   }, []);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !jumpTo) return;
+    const line = view.state.doc.line(Math.min(Math.max(1, jumpTo.line), view.state.doc.lines));
+    view.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 16 }) });
+    view.focus();
+  }, [jumpTo?.seq]);
 
   return <div class="editor" ref={host} />;
 }

@@ -13,10 +13,10 @@ const time = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digi
 /** Recompile button (Ctrl/Cmd+Enter), auto-compile toggle and compile state, above the preview. */
 export function CompileBar({ compiling, stale, lastCompiledAt, auto, onRecompile, onAuto }: CompileBarProps) {
   return (
-    <div class="compile-bar">
+    <div class="compile-bar" data-tour="compile">
       <button
         type="button"
-        class="primary"
+        class="secondary"
         onClick={onRecompile}
         disabled={compiling}
         title="Recompile (Ctrl+Enter or Cmd+Enter)"

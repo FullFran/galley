@@ -148,8 +148,8 @@ steps. Artifacts: `.github/workflows/pages.yml`, `server/Dockerfile` and
 
 ## Frontend
 
-The UI avoids git terms: a save is "Save" and the pull request is "a proposal
-for review", with a link to it on GitHub. Containers in `web/src/containers/`
+The UI avoids git terms: a save is "Save for review" and the pull request is
+"a proposal for review", with a link to it on GitHub. Containers in `web/src/containers/`
 own state and call the gateway; components in `web/src/ui/` only render props.
 Edited files are kept in memory until saved, and the page warns before closing
 with unsaved changes. If someone else changed the branch since it was opened,
@@ -158,6 +158,50 @@ reloading. If the session ends, unsaved text is shown on the sign-in screen.
 Opened over plain `http:` on a public host, the sign-in screen links to the
 https address instead of trying to sign in (the session cookie is `Secure`);
 http on `localhost` and `127.0.0.1` keeps working for local development.
+
+### UI overview
+
+- **Landing**: what galley does, one "Sign in with GitHub" button, what access
+  it needs, a static editor + preview drawing (HTML/CSS) and the author credit.
+- **App shell** (`web/src/ui/shell/AppShell.tsx`): skip link, sidebar, sticky
+  3.5rem header (breadcrumb, save state, the screen's actions) and a main
+  region that scrolls on its own; the shell is `100dvh`, so the header and
+  "Save for review" never scroll away. Notices are non-modal toasts.
+- **Sidebar**: navigation declared once as data (`web/src/shell/nav.ts`) and
+  filtered by role: Repositories, Paper (main file pinned first, then the
+  outline of the open file; a heading moves the editor and the preview there),
+  Files (tree with file-kind icons, an edited dot, `.galley.yml` visibility and
+  labels; admins can switch between "Show all files" and "View as co-author",
+  kept per repository in `localStorage`, with project settings still open to
+  them), Proposals (open count, your own proposal), Project settings (admins
+  only, after a separator), Take the tour and About galley, then the account,
+  Sign out and the credit. It is 16rem wide from 1024px, an icon rail (3.5rem,
+  with tooltips) from 768px, and an off-canvas drawer below. Ctrl/Cmd+B
+  toggles it outside text fields; the collapse choice is kept in
+  `localStorage` (guarded), the drawer closes on navigation and on Escape and
+  gives focus back to the menu button (`web/src/shell/sidebar.ts`,
+  `useSidebar.ts`).
+- **Workspace**: the main document opens on its own (`.galley.yml` `entry`,
+  else `index.qmd`, else the first top-level document). Editor and preview sit
+  side by side from 1024px; below that an Edit | Preview switch in the header
+  shows one at a time. Compile controls stay above the preview.
+- **Proposals**: rows that are one click target, review state as chips, and an
+  empty state that explains proposals. In a proposal, your review (approve, ask
+  for changes or comment) comes first, hunk headers read "Lines 5–9", merge
+  methods sit under "Merge options", and phones get a sticky "Write your
+  review" bar.
+- **Design rules**: semantic CSS tokens only (`web/src/styles.css`), light and
+  dark themes (`prefers-color-scheme`, or `data-theme` on `<html>`), one
+  accent spent on state, borders rather than shadows, 6px/10px radii, visible
+  2px focus rings, 44px targets, skeletons instead of "Loading…", colour
+  transitions only and none with reduced motion. Icons are inline SVG
+  components; no inline `style` attributes (CSP `style-src 'self'`).
+- **Copy**: every string of the new UI is in one typed English catalog,
+  `web/src/i18n/en.ts`, read with `useT()` from a Preact context whose default
+  is that catalog (no provider needed in tests). A Spanish catalog with the
+  same shape is planned; the sidebar footer has a slot for an ES | EN switch.
+- **Guided tour anchors**: `data-tour` on sidebar, outline, editor, preview,
+  save, proposals and compile, for the planned driver.js tour.
 
 ## Frontend data layer
 

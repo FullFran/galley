@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FRAME_READY, PREVIEW_RENDER, createReadyGate, parseFrameMessage, parseRenderMessage } from './protocol';
+import { FRAME_READY, PREVIEW_RENDER, PREVIEW_SCROLL, createReadyGate, parseFrameMessage, parseRenderMessage, parseScrollMessage } from './protocol';
 
 const valid = () => ({
   type: PREVIEW_RENDER,
@@ -72,5 +72,24 @@ describe('ready gate', () => {
     expect(gate.canPost()).toBe(false);
     expect(gate.ready()).toBe(true);
     expect(gate.canPost()).toBe(true);
+  });
+});
+
+describe('parseScrollMessage', () => {
+  const scroll = () => ({ type: PREVIEW_SCROLL, id: 'sec-band', text: 'Band model' });
+
+  it('accepts a heading target', () => {
+    expect(parseScrollMessage(scroll())).toEqual(scroll());
+    expect(parseScrollMessage({ ...scroll(), id: '' })).toEqual({ ...scroll(), id: '' });
+  });
+
+  it.each([
+    ['another type', { ...scroll(), type: PREVIEW_RENDER }],
+    ['extra keys', { ...scroll(), html: '<p>' }],
+    ['an id with markup', { ...scroll(), id: '"><img>' }],
+    ['a long text', { ...scroll(), text: 'x'.repeat(501) }],
+    ['a non-string text', { ...scroll(), text: 3 }],
+  ])('rejects %s', (_name, data) => {
+    expect(parseScrollMessage(data)).toBeUndefined();
   });
 });

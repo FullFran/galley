@@ -52,6 +52,16 @@ edit it, but anyone with write access could still change it on GitHub).
   credit ("Built by Francisco Olmedo", links to https://www.fullfran.com and
   the GitHub repo) in the landing footer, the sidebar footer and an About
   dialog, so galley can serve as a portfolio piece.
+- CX-i18n Spanish/English UI (Fran, 2026-10-28), after CX-UI: follow the
+  owner's hagalink/criba pattern: no library; `as const` typed dictionaries
+  grouped by area (`web/src/i18n/en.ts` exists since CX-UI, `es.ts` to add
+  with the same `Messages` shape); plurals and interpolation as small
+  functions; a Preact context whose default is the dictionary; the choice in
+  `localStorage` wrapped in try/catch; `<html lang>` kept in sync; a
+  hagabox-style key-parity Vitest test between catalogs; an ES | EN switcher
+  in the sidebar footer (slot left by CX-UI). Spanish register: informal
+  "tú", neutral Spanish compatible with Spain, no voseo, no exclamation marks
+  (owner's decision, 2026-10-28). `es.ts` is written after CX-UI.
 - CX3 Guided tour (Fran, 2026-10-28): an interactive onboarding guide modelled
   on hagalink/puertanueva `src/dominios/recorrido/` (PR #555, driver.js,
   author alvaroofernaandez): targets marked with `data-tour` attributes,
@@ -119,8 +129,15 @@ edit it, but anyone with write access could still change it on GitHub).
 - [x] C3 Review (`feat/comfort-review`). Route: delegated (2+ non-trivial
   files). Merged (PR #8, `e34cbcc`) and deployed; the live bundle contains
   the review UI.
-- [ ] CX1 Project config (`feat/comfort-config`). Route: delegated (2+
-  non-trivial files). Implemented and checked; pending commit, PR and merge.
+- [x] CX1 Project config (`feat/comfort-config`). Route: delegated (2+
+  non-trivial files). Merged (PR #9, `4589bf1`) and deployed.
+- [ ] CX-UI App shell redesign (`feat/comfort-shell`). Route: delegated (2+
+  non-trivial files, broad UI rewrite). Implemented and checked; pending
+  review, commit and PR.
+- [ ] CX-i18n Spanish/English UI. After CX-UI.
+- [ ] CX2 Writing feel, uploads and autocomplete.
+- [ ] CX3 Guided tour.
+- [ ] CX4 References manager.
 - [ ] C4 Drafts.
 - [ ] C5 Changed since last visit.
 - [ ] C6 Admin panel.
@@ -239,6 +256,57 @@ edit it, but anyone with write access could still change it on GitHub).
     remembered; missing and invalid configs show the notices and errors as
     text; no horizontal overflow at 390 px.
 
+- CX1 merged: PR #9 (`4589bf1`), deployed.
+- CX-UI implemented (delegated writer, branch `feat/comfort-shell`):
+  - Shell (`web/src/ui/shell/AppShell.tsx`): skip link, sidebar (16rem /
+    3.5rem icon rail with tooltips / phone drawer with scrim), sticky 3.5rem
+    header with breadcrumb, save state and actions, `100dvh` layout where
+    sidebar, editor and preview scroll on their own; toasts (z 60) instead of
+    banners above the editor; native `<dialog>` About (version, MIT, credits).
+  - Pure logic with tests: navigation data filtered by role
+    (`web/src/shell/nav.ts`), sidebar state machine and guarded persistence
+    (`sidebar.ts`; hook `useSidebar.ts` owns Ctrl/Cmd+B, Escape, focus
+    return), outline extraction with `{#sec-x}` ids and includes
+    (`outline.ts`), main document and save label (`workspace/session.ts`),
+    admin "View as co-author" filter and per-repo storage
+    (`config/viewAs.ts`, added at Fran's request), preview scroll message
+    (`preview/protocol.ts`, validated id/text).
+  - Audit fixes: "Save for review" in the header with an optional note
+    popover; aria-current plus weight and indicator for location; main
+    document opens on its own; Edit | Preview switch below 1024px; review
+    decision first with an action-named button, hunk headers shown as
+    "Lines 5–9", one Merge button with "Merge options", sticky review bar on
+    phones; proposal rows as one click target with status chips and a
+    teaching empty state; repository rows with visibility, last update
+    (`pushed_at`) and search from 6 repositories; accent tint instead of
+    success green for the open file; skeletons instead of "Loading…".
+  - Landing: value line, one "Sign in with GitHub", access note, HTML/CSS
+    editor + preview drawing, credit footer; http→https notice kept.
+  - Credit "Built by Francisco Olmedo" (https://www.fullfran.com) and the
+    source link in the landing footer, sidebar footer (info icon when
+    collapsed) and About, all `rel="noopener noreferrer"`.
+  - Tokens and light/dark themes in `web/src/styles.css`; editor colours and
+    syntax highlighting through CSS custom properties (they cross the shadow
+    root). No new dependency. Copy of the new UI in `web/src/i18n/en.ts`
+    (`as const`, `useT()` context with the English default).
+  - Checks: tests written first (RED: 5 new files failing on missing modules
+    plus 6 protocol cases; later `viewAs` RED on the missing module), then
+    GREEN. `npm ci --ignore-scripts` (0 vulnerabilities), lint, typecheck,
+    test (330 passed, 37 files), build. Sizes: main JS 149.5 → 159.1 kB gzip,
+    main CSS 2.2 → 6.7 kB gzip.
+  - Headless Chromium against the production build with mocked GitHub, at
+    1440, 1280 and 390 px in light and dark (82 screenshots in the session
+    scratchpad `shots-v2/`): no CSP violations, no page errors, no
+    horizontal overflow; main document opened automatically; outline heading
+    moves the editor cursor and scrolls the preview; Save stays in view while
+    the editor scrolls; Ctrl+B collapses and expands; the drawer takes focus,
+    closes on Escape and on opening a file, and returns focus to the menu
+    button; skip link is the first tab stop and focuses `main`; 2px focus
+    rings; no raw `@@` in the proposal view. The C3 review and CX1 config
+    scripts give the same requests and results as before the redesign. Admin
+    toggle: co-author view hides `figures/` and `_quarto.yml`, keeps project
+    settings, and is remembered after a reload.
+
 ## Next step
 
-Review, commit and open the CX1 pull request; then CX-UI.
+Review, commit and open the CX-UI pull request; then CX-i18n (`es.ts`).

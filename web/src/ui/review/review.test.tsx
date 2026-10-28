@@ -99,6 +99,12 @@ describe('review components render untrusted text as text', () => {
     const html = render(<FileDiff {...diffProps} />);
     expect(html).toContain('aria-label="Comment on line 2"');
   });
+
+  it('shows hunk positions in plain words instead of raw headers', () => {
+    const html = render(<FileDiff {...diffProps} />);
+    expect(html).not.toContain('@@');
+    expect(html).toContain('Lines 1–2');
+  });
 });
 
 const proposal: Proposal = {
