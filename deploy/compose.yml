@@ -1,0 +1,68 @@
+# galley API behind the existing Traefik (same pattern as the shadow-dungeon
+# API). Run from this directory with a filled .env next to it:
+#   docker compose up -d --build
+# No public port is published: Traefik reaches the container over its network.
+name: galley
+
+services:
+  galley-api:
+    build: ../server
+    image: galley-api:local
+    restart: unless-stopped
+    environment:
+      GALLEY_GITHUB_CLIENT_ID: ${GALLEY_GITHUB_CLIENT_ID:?set in .env}
+      GALLEY_GITHUB_CLIENT_SECRET: ${GALLEY_GITHUB_CLIENT_SECRET:?set in .env}
+      GALLEY_TOKEN_KEY: ${GALLEY_TOKEN_KEY:?set in .env}
+      GALLEY_WEBHOOK_SECRET: ${GALLEY_WEBHOOK_SECRET:?set in .env}
+      GALLEY_FRONTEND_ORIGIN: https://galley.fullfran.com
+      GALLEY_PUBLIC_URL: https://galley-api.fullfran.com
+      PB_ENCRYPTION_KEY: ${PB_ENCRYPTION_KEY:?set in .env}
+    volumes:
+      - pb_data:/pb/pb_data
+    tmpfs:
+      - /tmp
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    ulimits:
+      nofile: 4096
+    # Loopback only, for the admin UI over an SSH tunnel (docs/deploy.md).
+    # Not reachable from outside the VPS.
+    ports:
+      - "127.0.0.1:${GALLEY_ADMIN_LOCAL_PORT:-8091}:8090"
+    networks: [traefik]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:?set in .env}
+      - traefik.http.services.galley-api.loadbalancer.server.port=8090
+
+      # Public API.
+      - traefik.http.routers.galley-api.rule=Host(`galley-api.fullfran.com`)
+      - traefik.http.routers.galley-api.entrypoints=websecure
+      - traefik.http.routers.galley-api.tls.certresolver=${TRAEFIK_CERTRESOLVER:?set in .env}
+      - traefik.http.routers.galley-api.service=galley-api
+      - traefik.http.routers.galley-api.middlewares=galley-api-headers
+
+      # PocketBase admin UI and superuser auth: only from the allowlist.
+      # The default (127.0.0.1/32) blocks every public client; use the SSH
+      # tunnel instead, or set GALLEY_ADMIN_ALLOWLIST to your own IP/CIDR.
+      - traefik.http.routers.galley-api-admin.rule=Host(`galley-api.fullfran.com`) && (PathPrefix(`/_/`) || PathPrefix(`/api/collections/_superusers`))
+      - traefik.http.routers.galley-api-admin.priority=1000
+      - traefik.http.routers.galley-api-admin.entrypoints=websecure
+      - traefik.http.routers.galley-api-admin.tls.certresolver=${TRAEFIK_CERTRESOLVER:?set in .env}
+      - traefik.http.routers.galley-api-admin.service=galley-api
+      - traefik.http.routers.galley-api-admin.middlewares=galley-api-admin-allow,galley-api-headers
+      - traefik.http.middlewares.galley-api-admin-allow.ipallowlist.sourcerange=${GALLEY_ADMIN_ALLOWLIST:-127.0.0.1/32}
+
+      - traefik.http.middlewares.galley-api-headers.headers.stsSeconds=31536000
+      - traefik.http.middlewares.galley-api-headers.headers.contentTypeNosniff=true
+      - traefik.http.middlewares.galley-api-headers.headers.frameDeny=true
+      - traefik.http.middlewares.galley-api-headers.headers.referrerPolicy=no-referrer
+
+volumes:
+  pb_data: {}
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:?set in .env}
