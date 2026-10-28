@@ -1,5 +1,6 @@
 import { AuthRequiredError } from '../domain';
 import type { Session } from '../auth/session';
+import { en, type Messages } from '../i18n/en';
 import { describeError } from '../workspace/model';
 
 export type StartView =
@@ -33,6 +34,7 @@ export async function startView(
   session: Pick<Session, 'getAccessToken'>,
   search: string,
   origin?: PageOrigin,
+  t: Messages = en,
 ): Promise<StartView> {
   const loginFailed = new URLSearchParams(search).get('login') === 'failed';
   const httpsUrl = origin && httpsUrlFor(origin);
@@ -42,6 +44,6 @@ export async function startView(
     return { name: 'repos' };
   } catch (err) {
     if (err instanceof AuthRequiredError) return { name: 'signedOut', loginFailed };
-    return { name: 'signedOut', loginFailed, notice: describeError(err) };
+    return { name: 'signedOut', loginFailed, notice: describeError(err, t) };
   }
 }

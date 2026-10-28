@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { AuthRequiredError, type RepoGateway, type Repository } from '../domain';
 import { describeError } from '../workspace/model';
-import { useT } from '../i18n';
+import { useT, useTRef } from '../i18n';
 import { RepoList } from '../ui/RepoList';
 import { AppShell, type ShellContext } from '../ui/shell/AppShell';
 import { Skeleton } from '../ui/shell/Skeleton';
@@ -15,6 +15,7 @@ export interface RepoPickerProps {
 
 export function RepoPicker({ gateway, onOpen, onAuthRequired, shell }: RepoPickerProps) {
   const t = useT();
+  const tRef = useTRef();
   const [repos, setRepos] = useState<Repository[]>();
   const [error, setError] = useState<string>();
   const [attempt, setAttempt] = useState(0);
@@ -27,13 +28,13 @@ export function RepoPicker({ gateway, onOpen, onAuthRequired, shell }: RepoPicke
       (err: unknown) => {
         if (!active) return;
         if (err instanceof AuthRequiredError) onAuthRequired();
-        else setError(describeError(err));
+        else setError(describeError(err, tRef.current));
       },
     );
     return () => {
       active = false;
     };
-  }, [gateway, onAuthRequired, attempt]);
+  }, [gateway, onAuthRequired, attempt, tRef]);
 
   return (
     <AppShell shell={shell} active="repos" crumbs={[t.nav.repos]}>

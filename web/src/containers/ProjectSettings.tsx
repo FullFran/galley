@@ -5,6 +5,7 @@ import type { ProjectConfig } from '../config/project';
 import { CONFIG_PATH, parseConfig, type GalleyConfig } from '../config/schema';
 import { suggestConfig } from '../config/wizard';
 import { describeError } from '../workspace/model';
+import { useT } from '../i18n';
 import { ConfigForm } from '../ui/config/ConfigForm';
 
 export interface ConfigSaved {
@@ -31,6 +32,7 @@ export interface ProjectSettingsProps {
  * the working branch and its pull request.
  */
 export function ProjectSettings({ gateway, repo, working, project, onSaved, onCancel, onAuthRequired }: ProjectSettingsProps) {
+  const t = useT();
   const [draft, setDraft] = useState<GalleyConfig | undefined>(project.kind === 'valid' ? project.config : undefined);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
@@ -51,14 +53,14 @@ export function ProjectSettings({ gateway, repo, working, project, onSaved, onCa
     };
   }, [draft, gateway, repo, working]);
 
-  if (!draft) return <p class="muted">Reading the repository to suggest settings…</p>;
+  if (!draft) return <p class="muted">{t.config.reading}</p>;
 
   const save = async () => {
     const { text, problems } = checkDraft(draft);
     if (problems.some((p) => p.severity === 'error')) return;
     setSaving(true);
     setError(undefined);
-    const message = project.kind === 'missing' ? `Set up galley (${CONFIG_PATH})` : `Update galley settings (${CONFIG_PATH})`;
+    const message = project.kind === 'missing' ? t.config.commitSetup(CONFIG_PATH) : t.config.commitUpdate(CONFIG_PATH);
     try {
       const result = await gateway.save(repo, [{ path: CONFIG_PATH, content: text }], message, working.headSha);
       const parsed = parseConfig(text);
@@ -70,8 +72,8 @@ export function ProjectSettings({ gateway, repo, working, project, onSaved, onCa
       if (err instanceof AuthRequiredError) return onAuthRequired();
       setError(
         err instanceof ConflictError
-          ? 'Your branch changed since galley opened it. Reload the repository and save the settings again.'
-          : describeError(err),
+          ? t.config.conflict
+          : describeError(err, t),
       );
     } finally {
       setSaving(false);

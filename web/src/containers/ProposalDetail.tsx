@@ -26,7 +26,7 @@ import { FileDiff, type CommentDraft } from '../ui/review/FileDiff';
 import { GitHubLink } from '../ui/review/GitHubLink';
 import { MergeBox, People, ReviewForm } from '../ui/review/SidePanel';
 import { StaleComments } from '../ui/review/StaleComments';
-import { useT } from '../i18n';
+import { useT, useTRef } from '../i18n';
 import { AppShell, type ShellContext } from '../ui/shell/AppShell';
 import { Skeleton } from '../ui/shell/Skeleton';
 import { Toast } from '../ui/shell/Toasts';
@@ -60,6 +60,8 @@ const NO_BUFFERS: Buffers = {};
 
 export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthRequired, shell }: ProposalDetailProps) {
   const t = useT();
+  const tRef = useTRef();
+  const m = t.proposal;
   const [data, setData] = useState<Loaded>();
   const [loadError, setLoadError] = useState<string>();
   const [access, setAccess] = useState<RepoAccess>(NO_ACCESS);
@@ -79,9 +81,9 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
   const fail = useCallback(
     (err: unknown, show: (text: string) => void) => {
       if (err instanceof AuthRequiredError) onAuthRequired();
-      else show(describeReviewError(err));
+      else show(describeReviewError(err, tRef.current));
     },
-    [onAuthRequired],
+    [onAuthRequired, tRef],
   );
 
   const load = useCallback(async () => {
@@ -187,7 +189,7 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
     const raw = composer.startLine.trim();
     const start = raw === '' ? undefined : Number(raw);
     if (start !== undefined && (!Number.isInteger(start) || start < 1 || start > composer.line)) {
-      setNotice({ kind: 'error', text: `"From line" must be a line number between 1 and ${composer.line}.` });
+      setNotice({ kind: 'error', text: m.fromLineInvalid(composer.line) });
       return undefined;
     }
     if (composer.headSha !== proposal.headSha) return undefined;
@@ -196,7 +198,7 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
 
   const sendComment = async () => {
     const comment = draftComment();
-    if (comment && (await act(() => reviews.addComment(repo, number, proposal.headSha, comment), 'Comment sent.'))) {
+    if (comment && (await act(() => reviews.addComment(repo, number, proposal.headSha, comment), m.commentSent))) {
       setComposer(undefined);
     }
   };
@@ -214,7 +216,7 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
     const start = Number(composer.startLine.trim() || composer.line);
     const lines = Number.isInteger(start) ? rightLines(patch, start, composer.line) : undefined;
     if (!lines) {
-      setNotice({ kind: 'error', text: 'Suggestions can only cover lines shown in the changes.' });
+      setNotice({ kind: 'error', text: m.suggestionOutside });
       return;
     }
     const block = suggestionBlock(lines);
@@ -223,7 +225,7 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
 
   const reply = async (rootId: number) => {
     const body = replyDrafts[rootId]?.trim();
-    if (body && (await act(() => reviews.reply(repo, number, rootId, body), 'Reply sent.'))) {
+    if (body && (await act(() => reviews.reply(repo, number, rootId, body), m.replySent))) {
       setReplyDrafts((drafts) => ({ ...drafts, [rootId]: '' }));
     }
   };
@@ -231,7 +233,7 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
   const submit = async () => {
     const sent = await act(
       () => reviews.submitReview(repo, number, { event, body: reviewBody.trim(), commitId: proposal.headSha, comments: queued }),
-      'Review sent.',
+      m.reviewSent,
     );
     if (sent) {
       setPending([]);
@@ -241,13 +243,13 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
   };
 
   const apply = (comment: ReviewComment) => {
-    if (!window.confirm('Apply this suggestion as a new change to the proposal?')) return;
-    void act(() => applySuggestion({ repos, reviews }, repo, proposal, access, comment), 'Suggestion applied.');
+    if (!window.confirm(m.confirmApply)) return;
+    void act(() => applySuggestion({ repos, reviews }, repo, proposal, access, comment), m.suggestionApplied);
   };
 
   const merge = () => {
-    if (!window.confirm(`Merge "${proposal.title}" into ${proposal.baseBranch}? This cannot be undone from galley.`)) return;
-    void act(() => reviews.merge(repo, number, proposal.headSha, method), 'Merged.');
+    if (!window.confirm(m.confirmMerge(proposal.title, proposal.baseBranch))) return;
+    void act(() => reviews.merge(repo, number, proposal.headSha, method), m.merged);
   };
 
   const showPreview = async () => {
@@ -279,30 +281,30 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
         <h2 class="proposal-heading">{proposal.title}</h2>
         <p class="muted">
           #{proposal.number}
-          {proposal.author && ` by ${proposal.author.login}`} · {proposal.state === 'merged' ? 'merged' : proposal.state}{' '}
+          {proposal.author && m.by(proposal.author.login)} · {m.state[proposal.state]}{' '}
           <GitHubLink href={proposal.htmlUrl} />
         </p>
         {proposal.body && <p class="comment-body">{proposal.body}</p>}
         <StaleComments comments={stale} onDismiss={() => setStale([])} />
         <div class="actions">
           <button type="button" onClick={() => void showPreview()}>
-            {preview?.sha === proposal.headSha ? 'Hide preview' : 'Preview this version'}
+            {preview?.sha === proposal.headSha ? m.hidePreview : m.showPreview}
           </button>
           <button type="button" disabled={busy} onClick={() => void act(async () => undefined)}>
-            Reload
+            {m.reload}
           </button>
         </div>
         {preview?.sha === proposal.headSha && (
-          <section class="proposal-preview" aria-label="Preview of this version">
+          <section class="proposal-preview" aria-label={m.previewOf}>
             <Preview gateway={repos} repo={repo} headSha={preview.sha} files={preview.files} buffers={NO_BUFFERS} />
           </section>
         )}
-        <h3>Changes ({files.length} {files.length === 1 ? 'file' : 'files'})</h3>
+        <h3>{m.changes(files.length)}</h3>
         {files.map((file) => (
           <FileDiff
             key={file.path}
             file={file}
-            threads={threads.filter((t) => t.root.path === file.path)}
+            threads={threads.filter((th) => th.root.path === file.path)}
             pending={queued.filter((c) => c.path === file.path)}
             composer={composer}
             replyDrafts={replyDrafts}
@@ -322,7 +324,7 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
           />
         ))}
       </div>
-      <aside class="proposal-side" aria-label="Review and merge">
+      <aside class="proposal-side" aria-label={m.side}>
         {open && (
           <ReviewForm
             event={event}
@@ -341,12 +343,12 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
           assignees={proposal.assignees}
           candidates={candidates}
           canEdit={open && access.canPush}
-          editHint={open ? 'Only people who can change this repository can ask for reviews or assign people.' : undefined}
+          editHint={open ? m.editHint : undefined}
           busy={busy}
-          onRequest={people((l) => reviews.requestReviewers(repo, number, l), 'Review requested.')}
-          onRemoveReviewer={people((l) => reviews.removeReviewers(repo, number, l), 'Review request removed.')}
-          onAssign={people((l) => reviews.addAssignees(repo, number, l), 'Assigned.')}
-          onUnassign={people((l) => reviews.removeAssignees(repo, number, l), 'Unassigned.')}
+          onRequest={people((l) => reviews.requestReviewers(repo, number, l), m.reviewRequested)}
+          onRemoveReviewer={people((l) => reviews.removeReviewers(repo, number, l), m.reviewRemoved)}
+          onAssign={people((l) => reviews.addAssignees(repo, number, l), m.assigned)}
+          onUnassign={people((l) => reviews.removeAssignees(repo, number, l), m.unassigned)}
         />
       </aside>
       {open && (

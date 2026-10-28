@@ -8,24 +8,30 @@
 // The matcher uses no regular expressions built from input and runs in
 // polynomial time, so a hostile pattern cannot stall the page.
 
+import { en, type Messages } from '../i18n/en';
+
 export const MAX_PATTERN_LENGTH = 200;
 
-/** Why a pattern is not accepted, or undefined when it is fine. */
-export function globError(pattern: string): string | undefined {
-  if (pattern === '') return 'is empty.';
-  if (pattern.length > MAX_PATTERN_LENGTH) return `is too long (more than ${MAX_PATTERN_LENGTH} characters).`;
+/**
+ * Why a pattern is not accepted, or undefined when it is fine. The text
+ * continues a sentence such as "This pattern …"; `t` picks the language.
+ */
+export function globError(pattern: string, t: Messages = en): string | undefined {
+  const m = t.glob;
+  if (pattern === '') return m.empty;
+  if (pattern.length > MAX_PATTERN_LENGTH) return m.tooLong(MAX_PATTERN_LENGTH);
   // eslint-disable-next-line no-control-regex
-  if (/[\u0000-\u001f\u007f]/.test(pattern)) return 'contains control characters.';
-  if (pattern.includes('\\')) return 'uses a backslash; use "/" between folders.';
-  if (pattern.startsWith('/') || pattern.startsWith('~')) return 'must not start with "/" or "~": paths are relative to the repository.';
-  if (/^[A-Za-z]:/.test(pattern)) return 'must not name a drive: paths are relative to the repository.';
-  if (/[[\]{}!]/.test(pattern)) return 'uses unsupported syntax: only *, ** and ? are supported.';
-  if (pattern.endsWith('/')) return 'must not end with "/"; use "folder/*" or "folder/**".';
+  if (/[\u0000-\u001f\u007f]/.test(pattern)) return m.control;
+  if (pattern.includes('\\')) return m.backslash;
+  if (pattern.startsWith('/') || pattern.startsWith('~')) return m.absolute;
+  if (/^[A-Za-z]:/.test(pattern)) return m.drive;
+  if (/[[\]{}!]/.test(pattern)) return m.syntax;
+  if (pattern.endsWith('/')) return m.trailingSlash;
   for (const seg of pattern.split('/')) {
-    if (seg === '') return 'has an empty folder name ("//").';
-    if (seg === '..') return 'must not use "..": it would point outside the repository.';
-    if (seg === '.') return 'must not use "." as a folder name.';
-    if (seg.includes('**') && seg !== '**') return 'uses "**" inside a name; "**" must be a whole folder name.';
+    if (seg === '') return m.emptyFolder;
+    if (seg === '..') return m.parent;
+    if (seg === '.') return m.dot;
+    if (seg.includes('**') && seg !== '**') return m.doubleStar;
   }
   return undefined;
 }

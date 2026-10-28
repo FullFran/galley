@@ -1,6 +1,7 @@
 import { useState } from 'preact/hooks';
 import type { Repository } from '../domain';
 import { useT } from '../i18n';
+import { formatUpdated } from '../i18n/format';
 import { Icon } from './shell/icons';
 
 export interface RepoListProps {
@@ -10,10 +11,6 @@ export interface RepoListProps {
 }
 
 const SEARCH_FROM = 6;
-const day = (iso: string) => {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString(undefined, { dateStyle: 'medium' });
-};
 
 export function RepoList({ repos, onOpen, onReload }: RepoListProps) {
   const t = useT();
@@ -52,16 +49,19 @@ export function RepoList({ repos, onOpen, onReload }: RepoListProps) {
         </div>
       ) : (
         <ul class="row-list">
-          {shown.map((repo) => (
-            <li key={repo.id} class="row">
-              <button type="button" class="row-main" onClick={() => onOpen(repo)}>
-                <Icon name="library" />
-                <span class="row-title">{repo.fullName}</span>
-              </button>
-              <span class="chip">{repo.private ? m.private : m.public}</span>
-              {repo.updatedAt && day(repo.updatedAt) && <span class="muted row-meta">{m.updated(day(repo.updatedAt))}</span>}
-            </li>
-          ))}
+          {shown.map((repo) => {
+            const updated = repo.updatedAt ? formatUpdated(repo.updatedAt, t.meta.lang) : '';
+            return (
+              <li key={repo.id} class="row">
+                <button type="button" class="row-main" onClick={() => onOpen(repo)}>
+                  <Icon name="library" />
+                  <span class="row-title">{repo.fullName}</span>
+                </button>
+                <span class="chip">{repo.private ? m.private : m.public}</span>
+                {updated && <span class="muted row-meta">{m.updated(updated)}</span>}
+              </li>
+            );
+          })}
         </ul>
       )}
     </>

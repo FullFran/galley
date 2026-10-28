@@ -1,5 +1,6 @@
+import type { ComponentChildren } from 'preact';
 import type { FileChange } from '../domain';
-import { useT } from '../i18n';
+import { useT, type Messages } from '../i18n';
 import { Credit } from './shell/Credit';
 import { UnsavedCopies } from './StatusBanner';
 
@@ -11,10 +12,12 @@ export interface SignedOutProps {
   /** Edits that could not be saved because the session ended. */
   unsaved?: FileChange[];
   onSignIn: () => void;
+  /** The ES | EN switcher, in the footer. */
+  languageSwitch?: ComponentChildren;
 }
 
 /** Landing and sign in: what galley does, one action, what access it needs. */
-export function SignedOut({ loginFailed, notice, httpsUrl, unsaved = [], onSignIn }: SignedOutProps) {
+export function SignedOut({ loginFailed, notice, httpsUrl, unsaved = [], onSignIn, languageSwitch }: SignedOutProps) {
   const t = useT();
   const m = t.landing;
   return (
@@ -51,29 +54,30 @@ export function SignedOut({ loginFailed, notice, httpsUrl, unsaved = [], onSignI
           )}
           <p class="muted access-note">{m.access}</p>
         </section>
-        <LandingMock saveLabel={m.mockSave} />
+        <LandingMock m={m} />
       </main>
       <footer class="landing-foot">
         <Credit />
+        {languageSwitch}
       </footer>
     </div>
   );
 }
 
 /** A static drawing of the editor next to the preview; no real paper content. */
-function LandingMock({ saveLabel }: { saveLabel: string }) {
+function LandingMock({ m }: { m: Messages['landing'] }) {
   const bars = (widths: number[], cls = 'mock-line') => widths.map((w, i) => <span key={i} class={`${cls} w-${w}`} />);
   return (
     <div class="landing-mock" aria-hidden="true">
       <div class="mock-bar">
         <span class="mock-crumb" />
-        <span class="mock-button">{saveLabel}</span>
+        <span class="mock-button">{m.mockSave}</span>
       </div>
       <div class="mock-panes">
         <div class="mock-editor">
-          <span class="mock-code mock-heading"># Introduction</span>
+          <span class="mock-code mock-heading">{m.mockHeading}</span>
           {bars([90, 75, 85, 40], 'mock-code-line')}
-          <span class="mock-code mock-heading">## Model</span>
+          <span class="mock-code mock-heading">{m.mockSubheading}</span>
           {bars([80, 95, 60], 'mock-code-line')}
           <span class="mock-code">{'$$ p = s e^{-E/kT} $$'}</span>
           {bars([70, 50], 'mock-code-line')}
@@ -84,7 +88,7 @@ function LandingMock({ saveLabel }: { saveLabel: string }) {
             <span class="mock-authors" />
             <span class="mock-rule" />
             {bars([100, 100, 70])}
-            <span class="mock-section">1. Introduction</span>
+            <span class="mock-section">{m.mockSection}</span>
             {bars([100, 100, 100, 55])}
             <span class="mock-figure" />
             <span class="mock-eq">p = s·e<sup>−E/kT</sup> (1)</span>

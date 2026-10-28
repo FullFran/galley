@@ -4,81 +4,50 @@ import {
   RejectedError,
   SuggestionMismatchError,
   type MergeMethod,
-  type RejectedAction,
   type ReviewerStatus,
 } from '../domain';
+import { en, type Messages } from '../i18n/en';
 import { describeError } from '../workspace/model';
 import type { OverallReview } from './status';
 
-// Words for people who do not use git: a pull request is a "proposal".
+// Words for people who do not use git: a pull request is a "proposal". The
+// texts live in the message catalog (`t.labels`, `t.errors`).
 
-export const REVIEWER_LABEL: Record<ReviewerStatus, string> = {
-  pending: 'Waiting for review',
-  approved: 'Approved',
-  changes_requested: 'Changes requested',
-  commented: 'Commented',
-  dismissed: 'Review dismissed',
-};
+export const reviewerLabel = (status: ReviewerStatus, t: Messages = en): string => t.labels.reviewer[status];
 
-export const OVERALL_LABEL: Record<OverallReview, string> = {
-  changes_requested: 'Changes requested',
-  approved: 'Approved',
-  pending: 'Waiting for review',
-  commented: 'Commented',
-  none: 'No reviews yet',
-};
+export const overallLabel = (overall: OverallReview, t: Messages = en): string => t.labels.overall[overall];
 
-export const METHOD_LABEL: Record<MergeMethod, string> = {
-  merge: 'Keep every change separately (merge commit)',
-  squash: 'Combine into one change (squash)',
-  rebase: 'Add each change on top (rebase)',
-};
+export const methodLabel = (method: MergeMethod, t: Messages = en): string => t.labels.method[method];
 
 /** GitHub's `mergeable_state` in plain words. */
-export function mergeLabel(mergeable: boolean | null, state: string): string {
-  if (mergeable === null || state === 'unknown') return 'GitHub is still checking whether this can be merged.';
+export function mergeLabel(mergeable: boolean | null, state: string, t: Messages = en): string {
+  const m = t.labels.merge;
+  if (mergeable === null || state === 'unknown') return m.checking;
   switch (state) {
     case 'clean':
     case 'has_hooks':
-      return 'Ready to merge.';
+      return m.ready;
     case 'unstable':
-      return 'Can be merged, but some checks did not pass.';
+      return m.unstable;
     case 'dirty':
-      return 'Has conflicts with the main version; resolve them on GitHub first.';
+      return m.dirty;
     case 'blocked':
-      return 'Blocked by the repository rules (for example required reviews or checks).';
+      return m.blocked;
     case 'behind':
-      return 'Behind the main version; update it on GitHub first.';
+      return m.behind;
     case 'draft':
-      return 'Still a draft.';
+      return m.draft;
     default:
-      return 'Cannot be merged right now.';
+      return m.other;
   }
 }
 
-const REJECTED: Record<RejectedAction | 'other', string> = {
-  comment: 'GitHub did not accept the comment. Line comments can only be placed on lines shown in the changes.',
-  review:
-    'GitHub did not accept the review. An overall comment may be needed, or a line comment is not on a line shown in the changes.',
-  reviewers:
-    'GitHub did not accept this. Only people with access to the repository can be asked to review; ask the owner to add them.',
-  assignees: 'GitHub did not accept this. Only people with access to the repository can be assigned; ask the owner to add them.',
-  branch:
-    "GitHub did not let galley update this proposal's branch; it may be protected. Make the change on GitHub instead.",
-  other: 'GitHub did not accept this request. Reload and try again, or open it on GitHub.',
-};
-
 /** A failure during review, explained without git terms. */
-export function describeReviewError(err: unknown): string {
-  if (err instanceof SuggestionMismatchError) {
-    return 'The file changed since this suggestion was written, so it cannot be applied automatically. Edit the file instead.';
-  }
-  if (err instanceof ConflictError) {
-    return 'The proposal changed since you opened it. Reload it to see the latest version, then try again.';
-  }
-  if (err instanceof NotMergeableError) {
-    return 'GitHub did not allow the merge (rules, checks or conflicts). Open it on GitHub for details.';
-  }
-  if (err instanceof RejectedError) return REJECTED[err.action ?? 'other'];
-  return describeError(err);
+export function describeReviewError(err: unknown, t: Messages = en): string {
+  const m = t.errors;
+  if (err instanceof SuggestionMismatchError) return m.suggestionMismatch;
+  if (err instanceof ConflictError) return m.proposalChanged;
+  if (err instanceof NotMergeableError) return m.notMergeable;
+  if (err instanceof RejectedError) return m.rejected[err.action ?? 'other'];
+  return describeError(err, t);
 }

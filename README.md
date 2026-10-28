@@ -196,12 +196,39 @@ http on `localhost` and `127.0.0.1` keeps working for local development.
   2px focus rings, 44px targets, skeletons instead of "Loading…", colour
   transitions only and none with reduced motion. Icons are inline SVG
   components; no inline `style` attributes (CSP `style-src 'self'`).
-- **Copy**: every string of the new UI is in one typed English catalog,
-  `web/src/i18n/en.ts`, read with `useT()` from a Preact context whose default
-  is that catalog (no provider needed in tests). A Spanish catalog with the
-  same shape is planned; the sidebar footer has a slot for an ES | EN switch.
+- **Copy**: every interface string is in a typed catalog (see Languages
+  below), read with `useT()` from a Preact context whose default is the
+  English catalog (no provider needed in tests).
 - **Guided tour anchors**: `data-tour` on sidebar, outline, editor, preview,
   save, proposals and compile, for the planned driver.js tour.
+
+### Languages
+
+The interface is in Spanish and English, with no i18n library:
+
+- **Catalogs**: `web/src/i18n/en.ts` (`as const`, grouped by screen) defines
+  the `Messages` type; `web/src/i18n/es.ts` implements it, so a missing key
+  is a type error. Texts with numbers or names are small functions; plurals
+  use `Intl.PluralRules` (`i18n/plural.ts`). A parity test checks that both
+  catalogs have the same keys and that function messages take the same
+  arguments.
+- **Spanish register**: informal "tú", neutral Spanish that reads naturally
+  in Spain (no voseo, no regional slang), no exclamation marks, sentence case
+  and plain words for academics who do not use git ("Propuestas", "Guardar
+  para revisión", "Pedir cambios", "Incorporar" for merge). Product names
+  (galley, GitHub, Quarto, BibTeX) stay as they are.
+- **Choosing the language**: the ES | EN switch sits in the sidebar footer
+  and in the landing page footer. The choice is kept in `localStorage`
+  (`galley-locale`; if storage is blocked the switch still works for the
+  session). Without a stored choice, a browser language starting with `es`
+  picks Spanish, anything else English. Switching re-renders without a
+  reload and keeps unsaved edits; `<html lang>` follows the choice.
+- **Dates**: `Intl.DateTimeFormat` and `Intl.RelativeTimeFormat` in the active
+  language ("hace 3 horas", "2 days ago"; older than a week shows the date).
+- **Still English**: renderer diagnostics in the preview notes, the
+  validation messages for `.galley.yml` (admins only), and text galley writes
+  to GitHub (the pull request body). Commit messages follow the language of
+  the person saving.
 
 ## Frontend data layer
 

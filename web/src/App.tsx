@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { FileChange, Person, RepoAccess, RepoGateway, Repository, ReviewGateway } from './domain';
 import type { Session } from './auth/session';
-import { useT } from './i18n';
+import { useT, useTRef } from './i18n';
 import { startView } from './containers/boot';
 import { Proposals } from './containers/Proposals';
 import { RepoPicker } from './containers/RepoPicker';
@@ -9,6 +9,7 @@ import { Workspace } from './containers/Workspace';
 import type { NavId } from './shell/nav';
 import { useSidebar } from './shell/useSidebar';
 import type { ShellContext } from './ui/shell/AppShell';
+import { CurrentLanguageSwitch } from './ui/shell/LanguageSwitch';
 import { Skeleton } from './ui/shell/Skeleton';
 import { SignedOut } from './ui/SignedOut';
 
@@ -27,6 +28,9 @@ type View =
 
 export function App({ session, gateway, reviews }: AppProps) {
   const t = useT();
+  // Stable callbacks read the catalog through a ref, so a language switch does
+  // not re-run the screens' effects (the workspace would reload and lose edits).
+  const tRef = useTRef();
   const [view, setView] = useState<View>({ name: 'loading' });
   const [user, setUser] = useState<Person>();
   const [admin, setAdmin] = useState(false);
@@ -38,8 +42,8 @@ export function App({ session, gateway, reviews }: AppProps) {
   useEffect(() => {
     const search = window.location.search;
     if (search) window.history.replaceState(null, '', window.location.pathname);
-    void startView(session, search, window.location).then(setView);
-  }, [session]);
+    void startView(session, search, window.location, tRef.current).then(setView);
+  }, [session, tRef]);
 
   const signedIn = view.name === 'repos' || view.name === 'workspace' || view.name === 'proposals';
   const repo = view.name === 'workspace' || view.name === 'proposals' ? view.repo : undefined;
@@ -97,9 +101,9 @@ export function App({ session, gateway, reviews }: AppProps) {
   const signedOut = useCallback(
     (unsaved: FileChange[] = []) => {
       dirty.current = false;
-      setView({ name: 'signedOut', loginFailed: false, notice: t.app.sessionEnded, unsaved });
+      setView({ name: 'signedOut', loginFailed: false, notice: tRef.current.app.sessionEnded, unsaved });
     },
-    [t],
+    [tRef],
   );
   const onDirtyChange = useCallback((value: boolean) => {
     dirty.current = value;
@@ -143,6 +147,7 @@ export function App({ session, gateway, reviews }: AppProps) {
         httpsUrl={view.httpsUrl}
         unsaved={view.unsaved}
         onSignIn={() => window.location.assign(session.loginUrl())}
+        languageSwitch={<CurrentLanguageSwitch />}
       />
     );
   }
@@ -155,6 +160,7 @@ export function App({ session, gateway, reviews }: AppProps) {
     sidebar,
     onNavigate: navigate,
     onSignOut: () => void signOut(),
+    languageSwitch: <CurrentLanguageSwitch />,
   };
   if (view.name === 'repos') {
     return (

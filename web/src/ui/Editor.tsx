@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'preact/hooks';
-import { EditorState, type Extension } from '@codemirror/state';
+import { Compartment, EditorState, type Extension } from '@codemirror/state';
 import { EditorView, drawSelection, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { syntaxHighlighting } from '@codemirror/language';
@@ -9,6 +9,8 @@ import { highlightStyle, markdownSupport } from './editorStyle';
 
 export interface EditorProps {
   path: string;
+  /** Accessible name of the text area ("Contents of index.qmd"). */
+  label: string;
   /** Initial text; later changes are ignored, so render with `key={path}`. */
   doc: string;
   onChange: (text: string) => void;
@@ -42,11 +44,14 @@ const theme = EditorView.theme({
 });
 
 /** CodeMirror 6 editor. Owns the EditorView for its lifetime. */
-export function Editor({ path, doc, onChange, jumpTo }: EditorProps) {
+export function Editor({ path, label, doc, onChange, jumpTo }: EditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView>(undefined);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  // The accessible name follows a language switch without recreating the view.
+  const labelling = useRef(new Compartment());
+  const named = (name: string) => EditorView.contentAttributes.of({ 'aria-label': name });
 
   useEffect(() => {
     if (!host.current) return;
@@ -66,7 +71,7 @@ export function Editor({ path, doc, onChange, jumpTo }: EditorProps) {
           syntaxHighlighting(highlightStyle, { fallback: true }),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           language(path),
-          EditorView.contentAttributes.of({ 'aria-label': `Contents of ${path}` }),
+          labelling.current.of(named(label)),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) onChangeRef.current(update.state.doc.toString());
           }),
@@ -80,6 +85,10 @@ export function Editor({ path, doc, onChange, jumpTo }: EditorProps) {
     };
     // The view is created once per mount; the parent remounts it per file.
   }, []);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: labelling.current.reconfigure(named(label)) });
+  }, [label]);
 
   useEffect(() => {
     const view = viewRef.current;

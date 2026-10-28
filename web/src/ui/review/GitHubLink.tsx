@@ -1,17 +1,14 @@
+import { useT } from '../../i18n';
 import { githubUrl } from '../../review/status';
 
 /** A link to GitHub, rendered only for https://github.com URLs. */
-export function GitHubLink({ href, label = 'View on GitHub' }: { href?: string; label?: string }) {
+export function GitHubLink({ href, label }: { href?: string; label?: string }) {
+  const t = useT();
   const url = githubUrl(href);
   if (!url) return null;
   return (
     <a href={url} target="_blank" rel="noopener noreferrer">
-      {label}
+      {label ?? t.github.view}
     </a>
   );
-}
-
-export function formatDate(iso: string): string {
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? '' : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }

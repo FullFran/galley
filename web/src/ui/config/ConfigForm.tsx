@@ -3,6 +3,7 @@ import { candidateFiles, checkDraft, coveredBy, parseAccept, togglePattern } fro
 import { globError, isPlainPath } from '../../config/glob';
 import { visibleFiles } from '../../config/project';
 import { DEFAULT_ACCEPT, DEFAULT_UPLOAD_MB, type ConfigProblem, type GalleyConfig, type UploadRule } from '../../config/schema';
+import { useT } from '../../i18n';
 import { ProblemList } from './ViewNotice';
 
 export interface ConfigFormProps {
@@ -22,6 +23,8 @@ export interface ConfigFormProps {
 
 /** The setup wizard and the settings screen: one form over a `.galley.yml` draft. */
 export function ConfigForm({ mode, files, draft, repoProblems, branch, saving, error, onChange, onSave, onCancel }: ConfigFormProps) {
+  const t = useT();
+  const m = t.config;
   const [pattern, setPattern] = useState('');
   const { text, problems } = checkDraft(draft);
   const blocked = problems.some((p) => p.severity === 'error');
@@ -29,7 +32,7 @@ export function ConfigForm({ mode, files, draft, repoProblems, branch, saving, e
   const documents = candidateFiles(files);
   const globs = draft.editable.filter((p) => !isPlainPath(p) || !documents.includes(p));
   const entries = files.filter((f) => /\.(qmd|md)$/i.test(f) && !f.split('/').some((s) => s.startsWith('.')));
-  const patternError = pattern ? globError(pattern) : undefined;
+  const patternError = pattern ? globError(pattern, t) : undefined;
   const setUpload = (i: number, change: Partial<UploadRule>) =>
     onChange({ ...draft, uploads: draft.uploads.map((u, j) => (j === i ? { ...u, ...change } : u)) });
 
@@ -41,25 +44,21 @@ export function ConfigForm({ mode, files, draft, repoProblems, branch, saving, e
         if (!blocked) onSave();
       }}
     >
-      <h2>{mode === 'setup' ? 'Set up galley for this paper' : 'Project settings'}</h2>
+      <h2>{mode === 'setup' ? m.setupTitle : m.settingsTitle}</h2>
       <p class="muted">
-        {mode === 'setup'
-          ? 'galley suggested these settings from the repository. Check them, then save. '
-          : 'These settings live in .galley.yml in the repository. '}
-        Saving adds .galley.yml to your proposal on {branch}; it applies to everyone once the proposal is merged. The file
-        list only shapes what galley shows; it is not a GitHub permission.
+        {mode === 'setup' ? m.setupIntro : m.settingsIntro} {m.savingNote(branch)}
       </p>
       {repoProblems.length > 0 && (
         <div class="banner banner-error">
-          <p>The .galley.yml in the repository has problems; galley uses safe defaults until it is fixed:</p>
+          <p>{m.repoProblems}</p>
           <ProblemList problems={repoProblems} />
         </div>
       )}
 
       <fieldset>
-        <legend>Paper</legend>
+        <legend>{m.paper}</legend>
         <label>
-          Display name
+          {m.displayName}
           <input
             type="text"
             maxLength={120}
@@ -68,9 +67,9 @@ export function ConfigForm({ mode, files, draft, repoProblems, branch, saving, e
           />
         </label>
         <label>
-          Main file
+          {m.mainFile}
           <select value={draft.entry ?? ''} onChange={(e) => onChange({ ...draft, entry: e.currentTarget.value || undefined })}>
-            <option value="">From _quarto.yml (or index.qmd)</option>
+            <option value="">{m.mainFromQuarto}</option>
             {entries.map((f) => (
               <option key={f} value={f}>
                 {f}
@@ -81,7 +80,7 @@ export function ConfigForm({ mode, files, draft, repoProblems, branch, saving, e
       </fieldset>
 
       <fieldset>
-        <legend>Files co-authors can edit</legend>
+        <legend>{m.editable}</legend>
         <ul class="config-files">
           {globs.map((p) => (
             <li key={`g:${p}`}>
@@ -102,7 +101,7 @@ export function ConfigForm({ mode, files, draft, repoProblems, branch, saving, e
                     onChange={(e) => onChange(togglePattern(draft, f, e.currentTarget.checked))}
                   />{' '}
                   {f}
-                  {by && <span class="muted"> (included by {by})</span>}
+                  {by && <span class="muted"> {m.includedBy(by)}</span>}
                 </label>
               </li>
             );
@@ -113,8 +112,8 @@ export function ConfigForm({ mode, files, draft, repoProblems, branch, saving, e
             type="text"
             maxLength={200}
             value={pattern}
-            placeholder="Add a file or pattern, e.g. sections/*.qmd"
-            aria-label="File or pattern to add"
+            placeholder={m.addPlaceholder}
+            aria-label={m.addLabel}
             onInput={(e) => setPattern(e.currentTarget.value.trim())}
           />
           <button
@@ -125,15 +124,13 @@ export function ConfigForm({ mode, files, draft, repoProblems, branch, saving, e
               setPattern('');
             }}
           >
-            Add
+            {m.add}
           </button>
         </div>
-        {patternError && <p class="muted">This pattern {patternError}</p>}
-        <p class="muted">* matches within one folder, ** across folders, ? one character. Hidden files are never matched.</p>
+        {patternError && <p class="muted">{m.patternProblem(patternError)}</p>}
+        <p class="muted">{m.patternHelp}</p>
         <details>
-          <summary>
-            Co-authors will see {visible.length} file{visible.length === 1 ? '' : 's'}
-          </summary>
+          <summary>{m.coauthorsSee(visible.length)}</summary>
           <ul class="config-visible">
             {visible.map((f) => (
               <li key={f}>{f}</li>
@@ -143,15 +140,15 @@ export function ConfigForm({ mode, files, draft, repoProblems, branch, saving, e
       </fieldset>
 
       <fieldset>
-        <legend>Upload folders</legend>
+        <legend>{m.uploads}</legend>
         {draft.uploads.map((u, i) => (
           <div class="config-upload" key={i}>
             <label>
-              Folder
+              {m.folder}
               <input type="text" maxLength={200} value={u.folder} onInput={(e) => setUpload(i, { folder: e.currentTarget.value })} />
             </label>
             <label>
-              File types
+              {m.fileTypes}
               <input
                 type="text"
                 value={u.accept.join(', ')}
@@ -159,7 +156,7 @@ export function ConfigForm({ mode, files, draft, repoProblems, branch, saving, e
               />
             </label>
             <label>
-              Max size (MB)
+              {m.maxSize}
               <input
                 type="number"
                 min={1}
@@ -170,7 +167,7 @@ export function ConfigForm({ mode, files, draft, repoProblems, branch, saving, e
               />
             </label>
             <button type="button" onClick={() => onChange({ ...draft, uploads: draft.uploads.filter((_, j) => j !== i) })}>
-              Remove
+              {m.remove}
             </button>
           </div>
         ))}
@@ -180,14 +177,14 @@ export function ConfigForm({ mode, files, draft, repoProblems, branch, saving, e
             onChange({ ...draft, uploads: [...draft.uploads, { folder: 'figures/', accept: [...DEFAULT_ACCEPT], maxSizeMb: DEFAULT_UPLOAD_MB }] })
           }
         >
-          Add upload folder
+          {m.addUpload}
         </button>
       </fieldset>
 
       <fieldset>
-        <legend>Names shown for files</legend>
+        <legend>{m.names}</legend>
         <details>
-          <summary>Friendly names ({Object.values(draft.labels).filter(Boolean).length})</summary>
+          <summary>{m.friendlyNames(Object.values(draft.labels).filter(Boolean).length)}</summary>
           {visible.map((f) => (
             <label key={f} class="config-label">
               {f}
@@ -207,14 +204,14 @@ export function ConfigForm({ mode, files, draft, repoProblems, branch, saving, e
       </fieldset>
 
       <fieldset>
-        <legend>Preview</legend>
+        <legend>{m.preview}</legend>
         <label>
           <input
             type="checkbox"
             checked={draft.preview.autoCompile}
             onChange={(e) => onChange({ ...draft, preview: { autoCompile: e.currentTarget.checked } })}
           />{' '}
-          Compile automatically while typing (default for new users; each person can change it)
+          {m.autoCompile}
         </label>
       </fieldset>
 
@@ -225,15 +222,15 @@ export function ConfigForm({ mode, files, draft, repoProblems, branch, saving, e
         </p>
       )}
       <details>
-        <summary>Show .galley.yml</summary>
+        <summary>{m.showYaml}</summary>
         <pre class="config-yaml">{text}</pre>
       </details>
       <div class="config-actions">
         <button type="submit" class="primary" disabled={blocked || saving}>
-          {saving ? 'Saving…' : mode === 'setup' ? 'Save and propose .galley.yml' : 'Save settings to proposal'}
+          {saving ? m.saving : mode === 'setup' ? m.saveSetup : m.saveSettings}
         </button>
         <button type="button" onClick={onCancel} disabled={saving}>
-          Cancel
+          {m.cancel}
         </button>
       </div>
     </form>
