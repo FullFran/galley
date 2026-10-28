@@ -163,44 +163,85 @@ http on `localhost` and `127.0.0.1` keeps working for local development.
 
 - **Landing**: what galley does, one "Sign in with GitHub" button, what access
   it needs, a static editor + preview drawing (HTML/CSS) and the author credit.
+- **Addresses** (`web/src/shell/route.ts`): every screen has a hash route, so a
+  reload, a shared link or the back button lands where you were: `#/`
+  (repositories), `#/r/{owner}/{repo}` (main document), `…/f/{path}` (a file),
+  `…/proposals[/{n}]` and `…/admin/{tab}`. The fragment never reaches a server
+  or a Referer, and GitHub Pages needs no SPA fallback. Parsing is strict
+  (decoded segments, no `..`, slashes or control characters, GitHub name
+  rules); anything else is the repository list. Leaving the workspace with
+  unsaved edits asks first, also on back and forward. Sign in keeps the route
+  in `sessionStorage` and returns to it once, validated again.
 - **App shell** (`web/src/ui/shell/AppShell.tsx`): skip link, sidebar, sticky
-  3.5rem header (breadcrumb, save state, the screen's actions) and a main
-  region that scrolls on its own; the shell is `100dvh`, so the header and
-  "Save for review" never scroll away. Notices are non-modal toasts.
-- **Sidebar**: navigation declared once as data (`web/src/shell/nav.ts`) and
-  filtered by role: Repositories, Paper (main file pinned first, then the
-  outline of the open file; a heading moves the editor and the preview there),
-  Files (tree with file-kind icons, an edited dot, `.galley.yml` visibility and
-  labels; admins can switch between "Show all files" and "View as co-author",
-  kept per repository in `localStorage`, with project settings still open to
-  them), Proposals (open count, your own proposal), Project settings (admins
-  only, after a separator), Take the tour and About galley, then the account,
-  Sign out and the credit. It is 16rem wide from 1024px, an icon rail (3.5rem,
-  with tooltips) from 768px, and an off-canvas drawer below. Ctrl/Cmd+B
-  toggles it outside text fields; the collapse choice is kept in
-  `localStorage` (guarded), the drawer closes on navigation and on Escape and
-  gives focus back to the menu button (`web/src/shell/sidebar.ts`,
-  `useSidebar.ts`).
+  3.5rem header and a main region that scrolls on its own; the shell is
+  `100dvh`, so the header and "Save for review" never scroll away. Notices are
+  non-modal toasts; one-line banners sit above the screen.
+- **Sidebar**: declared once as data (`web/src/shell/nav.ts`), grouped by task
+  like the sidebars of Álvaro's apps. A repository switcher row on top; Write
+  (Contents: an Outline | Files switch over one tree, remembered per
+  repository; the main file has a muted "main" suffix); Review (collapsible,
+  closed by default, opens by itself on a proposals screen; one row
+  "Proposals 2 · 1 yours"); and for admins only one Admin entry, last behind a
+  separator. Nothing admin-related appears anywhere else. The footer has the
+  account button, Help (tour, shortcuts, About) and a muted "galley · by F.
+  Olmedo" credit line that opens About. Group state is one JSON map in
+  `localStorage` (`galley:nav-groups`, guarded; `web/src/shell/navGroups.ts`);
+  in the icon rail and the phone drawer groups never fold. The current entry
+  has a 3px accent bar and bold text. 16rem from 1024px, a 3.5rem icon rail
+  with tooltips from 768px, an off-canvas drawer below; Ctrl/Cmd+B toggles it
+  outside text fields (`sidebar.ts`, `useSidebar.ts`).
+- **Account menu** (`AccountMenu.tsx`, `Menu.tsx`): WAI-ARIA menu (arrows,
+  Home/End, Escape returns focus): signed in as, Theme System · Light · Dark,
+  Language English · Español (each with its own `lang`), Preferences…,
+  Keyboard shortcuts, Take the tour, About galley, and Sign out last after a
+  separator. The same for every role.
+- **Theme** (`web/src/shell/theme.ts`): Light and Dark set `data-theme` on
+  `<html>` and are stored as `galley:theme`; System removes both.
+  `web/public/theme-init.js`, an external script in `<head>` (CSP
+  `script-src 'self'`), applies the stored theme before first paint.
+- **Preferences** (native `<dialog>`): auto-compile default for papers where
+  you have not chosen yet, theme and language. Sections for unbuilt features
+  stay hidden.
+- **Header**: breadcrumb whose repository segment opens the switcher and whose
+  folder segments show the Files tab; save state with a dot (role=status, full
+  wording in the tooltip); a ⋯ menu (Recompile now, Keyboard shortcuts) and a
+  split "Save for review" button whose caret opens the optional note. Phones:
+  file name, Edit | Preview, ⋯ (with "Add a note…") and "Save".
+- **Keyboard shortcuts** (`web/src/shell/shortcuts.ts`, dialog on `?`):
+  Ctrl/Cmd+B sidebar, Ctrl/Cmd+Enter recompile, Ctrl/Cmd+S opens Save for
+  review (never the browser's save), `?` this list.
 - **Workspace**: the main document opens on its own (`.galley.yml` `entry`,
   else `index.qmd`, else the first top-level document). Editor and preview sit
   side by side from 1024px; below that an Edit | Preview switch in the header
-  shows one at a time. Compile controls stay above the preview.
-- **Proposals**: rows that are one click target, review state as chips, and an
-  empty state that explains proposals. In a proposal, your review (approve, ask
-  for changes or comment) comes first, hunk headers read "Lines 5–9", merge
-  methods sit under "Merge options", and phones get a sticky "Write your
-  review" bar.
+  shows one at a time. Above the preview: Recompile, an auto-compile switch,
+  and an "Out of date · Ctrl+Enter" badge only while the preview is behind.
+  When the paper is not set up (or its settings are broken) a one-line banner
+  says galley shows text files only: admins get "Set up…", co-authors "Why?";
+  it can be dismissed per repository.
+- **Admin area** (`AdminArea.tsx`, tabs in `web/src/shell/adminTabs.ts`):
+  Project settings (the setup wizard and settings form) and View as co-author;
+  tabs for the future admin panel (people, sessions, allowlist) are declared
+  but not shown. Co-authors who open an admin address see one line, never the
+  content. While viewing as co-author a slim "Viewing as co-author · Exit"
+  banner stays on screen.
+- **Proposals**: rows that are one click target with status chips (View on
+  GitHub lives on the detail page) and an empty state that explains proposals.
+  In a proposal, your review comes first; on your own proposal it says "You
+  can't approve your own proposal."; hunk headers read "Lines 5–9", merge
+  methods sit under "Merge options"; phones get a sticky "Write your review"
+  bar that hides while the review card is on screen.
 - **Design rules**: semantic CSS tokens only (`web/src/styles.css`), light and
   dark themes (`prefers-color-scheme`, or `data-theme` on `<html>`), one
   accent spent on state, borders rather than shadows, 6px/10px radii, visible
   2px focus rings, 44px targets, skeletons instead of "Loading…", colour
   transitions only and none with reduced motion. Icons are inline SVG
-  components; no inline `style` attributes (CSP `style-src 'self'`).
+  components; no inline `style` attributes (CSP `style-src 'self'`). Short
+  labels; details go in tooltips.
 - **Copy**: every interface string is in a typed catalog (see Languages
   below), read with `useT()` from a Preact context whose default is the
   English catalog (no provider needed in tests).
 - **Guided tour anchors**: `data-tour` on sidebar, outline, editor, preview,
-  save, proposals and compile, for the planned driver.js tour.
+  save, proposals, help and compile, for the planned driver.js tour.
 
 ### Languages
 
@@ -217,8 +258,9 @@ The interface is in Spanish and English, with no i18n library:
   and plain words for academics who do not use git ("Propuestas", "Guardar
   para revisión", "Pedir cambios", "Incorporar" for merge). Product names
   (galley, GitHub, Quarto, BibTeX) stay as they are.
-- **Choosing the language**: the ES | EN switch sits in the sidebar footer
-  and in the landing page footer. The choice is kept in `localStorage`
+- **Choosing the language**: English · Español in the account menu and in
+  Preferences once signed in, and the ES | EN switch in the landing footer.
+  The choice is kept in `localStorage`
   (`galley-locale`; if storage is blocked the switch still works for the
   session). Without a stored choice, a browser language starting with `es`
   picks Spanish, anything else English. Switching re-renders without a

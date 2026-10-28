@@ -11,10 +11,15 @@ export interface CompileBarProps {
   onAuto: (auto: boolean) => void;
 }
 
-/** Recompile button (Ctrl/Cmd+Enter), auto-compile toggle and compile state, above the preview. */
+/**
+ * Above the preview: Recompile (Ctrl/Cmd+Enter), the auto-compile switch and,
+ * only while the preview is behind the editor, an "Out of date" badge. The
+ * last compile time sits in the button's tooltip.
+ */
 export function CompileBar({ compiling, stale, lastCompiledAt, auto, onRecompile, onAuto }: CompileBarProps) {
   const t = useT();
   const m = t.compile;
+  const tooltip = lastCompiledAt !== undefined ? `${m.shortcut} · ${m.compiledAt(formatClock(lastCompiledAt, t.meta.lang))}` : m.shortcut;
   return (
     <div class="compile-bar" data-tour="compile">
       <button
@@ -22,22 +27,21 @@ export function CompileBar({ compiling, stale, lastCompiledAt, auto, onRecompile
         class="secondary"
         onClick={onRecompile}
         disabled={compiling}
-        title={m.shortcut}
+        title={tooltip}
         aria-keyshortcuts="Control+Enter Meta+Enter"
       >
         {compiling ? m.compiling : m.recompile}
       </button>
-      <label class="compile-auto">
-        <input type="checkbox" checked={auto} onChange={(e) => onAuto(e.currentTarget.checked)} /> {m.auto}
+      <label class="switch-row compile-auto">
+        <input type="checkbox" role="switch" class="switch" checked={auto} onChange={(e) => onAuto(e.currentTarget.checked)} />
+        <span>{m.auto}</span>
       </label>
-      <span class="muted compile-state" aria-live="polite">
-        {compiling
-          ? m.compiling
-          : stale
-            ? m.stale
-            : lastCompiledAt !== undefined
-              ? m.compiledAt(formatClock(lastCompiledAt, t.meta.lang))
-              : ''}
+      <span class="compile-state" aria-live="polite">
+        {!compiling && stale && (
+          <span class="chip chip-warn" title={m.stale}>
+            {m.outOfDate}
+          </span>
+        )}
       </span>
     </div>
   );

@@ -9,7 +9,19 @@ import {
   type Repository,
   type SaveResult,
 } from '../domain';
-import { applySaved, defaultMessage, describeError, dirtyPaths, runSave, type Buffers } from './model';
+import { applySaved, defaultMessage, describeError, dirtyPaths, runSave, textsEdited, type Buffers } from './model';
+
+describe('textsEdited', () => {
+  const buf = (text: string) => ({ base: text, text });
+  it('is true when an open file changed', () => {
+    expect(textsEdited({ 'a.qmd': buf('x') }, { 'a.qmd': { base: 'x', text: 'y' } })).toBe(true);
+  });
+
+  it('is false when a file is only opened, so the preview is not marked out of date', () => {
+    expect(textsEdited({}, { 'a.qmd': buf('x') })).toBe(false);
+    expect(textsEdited({ 'a.qmd': buf('x') }, { 'a.qmd': buf('x'), 'b.qmd': buf('z') })).toBe(false);
+  });
+});
 
 const repo: Repository = {
   id: 1,

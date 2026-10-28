@@ -50,7 +50,7 @@ const diffProps = {
 };
 
 describe('review components render untrusted text as text', () => {
-  it('escapes titles in the list and links only to GitHub', () => {
+  it('escapes titles in the list and keeps View on GitHub for the detail page', () => {
     const html = render(
       <ProposalList
         rows={[
@@ -62,9 +62,8 @@ describe('review components render untrusted text as text', () => {
     );
     expect(html).not.toContain('<img');
     expect(html).toContain('&lt;img');
-    expect(html).toContain('href="https://github.com/o/p/pull/1"');
-    expect(html).toContain('rel="noopener noreferrer"');
-    expect(html.match(/href=/g)?.length).toBe(1);
+    expect(html).not.toContain('href=');
+    expect(html).not.toContain('View on GitHub');
   });
 
   it('escapes file names, patches, comments and suggestions', () => {

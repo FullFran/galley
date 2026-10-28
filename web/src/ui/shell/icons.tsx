@@ -3,7 +3,7 @@
 
 export type IconId =
   | 'library' | 'outline' | 'folder' | 'proposals' | 'settings' | 'help' | 'info' | 'menu' | 'panel'
-  | 'close' | 'logout' | 'file' | 'document' | 'image' | 'bib' | 'chevron' | 'github';
+  | 'close' | 'logout' | 'file' | 'document' | 'image' | 'bib' | 'chevron' | 'github' | 'dots' | 'selector' | 'eye';
 
 const PATHS: Record<IconId, string[]> = {
   library: ['M4 4h4v16H4z', 'M10 4h4v16h-4z', 'M16.5 4.5l3.5 1-4 15-3.5-1'],
@@ -22,6 +22,9 @@ const PATHS: Record<IconId, string[]> = {
   image: ['M4 5h16v14H4z', 'M4 16l5-5 4 4 2-2 5 5', 'M15.5 9.5h.01'],
   bib: ['M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5z', 'M5 19.5A1.5 1.5 0 0 0 6.5 21H19v-3', 'M9 7h6'],
   chevron: ['M6 9l6 6 6-6'],
+  dots: ['M5 11a1 1 0 1 0 0 2 1 1 0 1 0 0-2z', 'M12 11a1 1 0 1 0 0 2 1 1 0 1 0 0-2z', 'M19 11a1 1 0 1 0 0 2 1 1 0 1 0 0-2z'],
+  selector: ['M8 9l4-4 4 4', 'M16 15l-4 4-4-4'],
+  eye: ['M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z', 'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'],
   github: ['M9 19c-4 1.5-4-2-6-2.5', 'M15 21v-3.5a3 3 0 0 0-.9-2.3c3-.3 6-1.5 6-6.5a5 5 0 0 0-1.4-3.5 4.7 4.7 0 0 0-.1-3.5s-1.1-.3-3.6 1.4a12.3 12.3 0 0 0-6.4 0C6.1 1.4 5 1.7 5 1.7a4.7 4.7 0 0 0-.1 3.5A5 5 0 0 0 3.5 8.7c0 5 3 6.2 6 6.5a3 3 0 0 0-.9 2.3V21'],
 };
 

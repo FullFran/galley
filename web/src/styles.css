@@ -666,37 +666,99 @@ label {
   color: var(--fg);
 }
 
-/* Current entry: weight, an indicator and aria-current; colour is not the only cue. */
+/* Current entry: a 3px accent bar on the left and bold, with aria-current; colour is not the only cue. */
 .nav-item[aria-current='page'] {
   background: var(--surface);
-  border-color: var(--border);
   color: var(--fg);
   font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent);
 }
 
-.nav-item[aria-current='page']::after {
-  content: '';
-  position: absolute;
-  right: var(--space-2);
-  width: 0.375rem;
-  height: 0.375rem;
-  border-radius: 50%;
-  background: var(--accent);
+.nav-meta {
+  flex: none;
+  margin-left: auto;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  white-space: nowrap;
 }
 
-.nav-item[aria-current='page'] .badge {
-  margin-right: var(--space-3);
+/* Task groups: a muted label, or a header button that folds the group (Review). */
+.nav-group + .nav-group {
+  margin-top: var(--space-2);
+}
+
+.nav-group-label,
+.nav-group-head {
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.nav-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 2rem;
+  border: 1px solid transparent;
+  background: transparent;
+  text-align: left;
+}
+
+.nav-group-head:hover {
+  color: var(--fg);
+}
+
+.nav-group-chevron {
+  width: 1rem;
+  height: 1rem;
+  transform: rotate(-90deg);
+}
+
+.nav-group-head[aria-expanded='true'] .nav-group-chevron {
+  transform: none;
+}
+
+.nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-list[hidden] {
+  display: none;
+}
+
+/* Repository switcher row above the groups. */
+.repo-switch-row {
+  flex: none;
+  padding: var(--space-2) var(--space-2) 0;
+}
+
+.repo-switch {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.repo-switch-icon {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  margin-left: auto;
+  color: var(--fg-muted);
 }
 
 .nav-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.nav-sub {
-  margin: calc(-1 * var(--space-1)) 0 var(--space-1) calc(var(--space-3) + 1.25rem + var(--space-3));
-  font-size: var(--text-xs);
 }
 
 .sidebar-panel {
@@ -778,8 +840,21 @@ label {
   padding-left: var(--space-3);
 }
 
-.outline-main .chip {
-  margin-left: auto;
+.tree-suffix {
+  flex: none;
+  font-size: var(--text-xs);
+}
+
+/* Contents: Outline | Files over one tree. */
+.segmented.contents-tabs {
+  display: flex;
+  margin: 0 0 var(--space-2);
+}
+
+.contents-tabs button {
+  flex: 1;
+  min-height: 2rem;
+  font-size: var(--text-xs);
 }
 
 .outline-l2 {
@@ -800,36 +875,58 @@ label {
   font-weight: 500;
 }
 
-.view-notice,
-.sidebar-panel .banner {
-  margin: var(--space-1) 0 var(--space-2);
-  padding: var(--space-2);
-  font-size: var(--text-xs);
-}
-
-.sidebar-panel .view-notice {
-  padding: 0 var(--space-2);
-}
-
-.sidebar-panel .banner button {
-  margin-top: var(--space-1);
-}
-
+/* Footer: one row with the account and Help, then a muted credit line. */
 .sidebar-foot {
   flex: none;
   padding: var(--space-2);
   border-top: 1px solid var(--border);
 }
 
-.account {
-  margin: 0;
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--text-sm);
-  font-weight: 500;
+.sidebar-foot-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
 }
 
-.sidebar-credit {
-  padding: var(--space-1) var(--space-3);
+.sidebar-foot-row > .menu-root:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+.account-button {
+  color: var(--fg);
+}
+
+.avatar {
+  display: inline-grid;
+  flex: none;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: 600;
+}
+
+.credit-line {
+  display: block;
+  width: 100%;
+  min-height: 1.5rem;
+  margin-top: var(--space-1);
+  padding: 0 var(--space-3);
+  border: none;
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+  font-weight: 400;
+  text-align: left;
+}
+
+.credit-line:hover {
+  color: var(--fg);
+  text-decoration: underline;
 }
 
 .credit {
@@ -844,10 +941,6 @@ label {
 
 .credit a:hover {
   color: var(--fg);
-}
-
-.credit-icon {
-  display: none;
 }
 
 /* Save button: the short label only on phones. */
@@ -865,11 +958,7 @@ label {
   }
 }
 
-/* ES | EN switcher: sidebar footer and landing footer. */
-.language-slot {
-  padding: var(--space-1) var(--space-3);
-}
-
+/* ES | EN switcher on the landing; signed in, the language lives in the account menu. */
 .language-switch button {
   min-width: 2.25rem;
   min-height: 2rem;
@@ -878,35 +967,6 @@ label {
   letter-spacing: 0.02em;
 }
 
-/* In the icon rail the two buttons stack so they fit 3.5rem. */
-.shell[data-collapsed='true'] .language-slot {
-  display: flex;
-  justify-content: center;
-  padding: var(--space-1) 0;
-}
-
-.shell[data-collapsed='true'] .language-switch {
-  flex-direction: column;
-}
-
-.view-as {
-  margin: var(--space-1) 0 var(--space-2);
-}
-
-.view-as .segmented {
-  display: flex;
-}
-
-.view-as .segmented button {
-  flex: 1;
-  min-height: 2.25rem;
-  padding: 0 var(--space-1);
-  font-size: var(--text-xs);
-}
-
-.view-as .panel-note {
-  margin: var(--space-1) 0 0;
-}
 
 /* Collapsed: an icon rail with tooltips. */
 @media (min-width: 768px) {
@@ -917,11 +977,11 @@ label {
 
   .shell[data-collapsed='true'] .brand,
   .shell[data-collapsed='true'] .nav-label,
-  .shell[data-collapsed='true'] .nav-sub,
+  .shell[data-collapsed='true'] .nav-meta,
+  .shell[data-collapsed='true'] .nav-group-label,
   .shell[data-collapsed='true'] .sidebar-panel,
-  .shell[data-collapsed='true'] .badge,
-  .shell[data-collapsed='true'] .account,
-  .shell[data-collapsed='true'] .sidebar-credit {
+  .shell[data-collapsed='true'] .repo-switch-icon,
+  .shell[data-collapsed='true'] .credit-line {
     display: none;
   }
 
@@ -930,12 +990,24 @@ label {
     padding: 0;
   }
 
-  .shell[data-collapsed='true'] .nav-item[aria-current='page']::after {
-    right: 0.125rem;
+  /* The rail is short; letting it overflow keeps the tooltips from being clipped. */
+  .shell[data-collapsed='true'] .sidebar-nav {
+    overflow: visible;
   }
 
-  .shell[data-collapsed='true'] .credit-icon {
-    display: inline-grid;
+  .shell[data-collapsed='true'] .repo-switch-row {
+    padding: var(--space-2) var(--space-1) 0;
+  }
+
+  .shell[data-collapsed='true'] .sidebar-foot-row {
+    flex-direction: column;
+  }
+
+  .shell[data-collapsed='true'] .sidebar-foot-row > .menu-root {
+    width: 100%;
+  }
+
+  .shell[data-collapsed='true'] .help-button {
     width: 100%;
   }
 }
@@ -1092,15 +1164,418 @@ label {
   min-height: 2.25rem;
 }
 
-.note-toggle {
+.save-dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: var(--space-1);
+  border-radius: 50%;
+  background: var(--accent);
+  vertical-align: 0.05em;
+}
+
+/* Split button: the caret opens the note. */
+.split-button .save-main {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.split-button .save-caret {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  padding: 0;
+  border-left: 1px solid color-mix(in srgb, var(--accent-fg) 35%, transparent);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.split-button .save-main:disabled + .save-caret {
+  border-color: var(--border);
+  background: var(--sidebar);
+  color: var(--fg);
+}
+
+.save-caret .icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.save-caret[aria-expanded='true'] .icon {
+  transform: rotate(180deg);
+}
+
+.more-button {
   width: 2.25rem;
   height: 2.25rem;
   min-height: 2.25rem;
-  margin-right: var(--space-1);
 }
 
-.note-toggle[aria-expanded='true'] .icon {
-  transform: rotate(180deg);
+/* Breadcrumb segments that do something. */
+.crumb {
+  min-height: 1.75rem;
+  padding: 0 var(--space-1);
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.crumb:hover {
+  color: var(--fg);
+  text-decoration: underline;
+}
+
+/* Menus (account, Help, ⋯): WAI-ARIA menu pattern on the .popover surface. */
+.menu-root {
+  position: relative;
+}
+
+.popover.menu {
+  width: 15rem;
+  padding: var(--space-1);
+}
+
+.popover.menu-up {
+  top: auto;
+  bottom: calc(100% + var(--space-2));
+}
+
+.popover.menu-start {
+  right: auto;
+  left: 0;
+}
+
+.menu-item,
+.menu-radio {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  min-height: 2.25rem;
+  padding: 0 var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--fg);
+  font-size: var(--text-sm);
+  font-weight: 400;
+  text-align: left;
+}
+
+.menu-item:hover,
+.menu-item:focus-visible,
+.menu-radio:hover:not([aria-disabled='true']),
+.menu-radio:focus-visible {
+  background: var(--hover);
+}
+
+.menu-label {
+  flex: 1;
+}
+
+.menu-kbd,
+.shortcut-list kbd {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--sidebar);
+  color: var(--fg-muted);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.menu-item-danger {
+  color: var(--danger-fg);
+}
+
+.menu .menu-header {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: var(--space-1) var(--space-2) var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.menu .menu-header .muted {
+  font-size: var(--text-xs);
+  font-weight: 400;
+}
+
+.menu-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+}
+
+.menu-group-label {
+  color: var(--fg-muted);
+  font-size: var(--text-xs);
+}
+
+.menu-segmented {
+  display: flex;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--sidebar);
+}
+
+.menu-segmented .menu-radio {
+  flex: 1;
+  justify-content: center;
+  min-height: 2rem;
+  padding: 0 var(--space-1);
+  font-size: var(--text-xs);
+}
+
+.menu-radio[aria-checked='true'] {
+  border-color: var(--border);
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.menu-radio[aria-disabled='true'] {
+  color: var(--fg-muted);
+  cursor: not-allowed;
+}
+
+.menu-separator {
+  height: 1px;
+  margin: var(--space-1) 0;
+  background: var(--border);
+}
+
+.narrow-only {
+  display: none;
+}
+
+/* Switches: a checkbox with role="switch", drawn as a track and a knob. */
+.switch-row {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+input.switch {
+  appearance: none;
+  position: relative;
+  flex: none;
+  width: 2.25rem;
+  height: 1.25rem;
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--sidebar);
+  cursor: pointer;
+}
+
+input.switch::after {
+  content: '';
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  width: calc(1.25rem - 4px);
+  height: calc(1.25rem - 4px);
+  border-radius: 50%;
+  background: var(--fg-muted);
+  transition: transform var(--dur-fast);
+}
+
+input.switch:checked {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+input.switch:checked::after {
+  background: var(--accent-fg);
+  transform: translateX(1rem);
+}
+
+/* One-line banners above the screen (view as co-author, not set up). */
+.shell-banners {
+  flex: none;
+}
+
+.line-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.25rem;
+  padding: 0 var(--space-2) 0 var(--space-4);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+
+.line-banner-warn {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+
+.line-banner-error {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+}
+
+.line-banner-info {
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+
+.line-banner-icon {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+}
+
+.line-banner-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.line-banner-action,
+.line-banner-why summary {
+  flex: none;
+  min-height: 1.75rem;
+  padding: 0 var(--space-2);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: inherit;
+  font-size: var(--text-xs);
+  font-weight: 600;
+  line-height: 1.6rem;
+  cursor: pointer;
+}
+
+.line-banner-why {
+  flex: none;
+}
+
+/* The "Why?" popover hangs from the banner's right edge, so it stays on screen on phones. */
+.line-banner {
+  position: relative;
+}
+
+.line-banner .line-banner-pop {
+  right: var(--space-2);
+}
+
+.line-banner-why summary {
+  list-style: none;
+}
+
+.line-banner-why summary::-webkit-details-marker {
+  display: none;
+}
+
+.line-banner .line-banner-pop {
+  margin: 0;
+  color: var(--fg);
+  font-size: var(--text-sm);
+  white-space: normal;
+}
+
+.line-banner-close {
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  min-height: 2rem;
+  color: inherit;
+}
+
+/* Admin area tabs. */
+.tabs {
+  display: flex;
+  gap: var(--space-1);
+  margin: var(--space-4) 0 var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.tab {
+  min-height: var(--target);
+  padding: 0 var(--space-3);
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--fg-muted);
+}
+
+.tab[aria-selected='true'] {
+  border-bottom-color: var(--accent);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.view-as {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.view-as p {
+  margin: 0;
+}
+
+/* Preferences and shortcuts dialogs. */
+.prefs-section h3 {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--text-md);
+}
+
+.prefs-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-2);
+}
+
+.segmented button[role='radio'][aria-checked='true'] {
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.shortcut-list {
+  margin: var(--space-3) 0;
+}
+
+.shortcut-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.shortcut-row dt,
+.shortcut-row dd {
+  margin: 0;
+}
+
+.shortcut-row dd {
+  display: flex;
+  gap: var(--space-1);
+  align-items: center;
+  white-space: nowrap;
+}
+
+.own-proposal {
+  margin: var(--space-1) 0 var(--space-2);
+  font-size: var(--text-xs);
 }
 
 .popover {
@@ -1367,14 +1842,7 @@ label {
 }
 
 .compile-auto {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  white-space: nowrap;
-}
-
-.compile-auto input {
-  margin: 0;
+  font-size: var(--text-sm);
 }
 
 .compile-state {
@@ -1455,6 +1923,22 @@ label {
     padding: 0 var(--space-2);
   }
 
+  .split-button .save-caret {
+    display: none;
+  }
+
+  .split-button .save-main {
+    border-radius: var(--radius-control);
+  }
+
+  .narrow-only {
+    display: flex;
+  }
+
+  .line-banner {
+    padding-left: var(--space-3);
+  }
+
   .view-switch button {
     padding: 0 var(--space-2);
   }
@@ -1476,8 +1960,9 @@ label {
 }
 
 @media (max-width: 420px) {
-  .shell-header:has(.save-control) .breadcrumb {
-    display: none;
+  /* Phones keep the file name, truncated, before Edit | Preview, ⋯ and Save. */
+  .breadcrumb li:last-child {
+    max-width: 100%;
   }
 
   .header-actions {
@@ -2095,6 +2580,10 @@ label {
   .review-bar button {
     flex: 1;
     min-height: var(--target);
+  }
+
+  .review-bar[hidden] {
+    display: none;
   }
 
   .thread,

@@ -4,7 +4,7 @@ import type { ProjectSource, RenderResult } from '../render';
 import { createRenderClient, TOO_COMPLEX } from '../render/client';
 import { createCompiler, isRecompileShortcut, type CompileState, type Compiler } from '../compile/compiler';
 import { readAutoCompile, writeAutoCompile } from '../compile/preference';
-import { describeError, type Buffers } from '../workspace/model';
+import { describeError, textsEdited, type Buffers } from '../workspace/model';
 import { useT } from '../i18n';
 import { CompileBar } from '../ui/CompileBar';
 import { PreviewFrame } from '../ui/PreviewFrame';
@@ -22,16 +22,12 @@ export interface PreviewProps {
   autoCompileDefault?: boolean;
   /** Heading to scroll the preview to, from the outline. */
   scrollTo?: { id?: string; text: string; seq: number };
+  /** Bumped by "Recompile now" in the header ⋯ menu. */
+  recompileSeq?: number;
 }
 
 const DEBOUNCE_MS = 300;
 
-/** True when any open file's text differs between two buffer sets. */
-function textsDiffer(a: Buffers, b: Buffers): boolean {
-  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-  for (const k of keys) if (a[k]?.text !== b[k]?.text) return true;
-  return false;
-}
 
 /**
  * Renders the project in a Web Worker and hands the result to the sandboxed
@@ -40,7 +36,7 @@ function textsDiffer(a: Buffers, b: Buffers): boolean {
  * stays out of the initial bundle, and a document that takes too long to
  * render cannot freeze the editor.
  */
-export function Preview({ gateway, repo, headSha, files, buffers, entry, autoCompileDefault = false, scrollTo }: PreviewProps) {
+export function Preview({ gateway, repo, headSha, files, buffers, entry, autoCompileDefault = false, scrollTo, recompileSeq }: PreviewProps) {
   const [result, setResult] = useState<RenderResult & { seq: number }>();
   const t = useT();
   // Kept as data, so the text follows a language switch.
@@ -113,11 +109,14 @@ export function Preview({ gateway, repo, headSha, files, buffers, entry, autoCom
 
   const lastBuffers = useRef(buffers);
   useEffect(() => {
-    if (textsDiffer(lastBuffers.current, buffers)) compiler.current?.edited();
+    if (textsEdited(lastBuffers.current, buffers)) compiler.current?.edited();
     lastBuffers.current = buffers;
   }, [buffers]);
 
   useEffect(() => compiler.current?.setAuto(auto), [auto]);
+  useEffect(() => {
+    if (recompileSeq) compiler.current?.recompile();
+  }, [recompileSeq]);
   useEffect(() => setAuto(readAutoCompile(repo.fullName, autoCompileDefault)), [repo.fullName, autoCompileDefault]);
 
   // Ctrl/Cmd+Enter anywhere in galley, including inside the editor (captured

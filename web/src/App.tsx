@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { FileChange, Person, RepoAccess, RepoGateway, Repository, ReviewGateway } from './domain';
 import type { Session } from './auth/session';
-import { useT, useTRef } from './i18n';
+import { useTRef } from './i18n';
 import { startView } from './containers/boot';
 import { Proposals } from './containers/Proposals';
 import { RepoPicker } from './containers/RepoPicker';
 import { Workspace } from './containers/Workspace';
+import { DEFAULT_ADMIN_TAB } from './shell/adminTabs';
 import type { NavId } from './shell/nav';
+import { formatRoute, parseRoute, rememberRoute, repoRoute, takeRememberedRoute, type RepoRoute, type Route } from './shell/route';
 import { useSidebar } from './shell/useSidebar';
 import type { ShellContext } from './ui/shell/AppShell';
 import { CurrentLanguageSwitch } from './ui/shell/LanguageSwitch';
@@ -23,11 +25,17 @@ type View =
   | { name: 'loading' }
   | { name: 'signedOut'; loginFailed: boolean; notice?: string; httpsUrl?: string; unsaved?: FileChange[] }
   | { name: 'repos' }
-  | { name: 'workspace'; repo: Repository; settings?: boolean }
-  | { name: 'proposals'; repo: Repository };
+  | { name: 'workspace'; repo: Repository; route: Extract<RepoRoute, { name: 'workspace' | 'admin' }> }
+  | { name: 'proposals'; repo: Repository; number?: number };
 
+const sameRepo = (r: Repository, route: RepoRoute) => r.fullName.toLowerCase() === `${route.owner}/${route.repo}`.toLowerCase();
+
+/**
+ * Screens follow the URL fragment (shell/route.ts), so a reload, a shared
+ * link or the back button lands where the person was. Leaving the workspace
+ * with unsaved edits asks first, also on back and forward.
+ */
 export function App({ session, gateway, reviews }: AppProps) {
-  const t = useT();
   // Stable callbacks read the catalog through a ref, so a language switch does
   // not re-run the screens' effects (the workspace would reload and lose edits).
   const tRef = useTRef();
@@ -38,16 +46,101 @@ export function App({ session, gateway, reviews }: AppProps) {
   const [proposalsTick, setProposalsTick] = useState(0);
   const dirty = useRef(false);
   const sidebar = useSidebar();
-
-  useEffect(() => {
-    const search = window.location.search;
-    if (search) window.history.replaceState(null, '', window.location.pathname);
-    void startView(session, search, window.location, tRef.current).then(setView);
-  }, [session, tRef]);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  // The fragment the current screen stands for; back/forward compare with it.
+  const shown = useRef('#/');
+  const repoList = useRef<Promise<Repository[]>>(undefined);
 
   const signedIn = view.name === 'repos' || view.name === 'workspace' || view.name === 'proposals';
   const repo = view.name === 'workspace' || view.name === 'proposals' ? view.repo : undefined;
+  const signedInRef = useRef(signedIn);
+  signedInRef.current = signedIn;
 
+  /** Shows a route: finds its repository (the open one, else the list), else the repository list. */
+  const show = useCallback(
+    async (route: Route) => {
+      shown.current = formatRoute(route);
+      if (route.name === 'repos') return setView({ name: 'repos' });
+      const current = viewRef.current;
+      let found = (current.name === 'workspace' || current.name === 'proposals') && sameRepo(current.repo, route) ? current.repo : undefined;
+      if (!found) {
+        if (current.name !== 'loading') setView({ name: 'loading' });
+        repoList.current ??= gateway.listRepositories();
+        const list = await repoList.current.catch(() => {
+          repoList.current = undefined;
+          return [] as Repository[];
+        });
+        found = list.find((r) => sameRepo(r, route));
+      }
+      if (!found) {
+        window.history.replaceState(null, '', '#/');
+        shown.current = '#/';
+        return setView({ name: 'repos' });
+      }
+      if (route.name === 'proposals') return setView({ name: 'proposals', repo: found, number: route.number });
+      setView({ name: 'workspace', repo: found, route });
+    },
+    [gateway],
+  );
+
+  useEffect(() => {
+    // Keep the fragment; drop the OAuth callback's query (`?login=failed`).
+    const search = window.location.search;
+    if (search) window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+    void startView(session, search, window.location, tRef.current).then((start) => {
+      if (start.name !== 'repos') return setView(start);
+      const back = takeRememberedRoute();
+      if (back) window.history.replaceState(null, '', formatRoute(back));
+      const route = back ?? parseRoute(window.location.hash);
+      if (formatRoute(route) !== window.location.hash && window.location.hash !== '') window.history.replaceState(null, '', formatRoute(route));
+      void show(route);
+    });
+  }, [session, tRef, show]);
+
+  /** Leaving the workspace (or its repository) drops unsaved edits. */
+  const leavesEdits = (route: Route) => {
+    const current = viewRef.current;
+    if (current.name !== 'workspace' || !dirty.current) return false;
+    return !((route.name === 'workspace' || route.name === 'admin') && sameRepo(current.repo, route));
+  };
+  const canLeave = () => !dirty.current || window.confirm(tRef.current.app.leavePrompt);
+
+  const go = useCallback(
+    (route: Route) => {
+      const hash = formatRoute(route);
+      if (hash === shown.current) return;
+      if (leavesEdits(route) && !canLeave()) return;
+      if (leavesEdits(route)) dirty.current = false;
+      window.history.pushState(null, '', hash);
+      void show(route);
+    },
+    [show],
+  );
+
+  // Back, forward and edits of the address bar.
+  useEffect(() => {
+    const onPop = () => {
+      if (!signedInRef.current) return;
+      const route = parseRoute(window.location.hash);
+      const hash = formatRoute(route);
+      if (hash === shown.current) return;
+      if (leavesEdits(route) && !canLeave()) {
+        // Stay: put the current screen's address back.
+        window.history.pushState(null, '', shown.current);
+        return;
+      }
+      if (leavesEdits(route)) dirty.current = false;
+      if (hash !== window.location.hash) window.history.replaceState(null, '', hash);
+      void show(route);
+    };
+    window.addEventListener('popstate', onPop);
+    window.addEventListener('hashchange', onPop);
+    return () => {
+      window.removeEventListener('popstate', onPop);
+      window.removeEventListener('hashchange', onPop);
+    };
+  }, [show]);
   useEffect(() => {
     if (signedIn && !user) reviews.currentUser().then(setUser, () => undefined);
   }, [signedIn, user, reviews]);
@@ -80,7 +173,7 @@ export function App({ session, gateway, reviews }: AppProps) {
     };
   }, [repo?.id, access]);
 
-  // Proposal count and the user's own proposal for the sidebar; optional.
+  // Proposal count and how many are the user's own, for the sidebar; optional.
   useEffect(() => {
     setProposals(undefined);
     if (!repo) return;
@@ -88,7 +181,7 @@ export function App({ session, gateway, reviews }: AppProps) {
     reviews.listProposals(repo).then(
       (list) => {
         if (!active) return;
-        const mine = user ? list.find((p) => p.author?.login === user.login)?.number : undefined;
+        const mine = user ? list.filter((p) => p.author?.login === user.login).length : 0;
         setProposals({ count: list.length, mine });
       },
       () => undefined,
@@ -109,27 +202,23 @@ export function App({ session, gateway, reviews }: AppProps) {
     dirty.current = value;
   }, []);
   const refreshProposals = useCallback(() => setProposalsTick((n) => n + 1), []);
-  const canLeave = () => !dirty.current || window.confirm(t.app.leavePrompt);
 
   const signOut = async () => {
     if (!canLeave()) return;
     dirty.current = false;
     await session.logout().catch(() => undefined);
     setUser(undefined);
+    window.history.replaceState(null, '', '#/');
+    shown.current = '#/';
     setView({ name: 'signedOut', loginFailed: false });
   };
 
   const navigate = (id: NavId) => {
-    if (id === 'repos') {
-      if (canLeave()) setView({ name: 'repos' });
-      return;
-    }
     if (!repo) return;
-    if (id === 'proposals' && view.name !== 'proposals') {
-      if (canLeave()) setView({ name: 'proposals', repo });
-    } else if (id === 'paper' || id === 'files' || id === 'settings') {
-      if (view.name !== 'workspace') setView({ name: 'workspace', repo, settings: id === 'settings' });
-    }
+    const base = repoRoute(repo.fullName);
+    if (id === 'proposals') go({ name: 'proposals', ...base });
+    else if (id === 'admin') go({ name: 'admin', ...base, tab: DEFAULT_ADMIN_TAB });
+    else go({ name: 'workspace', ...base });
   };
 
   if (view.name === 'loading') {
@@ -146,7 +235,11 @@ export function App({ session, gateway, reviews }: AppProps) {
         notice={view.notice}
         httpsUrl={view.httpsUrl}
         unsaved={view.unsaved}
-        onSignIn={() => window.location.assign(session.loginUrl())}
+        onSignIn={() => {
+          // GitHub sign in loses the fragment; come back to it afterwards.
+          rememberRoute(window.location.hash);
+          window.location.assign(session.loginUrl());
+        }}
         languageSwitch={<CurrentLanguageSwitch />}
       />
     );
@@ -159,25 +252,43 @@ export function App({ session, gateway, reviews }: AppProps) {
     proposals,
     sidebar,
     onNavigate: navigate,
+    onRepos: () => go({ name: 'repos' }),
     onSignOut: () => void signOut(),
-    languageSwitch: <CurrentLanguageSwitch />,
   };
   if (view.name === 'repos') {
     return (
-      <RepoPicker gateway={gateway} shell={shell} onOpen={(r) => setView({ name: 'workspace', repo: r })} onAuthRequired={signedOut} />
+      <RepoPicker
+        gateway={gateway}
+        shell={shell}
+        onOpen={(r) => go({ name: 'workspace', ...repoRoute(r.fullName) })}
+        onAuthRequired={signedOut}
+      />
     );
   }
   if (view.name === 'proposals') {
-    return <Proposals key={view.repo.id} repos={gateway} reviews={reviews} repo={view.repo} shell={shell} onAuthRequired={signedOut} />;
+    const base = repoRoute(view.repo.fullName);
+    return (
+      <Proposals
+        key={view.repo.id}
+        repos={gateway}
+        reviews={reviews}
+        repo={view.repo}
+        number={view.number}
+        onOpen={(number) => go({ name: 'proposals', ...base, number })}
+        shell={shell}
+        onAuthRequired={signedOut}
+      />
+    );
   }
   return (
     <Workspace
       key={view.repo.id}
       gateway={gateway}
       repo={view.repo}
+      route={view.route}
+      onRoute={go}
       access={access}
       shell={shell}
-      settingsFirst={view.settings}
       onAuthRequired={signedOut}
       onDirtyChange={onDirtyChange}
       onSaved={refreshProposals}

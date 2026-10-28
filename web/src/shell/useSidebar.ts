@@ -1,5 +1,6 @@
 import type { RefObject } from 'preact';
 import { useEffect, useReducer, useRef } from 'preact/hooks';
+import { matchShortcut, typingInField } from './shortcuts';
 import { initialSidebar, readCollapsed, reduceSidebar, writeCollapsed, type SidebarAction, type SidebarState } from './sidebar';
 
 export interface SidebarControl {
@@ -20,12 +21,6 @@ const storage = (): Storage | undefined => {
 };
 const width = () => (typeof window === 'undefined' ? 1280 : window.innerWidth);
 
-/** Ctrl/Cmd+B means bold in text fields, so the shortcut leaves them alone. */
-function typingInField(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
-}
-
 /**
  * Owns the sidebar state for the whole signed-in app, so it survives moving
  * between screens: the collapse preference (stored), the phone drawer (not
@@ -45,8 +40,8 @@ export function useSidebar(): SidebarControl {
     const onResize = () => dispatch({ type: 'resize', width: window.innerWidth });
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') return dispatch({ type: 'closeDrawer' });
-      if (e.key.toLowerCase() !== 'b' || !(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
-      if (typingInField(e.target)) return;
+      // Ctrl/Cmd+B means bold in text fields, so the shortcut leaves them alone.
+      if (matchShortcut(e, typingInField(e.target)) !== 'toggleSidebar') return;
       e.preventDefault();
       dispatch({ type: 'toggle' });
     };

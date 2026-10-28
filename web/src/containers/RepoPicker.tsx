@@ -37,7 +37,7 @@ export function RepoPicker({ gateway, onOpen, onAuthRequired, shell }: RepoPicke
   }, [gateway, onAuthRequired, attempt, tRef]);
 
   return (
-    <AppShell shell={shell} active="repos" crumbs={[t.nav.repos]}>
+    <AppShell shell={shell} crumbs={[t.nav.repos]}>
       <div class="page">
         <h1>{t.repos.title}</h1>
         <p class="muted">{t.repos.intro}</p>

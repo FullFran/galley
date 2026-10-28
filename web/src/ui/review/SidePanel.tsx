@@ -139,6 +139,7 @@ export function ReviewForm(props: ReviewFormProps) {
           </label>
         ))}
       </fieldset>
+      {ownProposal && <p class="muted own-proposal">{t.review.ownProposal}</p>}
       <label>
         {t.review.overallComment(!needsBody)}
         <textarea rows={4} value={body} onInput={(e) => props.onBody((e.target as HTMLTextAreaElement).value)} />
