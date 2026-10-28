@@ -135,7 +135,21 @@ CI status in-app.
   whether sd-api is Cloudflare-proxied, PocketBase trusted proxy header,
   `repository_id` scoping after refresh.
 
+- 2026-10-28 delivered: PRs #1-#5 merged into `main` in order (merge commit
+  `ff5c964`). Deployed: Pages at <https://galley.fullfran.com> with HTTPS
+  enforced; API at <https://galley-api.fullfran.com>. First end-to-end save
+  from galley produced PR #7 on the paper repository, authored by Fran, and it
+  was merged.
+  Confirmed deploy values (now in `docs/deploy.md`): Traefik network
+  `dokploy-network`, certresolver `letsencrypt`; `sd-api` and `galley-api` are
+  DNS-only A records; GitHub App `galley-by-fullfran` created from a manifest.
+  Branch protection is unavailable on the private GitHub Free paper repo
+  (HTTP 403). Still unverified: whether `repository_id` survives refresh.
+  Gotcha (stacked merge): `gh pr merge --delete-branch` on a PR whose branch
+  was the base of the next PR closed that dependent PR. Retarget the
+  dependent PR to `main` before merging its base, and delete branches only
+  after the whole stack is merged.
+
 ## Next step
 
-Push the stacked branches and open the PRs (Fran's decision), then follow
-`docs/deploy.md` for the manual steps and the live first-run checklist.
+Done. Follow-up work continues in `odd/tasks/galley-comfort.md`.

@@ -4,12 +4,14 @@ import { UnsavedCopies } from './StatusBanner';
 export interface SignedOutProps {
   loginFailed: boolean;
   notice?: string;
+  /** Set when the page was opened over http: sign in only works over https. */
+  httpsUrl?: string;
   /** Edits that could not be saved because the session ended. */
   unsaved?: FileChange[];
   onSignIn: () => void;
 }
 
-export function SignedOut({ loginFailed, notice, unsaved = [], onSignIn }: SignedOutProps) {
+export function SignedOut({ loginFailed, notice, httpsUrl, unsaved = [], onSignIn }: SignedOutProps) {
   return (
     <main class="card">
       <h1>galley</h1>
@@ -30,9 +32,15 @@ export function SignedOut({ loginFailed, notice, unsaved = [], onSignIn }: Signe
           <UnsavedCopies copies={unsaved} />
         </section>
       )}
-      <button type="button" class="primary" onClick={onSignIn}>
-        Sign in with GitHub
-      </button>
+      {httpsUrl ? (
+        <p class="banner banner-warn" role="alert">
+          Open galley over https: <a href={httpsUrl}>{httpsUrl}</a>
+        </p>
+      ) : (
+        <button type="button" class="primary" onClick={onSignIn}>
+          Sign in with GitHub
+        </button>
+      )}
     </main>
   );
 }
