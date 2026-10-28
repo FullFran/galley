@@ -65,9 +65,10 @@ them on GitHub.
 ## Tasks
 
 - [x] C1 Polish (`feat/comfort-polish`). Route: delegated (2+ files).
-- [x] C2 Preview (`feat/comfort-preview`). Route: delegated. Merge on hold
-  until Fran decides the citeproc-js licence question (CPAL-1.0/AGPL).
-- [ ] C3 Review.
+- [x] C2 Preview (`feat/comfort-preview`). Route: delegated. Merged (PR #7,
+  `06f1b0c`) and deployed.
+- [x] C3 Review (`feat/comfort-review`). Route: delegated (2+ non-trivial
+  files). Implemented and checked; pending commit, PR and merge.
 - [ ] C4 Drafts.
 - [ ] C5 Changed since last visit.
 - [ ] C6 Admin panel.
@@ -93,6 +94,56 @@ them on GitHub.
   throws); parent spot check test + typecheck: pass. Sizes: main 136.9 kB gzip,
   render worker 245 kB gzip. Real paper rendered with no diagnostics.
 
+- C2 merged: PR #7 (`06f1b0c`). Live check on production: `preview.html` is
+  served with its own CSP, and the opaque-origin frame handshake (ready, then
+  render) works.
+- C3 implemented (delegated writer):
+  - Port `ReviewGateway` (`web/src/domain/review.ts`), separate from
+    `RepoGateway` because reviewing is a different capability from editing;
+    GitHub adapter `web/src/github/review.ts` on the existing client (origin
+    check, pagination, error mapping, 401 retry). Shared git helpers moved to
+    `web/src/github/git.ts`; `save` keeps the same requests. 422 now maps to
+    `RejectedError` (a `GatewayError`, so existing callers are unaffected).
+  - Pure logic in `web/src/review/`: patch parsing and anchors, thread
+    grouping, reviewer states, merge gating, suggestion parse/apply with
+    co-author trailer, plain-language labels.
+  - Containers `Proposals` and `ProposalDetail`; presentational components in
+    `web/src/ui/review/`. All PR text rendered as text nodes; links only to
+    https://github.com URLs.
+  - Endpoints checked against docs.github.com: everything fits Contents RW,
+    Pull requests RW and Metadata R (assignees: Issues or Pull requests).
+    Merge settings (`allow_*_merge`) need Contents read+write; if GitHub hides
+    them, galley offers no merge method and points to GitHub. Team reviewers
+    are not shown. CI status stays in C8.
+  - Fixed a C2 race found during the headless check: the preview frame's first
+    `ready` could arrive before the message listener (registered in a passive
+    effect) existed, leaving the preview blank when the frame loaded fast; the
+    listener is now registered in a layout effect.
+  - Checks: tests written first (RED: missing modules), then GREEN.
+    `npm ci --ignore-scripts` (0 vulnerabilities), lint, typecheck, test (189
+    passed, 20 files), build (main 145.2 kB gzip). Headless Chromium against
+    the production build with mocked GitHub: list with review and merge
+    states, 422 reviewer message, queued line comment sent with an approval,
+    range comment with suggestion block, suggestion applied as a fast-forward
+    commit with `Co-authored-by`, merge with `sha` and method, PR-head preview
+    rendered, `<img onerror>` in titles and comments stays text, no horizontal
+    overflow at 390 px.
+  - One scoped correction after an independent review (no blockers): draft
+    and queued comments are tied to the head they were written on and, when
+    the head moves, are not sent but shown with copyable text; unchanged diff
+    lines carry both LEFT and RIGHT anchors, and threads that cannot be placed
+    go to "earlier version" (file-level comments get their own list); 422
+    errors carry the refused action for accurate messages; suggestion
+    matching ignores `\r` and keeps CRLF consistent, also on a last line
+    without newline; reviewer/assignee controls need push access; a refused
+    fast-forward on an unmoved head reports a protected branch; suggestion
+    fences follow CommonMark (longer closing fence, up to 3 spaces indent).
+    Regression test for the preview ready race (hooks mocked; fails with a
+    passive effect). Checks: lint, typecheck, test (204 passed, 23 files),
+    build (main 146.1 kB gzip); headless check: review after an applied
+    suggestion posted on `c2` without the stale comment, LEFT and file
+    threads shown.
+
 ## Next step
 
-Fran's citeproc-js licence decision, then merge C2 and start C3.
+Review, commit and open the C3 pull request; then C4 Drafts.

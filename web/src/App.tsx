@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'preact/hooks';
-import type { FileChange, RepoGateway, Repository } from './domain';
+import type { FileChange, RepoGateway, Repository, ReviewGateway } from './domain';
 import type { Session } from './auth/session';
 import { startView } from './containers/boot';
+import { Proposals } from './containers/Proposals';
 import { RepoPicker } from './containers/RepoPicker';
 import { Workspace } from './containers/Workspace';
 import { SignedOut } from './ui/SignedOut';
@@ -9,17 +10,19 @@ import { SignedOut } from './ui/SignedOut';
 export interface AppProps {
   session: Session;
   gateway: RepoGateway;
+  reviews: ReviewGateway;
 }
 
 type View =
   | { name: 'loading' }
   | { name: 'signedOut'; loginFailed: boolean; notice?: string; httpsUrl?: string; unsaved?: FileChange[] }
   | { name: 'repos' }
-  | { name: 'workspace'; repo: Repository };
+  | { name: 'workspace'; repo: Repository }
+  | { name: 'proposals'; repo: Repository };
 
 const LEAVE_PROMPT = 'You have unsaved changes. Leave anyway?';
 
-export function App({ session, gateway }: AppProps) {
+export function App({ session, gateway, reviews }: AppProps) {
   const [view, setView] = useState<View>({ name: 'loading' });
   const dirty = useRef(false);
 
@@ -62,9 +65,18 @@ export function App({ session, gateway }: AppProps) {
     <>
       <header class="top-bar">
         <strong>galley</strong>
-        {view.name === 'workspace' && (
+        {(view.name === 'workspace' || view.name === 'proposals') && (
           <>
             <span class="repo-name">{view.repo.fullName}</span>
+            {view.name === 'workspace' ? (
+              <button type="button" onClick={() => canLeave() && setView({ name: 'proposals', repo: view.repo })}>
+                Proposals
+              </button>
+            ) : (
+              <button type="button" onClick={() => setView({ name: 'workspace', repo: view.repo })}>
+                Edit files
+              </button>
+            )}
             <button type="button" onClick={() => canLeave() && setView({ name: 'repos' })}>
               Repositories
             </button>
@@ -76,6 +88,8 @@ export function App({ session, gateway }: AppProps) {
       </header>
       {view.name === 'repos' ? (
         <RepoPicker gateway={gateway} onOpen={(repo) => setView({ name: 'workspace', repo })} onAuthRequired={signedOut} />
+      ) : view.name === 'proposals' ? (
+        <Proposals key={view.repo.id} repos={gateway} reviews={reviews} repo={view.repo} onAuthRequired={signedOut} />
       ) : (
         <Workspace
           key={view.repo.id}

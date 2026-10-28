@@ -3,13 +3,13 @@ import {
   GatewayError,
   NotFoundError,
   NotTextError,
-  type FileChange,
   type RepoGateway,
   type Repository,
   type SaveResult,
   type WorkingState,
 } from '../domain';
 import { GitHubClient, type TokenSource } from './client';
+import { branchHead as headOf, createCommit, fastForward, listTree, refPath, repoBase, seg } from './git';
 
 export interface GitHubGatewayOptions {
   tokens: TokenSource;
@@ -25,23 +25,12 @@ interface GhRepo {
   private: boolean;
 }
 
-interface GhRef {
-  object: { sha: string };
-}
-
 interface GhPull {
   html_url: string;
   merged_at: string | null;
   head: { sha: string };
 }
 
-interface GhTree {
-  truncated: boolean;
-  tree: { path: string; type: string; mode: string }[];
-}
-
-const seg = encodeURIComponent;
-const refPath = (branch: string) => branch.split('/').map(seg).join('/');
 
 /**
  * RepoGateway backed by the GitHub REST API, called directly from the browser
@@ -56,17 +45,10 @@ export function createGitHubGateway(options: GitHubGatewayOptions): RepoGateway 
     login.catch(() => (login = undefined));
     return login;
   };
-  const base = (repo: Repository) => `/repos/${seg(repo.owner)}/${seg(repo.name)}`;
+  const base = repoBase;
   const workingBranch = async () => `galley/${await userLogin()}`;
 
-  /** Returns the commit SHA a branch points at, or undefined if it does not exist. */
-  const branchHead = async (repo: Repository, branch: string): Promise<string | undefined> => {
-    const res = await gh.request<GhRef>(`${base(repo)}/git/ref/heads/${refPath(branch)}`, {
-      repositoryId: repo.id,
-      allow: [404],
-    });
-    return res.status === 404 ? undefined : res.data.object.sha;
-  };
+  const branchHead = (repo: Repository, branch: string) => headOf(gh, repo, branch);
 
   const pulls = (repo: Repository, branch: string, query: string) =>
     gh.request<GhPull[]>(
@@ -146,11 +128,8 @@ export function createGitHubGateway(options: GitHubGatewayOptions): RepoGateway 
       const branchExists = headSha !== undefined;
       headSha ??= await branchHead(repo, repo.defaultBranch);
       if (headSha === undefined) throw new NotFoundError(`branch ${repo.defaultBranch} not found`);
-      const { data } = await gh.request<GhTree>(`${base(repo)}/git/trees/${seg(headSha)}?recursive=1`, {
-        repositoryId: repo.id,
-      });
-      const files = data.tree.filter((e) => e.type === 'blob').map((e) => e.path);
-      return { branch, branchExists, headSha, files, truncated: data.truncated };
+      const { files, truncated } = await listTree(gh, repo, headSha);
+      return { branch, branchExists, headSha, files, truncated };
     },
 
     async readFile(repo, path, ref) {
@@ -168,45 +147,22 @@ export function createGitHubGateway(options: GitHubGatewayOptions): RepoGateway 
       if (current !== undefined && current !== expectedHeadSha) {
         throw new ConflictError(`${branch} moved since it was opened`);
       }
-      const opts = { repositoryId: repo.id, method: 'POST' };
-      const parent = await gh.request<{ tree: { sha: string } }>(
-        `${base(repo)}/git/commits/${seg(expectedHeadSha)}`,
-        { repositoryId: repo.id },
-      );
-      const baseTree = await gh.request<GhTree>(
-        `${base(repo)}/git/trees/${seg(parent.data.tree.sha)}?recursive=1`,
-        { repositoryId: repo.id },
-      );
-      const modes = new Map(baseTree.data.tree.map((e) => [e.path, e.mode]));
-      const tree = await gh.request<{ sha: string }>(`${base(repo)}/git/trees`, {
-        ...opts,
-        body: {
-          base_tree: parent.data.tree.sha,
-          tree: changes.map((c) => toTreeEntry(c, modes.get(c.path))),
-        },
-      });
-      const commit = await gh.request<{ sha: string }>(`${base(repo)}/git/commits`, {
-        ...opts,
-        body: { message, tree: tree.data.sha, parents: [expectedHeadSha] },
-      });
-      const commitSha = commit.data.sha;
+      const commitSha = await createCommit(gh, repo, changes, message, expectedHeadSha);
 
       // Never force: a create fails if the branch appeared meanwhile, and an
       // update fails unless it is a fast-forward. Both answer 422.
-      const ref =
+      const moved =
         current === undefined
-          ? await gh.request(`${base(repo)}/git/refs`, {
-              ...opts,
-              allow: [422],
-              body: { ref: `refs/heads/${branch}`, sha: commitSha },
-            })
-          : await gh.request(`${base(repo)}/git/refs/heads/${refPath(branch)}`, {
-              ...opts,
-              method: 'PATCH',
-              allow: [422],
-              body: { sha: commitSha, force: false },
-            });
-      if (ref.status === 422) throw new ConflictError(`${branch} moved since it was opened`);
+          ? (
+              await gh.request(`${base(repo)}/git/refs`, {
+                repositoryId: repo.id,
+                method: 'POST',
+                allow: [422],
+                body: { ref: `refs/heads/${branch}`, sha: commitSha },
+              })
+            ).status !== 422
+          : await fastForward(gh, repo, branch, commitSha);
+      if (!moved) throw new ConflictError(`${branch} moved since it was opened`);
 
       // The commit has landed; a failing pull request step must not hide that,
       // or a retry would report a false conflict.
@@ -246,11 +202,6 @@ function toRepository(r: GhRepo): Repository {
     defaultBranch: r.default_branch,
     private: r.private,
   };
-}
-
-/** Existing files keep their mode (for example 100755); new files get 100644. */
-function toTreeEntry(change: FileChange, mode = '100644') {
-  return { path: change.path, mode, type: 'blob', content: change.content };
 }
 
 /** Decodes GitHub's base64, which has line breaks, into bytes. */

@@ -154,9 +154,10 @@ http on `localhost` and `127.0.0.1` keeps working for local development.
 
 ## Frontend data layer
 
-`web/src/domain/` defines the `RepoGateway` port and its typed errors
-(`ConflictError`, `AuthRequiredError`, `TransientError`, `NotFoundError`,
-`PermissionError`). The app depends only on that port. `web/src/github/`
+`web/src/domain/` defines the `RepoGateway` and `ReviewGateway` ports and their
+typed errors (`ConflictError`, `AuthRequiredError`, `TransientError`,
+`NotFoundError`, `PermissionError`, `RejectedError` for 422,
+`NotMergeableError`, `SuggestionMismatchError`). The app depends only on that port. `web/src/github/`
 implements it against `api.github.com` with `fetch`, and `web/src/auth/` is the
 session client for the auth endpoints above.
 
@@ -259,6 +260,55 @@ Remaining risk: while the dev server runs, any website can read those files
 through a sandboxed frame. They hold no secrets (galley's own public frame code
 and published npm packages), but do not keep private code under
 `web/src/preview/`.
+
+## Review
+
+**Proposals** (in the top bar of a repository) lists every open pull request of
+the repository, not only galley's own, with its review state and whether it can
+be merged. Opening one shows:
+
+- the changed files as a line-by-line diff from GitHub's `patch` field; files
+  without one (binary or very large changes) say so and link to GitHub;
+- "Preview this version", which renders the proposal's head commit in the same
+  sandboxed preview (read-only);
+- line comments grouped into conversations, with replies. A new comment can
+  cover one line or a range ("From line"), can be sent at once ("Comment now")
+  or kept for the review ("Add to review"), and "Suggest a change" inserts a
+  ```` ```suggestion ```` block with the current lines;
+- the review form: comment, approve or ask for changes, with an optional
+  overall comment; kept line comments go out in the same review request;
+- reviewers with their latest state (waiting, approved, changes requested,
+  commented), and assignees. Candidates come from the repository's assignable
+  users; GitHub answers 422 for people without access, shown as a plain
+  message;
+- Merge, only when GitHub reports the proposal mergeable (`clean`, `unstable`
+  or `has_hooks`; never `blocked`) and the user has push access, with the merge
+  methods the repository allows. galley asks for confirmation and always sends
+  the head SHA the user saw, so a proposal that moved fails (409) instead of
+  merging unseen commits. Rules and checks are never bypassed.
+
+Applying a suggestion: GitHub has no REST endpoint for it, so galley makes an
+ordinary commit on the proposal's head branch (only for branches in the same
+repository and users with push access), on top of the head the user saw, and
+moves the branch fast-forward only. Exactly the suggested lines are replaced,
+after checking that they still read as in the comment's diff; otherwise it
+refuses and asks to edit the file instead. The commit carries
+`Co-authored-by: <login> <<id>+<login>@users.noreply.github.com>` for the
+suggester.
+
+All proposal text (titles, descriptions, comments, file names, diffs) is shown
+as plain text, never as HTML, and links point only to `https://github.com/`
+URLs from GitHub's API, with `rel="noopener noreferrer"`.
+
+The review screens use the app's existing permissions: Pull requests
+(read/write) for proposals, comments, reviews, reviewers and assignees;
+Contents (write) for merging and applying suggestions; Metadata for the
+repository's permissions and merge settings. CI status needs Checks or Actions
+access and is planned separately (C8).
+
+The port is `ReviewGateway` in `web/src/domain/review.ts`, implemented in
+`web/src/github/review.ts`; diff parsing, threads, suggestions and reviewer
+states are plain functions in `web/src/review/`.
 
 ## Licence
 

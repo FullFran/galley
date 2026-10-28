@@ -296,3 +296,254 @@ textarea {
     border-bottom: 1px solid var(--border);
   }
 }
+
+/* Proposals (pull requests) and their review. */
+.page-wide {
+  max-width: 64rem;
+}
+
+.proposal-list {
+  list-style: none;
+  padding: 0;
+}
+
+.proposal-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.proposal-title {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font-weight: 600;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.proposal-state {
+  margin-left: auto;
+  font-size: 0.9rem;
+}
+
+.proposal {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+}
+
+.proposal-heading,
+.comment-body {
+  overflow-wrap: anywhere;
+}
+
+.comment-body {
+  white-space: pre-wrap;
+  margin: 0.25rem 0;
+}
+
+.proposal-preview {
+  display: flex;
+  flex-direction: column;
+  margin: 0.75rem 0;
+}
+
+.file-diff {
+  margin: 1rem 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.file-diff-head {
+  padding: 0.4rem 0.6rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
+
+.diff-missing {
+  margin: 0.6rem;
+}
+
+.diff {
+  overflow-x: auto;
+  font-family: ui-monospace, monospace;
+  font-size: 0.82rem;
+}
+
+.diff-row {
+  display: grid;
+  grid-template-columns: 1.6rem 3rem 3rem minmax(0, 1fr);
+  align-items: start;
+}
+
+.diff-row code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding-right: 0.5rem;
+}
+
+.diff-hunk {
+  display: block;
+  padding: 0.15rem 0.6rem;
+  background: #ddf4ff;
+  color: var(--muted);
+}
+
+.diff-add {
+  background: var(--ok-bg);
+}
+
+.diff-del {
+  background: var(--error-bg);
+}
+
+.diff-no {
+  color: var(--muted);
+  text-align: right;
+  padding-right: 0.5rem;
+  user-select: none;
+}
+
+.diff-comment {
+  padding: 0 0.3rem;
+  border: none;
+  background: none;
+  color: var(--accent);
+  opacity: 0.35;
+}
+
+.diff-row:hover .diff-comment,
+.diff-comment:focus {
+  opacity: 1;
+}
+
+.thread,
+.composer,
+.outdated,
+.comment-pending {
+  margin: 0.4rem 0.6rem 0.6rem 2rem;
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 0.9rem;
+}
+
+.thread,
+.composer {
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+}
+
+.comment + .comment {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.comment-pending {
+  padding: 0.4rem 0.6rem;
+  background: var(--warn-bg);
+  border-radius: 6px;
+}
+
+.suggestion pre {
+  margin: 0.25rem 0;
+  padding: 0.4rem;
+  background: var(--ok-bg);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.thread-reply {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-end;
+  margin-top: 0.5rem;
+}
+
+.composer label,
+.side-block label {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.proposal-side {
+  min-width: 0;
+}
+
+.side-block {
+  margin-bottom: 1rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.side-block h3 {
+  margin: 0.25rem 0 0.5rem;
+  font-size: 1rem;
+}
+
+.side-block select {
+  font: inherit;
+  display: block;
+  width: 100%;
+  margin-top: 0.25rem;
+}
+
+.people {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.5rem;
+}
+
+.people li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.review-status {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.status-approved {
+  color: #1a7f37;
+}
+
+.status-changes_requested {
+  color: #cf222e;
+}
+
+button.link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+
+.review-events {
+  border: none;
+  padding: 0;
+  margin: 0 0 0.5rem;
+}
+
+.review-events input {
+  width: auto;
+}
+
+@media (max-width: 56rem) {
+  .proposal {
+    grid-template-columns: 1fr;
+  }
+}
