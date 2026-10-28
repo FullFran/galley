@@ -183,8 +183,8 @@ http on `localhost` and `127.0.0.1` keeps working for local development.
   closed by default, opens by itself on a proposals screen; one row
   "Proposals 2 · 1 yours"); and for admins only one Admin entry, last behind a
   separator. Nothing admin-related appears anywhere else. The footer has the
-  account button, Help (tour, shortcuts, About) and a muted "galley · by F.
-  Olmedo" credit line that opens About. Group state is one JSON map in
+  account button, Help (tour, shortcuts, About) and a muted "galley · by FullFran"
+  credit line that opens About. Group state is one JSON map in
   `localStorage` (`galley:nav-groups`, guarded; `web/src/shell/navGroups.ts`);
   in the icon rail and the phone drawer groups never fold. The current entry
   has a 3px accent bar and bold text. 16rem from 1024px, a 3.5rem icon rail
@@ -200,8 +200,29 @@ http on `localhost` and `127.0.0.1` keeps working for local development.
   `web/public/theme-init.js`, an external script in `<head>` (CSP
   `script-src 'self'`), applies the stored theme before first paint.
 - **Preferences** (native `<dialog>`): auto-compile default for papers where
-  you have not chosen yet, theme and language. Sections for unbuilt features
-  stay hidden.
+  you have not chosen yet, editor mode (Paper default | Writing | Code), Vim
+  key bindings, theme and language. Sections for unbuilt features stay hidden.
+- **Editor** (`web/src/ui/Editor.tsx`, `editorModes.ts`, `editorAssist.ts`,
+  logic in `web/src/editor/`): two modes. Writing: soft wrap, the paper font at
+  16px with 1.7 line height, lines of about 72 characters centred, no gutter,
+  only quiet hints for headings, emphasis, `$math$` and `@citations`. Code: the
+  monospace look with line numbers and full highlighting. The header has a
+  Writing | Code control (inside ⋯ on phones); the choice is per person in
+  `localStorage` (`galley:prefs`), else `.galley.yml` `editor.default_mode`,
+  else Writing for co-authors and Code for admins. Vim key bindings
+  (`@replit/codemirror-vim` 6.4.0, the maintained CodeMirror 6 Vim; its own
+  ~130 kB chunk) load only when turned on. Autocomplete on `@` lists bib keys
+  (author, year, title) from every `.bib` and crossref labels (`fig-`, `tbl-`,
+  `eq-`, `sec-`, with number and caption) from every `.qmd`; inside
+  `{{< include … >}}` and `![](…)` it completes paths from the repository tree.
+  Unknown citation keys and dangling crossrefs get inline warnings. Go to
+  definition: double-click, Ctrl/Cmd+click or F12 on an include opens the
+  file, on a figure path shows the figure in a lightbox, on `@fig-…`/`@sec-…`/
+  `@eq-…`/`@tbl-…` opens the file that defines the label at that line, and on
+  a citation key opens the `.bib` file at the entry; each move is announced to
+  screen readers. The index (BibTeX parser and label scan) is built in a small
+  worker (`indexWorker.ts`), refreshed 500 ms after edits stop; autocomplete,
+  warnings and go to definition load in their own chunk after the editor.
 - **Header**: breadcrumb whose repository segment opens the switcher and whose
   folder segments show the Files tab; save state with a dot (role=status, full
   wording in the tooltip); a ⋯ menu (Recompile now, Keyboard shortcuts) and a
@@ -294,6 +315,36 @@ branch exists but has no commits of its own and is behind the default branch
 open pull request, and its latest closed pull request was merged at exactly its
 current head (a squash or rebase merge), the branch is deleted and recreated
 from the default head on the next save.
+
+Staying up to date with the default branch (`web/src/workspace/upstream.ts`):
+while the workspace is open galley polls the default branch head every 60 s
+while the tab is visible, and again on window focus (one cheap ref lookup; the
+compare runs only when a head moved). When the default branch has commits the
+working head lacks, a one-line prompt says "main has N new changes · Bring them
+in" with a dismiss (it comes back when main moves again); nothing is merged
+while you edit. "Bring them in" fast-forwards a branch that is only behind, or
+merges the default branch into `galley/<login>` with `POST /repos/{o}/{r}/merges`
+(commit message "Merge main into galley/<login>"; needs the Contents: write
+permission the app already has): 201 moves the workspace onto the merge
+commit, 204 means nothing to do, 409 shows a non-blocking banner ("Your
+proposal conflicts with the latest version; ask an admin or resolve on GitHub")
+with a link to the compare page. A merge commit whose first parent is not the
+head you opened counts as a moved branch. Nothing is ever forced. Open files
+without edits take the new text. Edited files get a line-level three-way merge
+in the browser (`web/src/workspace/merge3.ts`, `node-diff3` 3.2.1, MIT, about
+12 kB, no dependencies) of the text you started from, your text and the new
+text: a clean merge becomes your (still unsaved) text with a "Merged main's
+latest changes into your text" notice; where both changed the same lines, the
+editor is replaced by a plain resolution view (both texts side by side, "Their
+version" / "Your version" / "Keep both", never conflict markers) and the file
+cannot be saved until every place has a choice. A file typed into while the
+new version was loading counts as edited. Every save first brings the default
+branch in the same way and commits on top of the result; a merge that landed
+stays the new head even if the commit then fails. Before the first save there
+is no branch yet: it is created from the current default head. The project
+index caches file text by blob SHA, so a new commit re-reads only changed
+files, at most six at a time.
+
 Saved files keep their existing mode; new files are `100644`. A save is one
 commit whose parent is the head the user opened, and the branch is moved
 fast-forward only (never forced). If the branch moved in the meantime, the save

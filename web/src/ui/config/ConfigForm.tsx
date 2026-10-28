@@ -215,6 +215,24 @@ export function ConfigForm({ mode, files, draft, repoProblems, branch, saving, e
         </label>
       </fieldset>
 
+      <fieldset>
+        <legend>{m.editor}</legend>
+        <label>
+          {m.defaultMode}
+          <select
+            value={draft.editor?.defaultMode ?? ''}
+            onChange={(e) => {
+              const value = e.currentTarget.value;
+              onChange({ ...draft, editor: value === 'writing' || value === 'code' ? { defaultMode: value } : {} });
+            }}
+          >
+            <option value="">{m.defaultModeUnset}</option>
+            <option value="writing">{t.editor.writing}</option>
+            <option value="code">{t.editor.code}</option>
+          </select>
+        </label>
+      </fieldset>
+
       {problems.length > 0 && <ProblemList problems={problems} />}
       {error && (
         <p class="banner banner-error" role="alert">

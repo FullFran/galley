@@ -1,4 +1,4 @@
-export type { FileChange, RepoGateway, Repository, SaveResult, WorkingState } from './repo';
+export type { BlobInfo, BringInResult, FileChange, RepoGateway, Repository, SaveResult, UpstreamStatus, WorkingState } from './repo';
 export type {
   ChangedFile,
   DiffSide,

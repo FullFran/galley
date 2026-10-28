@@ -1,9 +1,9 @@
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { useT } from '../../i18n';
 import { useLocale } from '../../i18n/LocaleProvider';
 import { ENDONYMS } from '../../i18n/locale';
 import { MENU_LOCALES } from './AccountMenu';
-import { readPrefs, writePrefs } from '../../shell/prefs';
+import { onPrefsChange, readPrefs, writePrefs, type Prefs } from '../../shell/prefs';
 import type { Theme } from '../../shell/theme';
 import { Modal } from './Modal';
 import { ThemeSwitch } from './ThemeSwitch';
@@ -15,15 +15,26 @@ export interface PreferencesDialogProps {
   onClose: () => void;
 }
 
+const MODES = ['default', 'writing', 'code'] as const;
+
 /**
  * Preferences of this browser. Sections for features that are not built yet
- * (Writing/Code mode, Vim, notifications) stay out until they exist.
+ * (notifications) stay out until they exist.
  */
 export function PreferencesDialog({ open, theme, onTheme, onClose }: PreferencesDialogProps) {
   const t = useT();
   const m = t.preferences;
   const { locale, setLocale } = useLocale();
   const [auto, setAuto] = useState(() => readPrefs().autoCompile ?? false);
+  const [prefs, setPrefs] = useState<Prefs>(readPrefs);
+  // The header's Writing | Code control writes the same preference.
+  useEffect(() => onPrefsChange(setPrefs), []);
+  const update = (change: Partial<Prefs>) => {
+    const next: Prefs = { ...readPrefs(), ...change };
+    if (next.editorMode === undefined) delete next.editorMode;
+    setPrefs(next);
+    writePrefs(next);
+  };
   return (
     <Modal open={open} onClose={onClose} labelledBy="prefs-title" class="prefs-dialog">
       <h2 id="prefs-title">{m.title}</h2>
@@ -43,6 +54,34 @@ export function PreferencesDialog({ open, theme, onTheme, onClose }: Preferences
           />
           <span>{m.autoCompile}</span>
         </label>
+        <div class="prefs-row">
+          <span id="prefs-mode">{m.editorMode}</span>
+          <div class="segmented" role="radiogroup" aria-labelledby="prefs-mode">
+            {MODES.map((choice) => (
+              <button
+                key={choice}
+                type="button"
+                role="radio"
+                aria-checked={(prefs.editorMode ?? 'default') === choice}
+                onClick={() => update({ editorMode: choice === 'default' ? undefined : choice })}
+              >
+                {choice === 'default' ? m.paperDefault : t.editor[choice]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p class="muted prefs-hint">{m.editorModeHint}</p>
+        <label class="switch-row" title={m.vimHint}>
+          <input
+            type="checkbox"
+            role="switch"
+            class="switch"
+            checked={prefs.vim === true}
+            onChange={(e) => update({ vim: e.currentTarget.checked })}
+          />
+          <span>{m.vim}</span>
+        </label>
+        <p class="muted prefs-hint">{m.vimHint}</p>
       </section>
       <section class="prefs-section" aria-labelledby="prefs-appearance">
         <h3 id="prefs-appearance">{m.appearance}</h3>

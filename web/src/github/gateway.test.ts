@@ -92,8 +92,8 @@ describe('GitHub gateway', () => {
           truncated: false,
           tree: [
             { path: 'docs', type: 'tree' },
-            { path: 'docs/paper.qmd', type: 'blob' },
-            { path: 'README.md', type: 'blob' },
+            { path: 'docs/paper.qmd', type: 'blob', sha: 's1', size: 120 },
+            { path: 'README.md', type: 'blob', sha: 's2' },
             { path: 'vendor/lib', type: 'commit' },
           ],
         }),
@@ -106,6 +106,7 @@ describe('GitHub gateway', () => {
       headSha: 'b1',
       files: ['docs/paper.qmd', 'README.md'],
       truncated: false,
+      blobs: { 'docs/paper.qmd': { sha: 's1', size: 120 }, 'README.md': { sha: 's2' } },
     });
     expect(calls(requests)).not.toContain(`GET ${R}/git/ref/heads/main`);
     expect(requests.some((r) => r.method === 'PATCH')).toBe(false);
@@ -156,6 +157,7 @@ describe('GitHub gateway', () => {
       headSha: 'm1',
       files: ['a.md'],
       truncated: true,
+      blobs: {},
     });
   });
 
@@ -442,6 +444,98 @@ describe('GitHub gateway', () => {
 
     await expect(gw.openRepository(repo)).resolves.toMatchObject({ branchExists: true, headSha: 'b1' });
     expect(requests.some((r) => r.method === 'DELETE' || r.url.includes('state=closed'))).toBe(false);
+  });
+
+  describe('bringing the default branch in', () => {
+    it('counts the default branch commits the working head lacks', async () => {
+      const { gw, requests } = gateway([
+        on('GET', `${R}/compare/b1...main`, () => json({ ahead_by: 3, behind_by: 1, merge_base_commit: { sha: 'x' } })),
+        on('GET', `${R}/git/ref/heads/main`, () => json({ object: { sha: 'm9' } })),
+      ]);
+      await expect(gw.upstream(repo, 'b1')).resolves.toEqual({ defaultHead: 'm9', behind: 3 });
+      await expect(gw.defaultHead(repo)).resolves.toBe('m9');
+      expect(requests.every((r) => r.method === 'GET')).toBe(true);
+    });
+
+    it('merges the default branch into a diverged working branch with the merges API', async () => {
+      const { gw, requests } = gateway([
+        ...diverged(),
+        on('POST', `${R}/merges`, () => json({ sha: 'mg1', parents: [{ sha: 'b1' }, { sha: 'm9' }] }, 201)),
+        on('GET', `${R}/git/trees/mg1?recursive=1`, () => json({ truncated: false, tree: [{ path: 'a.qmd', type: 'blob', sha: 'x1', size: 3 }] })),
+      ]);
+      await expect(gw.bringInDefault(repo, 'b1')).resolves.toEqual({
+        kind: 'updated',
+        headSha: 'mg1',
+        files: ['a.qmd'],
+        truncated: false,
+        blobs: { 'a.qmd': { sha: 'x1', size: 3 } },
+      });
+      expect(requests.find((r) => r.method === 'POST')?.body).toEqual({
+        base: 'galley/ana',
+        head: 'main',
+        commit_message: 'Merge main into galley/ana',
+      });
+      expect(requests.some((r) => r.method === 'PATCH' || r.method === 'DELETE')).toBe(false);
+    });
+
+    it('treats a merge commit whose first parent is not the expected head as a moved branch', async () => {
+      const { gw } = gateway([
+        ...diverged(),
+        on('POST', `${R}/merges`, () => json({ sha: 'mg1', parents: [{ sha: 'elsewhere' }, { sha: 'm9' }] }, 201)),
+      ]);
+      await expect(gw.bringInDefault(repo, 'b1')).rejects.toBeInstanceOf(ConflictError);
+    });
+
+    it('reports nothing to do when the merges API answers 204', async () => {
+      const { gw } = gateway([...diverged(), on('POST', `${R}/merges`, () => new Response(null, { status: 204 }))]);
+      await expect(gw.bringInDefault(repo, 'b1')).resolves.toEqual({ kind: 'current' });
+    });
+
+    it('reports a merge conflict (409) without forcing anything', async () => {
+      const { gw, requests } = gateway([
+        ...diverged(),
+        on('POST', `${R}/merges`, () => json({ message: 'Merge conflict' }, 409)),
+      ]);
+      await expect(gw.bringInDefault(repo, 'b1')).resolves.toEqual({ kind: 'conflict' });
+      expect(requests.some((r) => r.method === 'PATCH' || r.method === 'DELETE')).toBe(false);
+    });
+
+    it('fast-forwards a working branch that is only behind instead of merging', async () => {
+      const { gw, requests } = gateway([
+        on('GET', `${R}/git/ref/heads/galley/ana`, () => json({ object: { sha: 'b1' } })),
+        on('GET', `${R}/compare/main...galley/ana`, () => json({ ahead_by: 0, behind_by: 2, base_commit: { sha: 'm9' } })),
+        on('PATCH', `${R}/git/refs/heads/galley/ana`, () => json({ object: { sha: 'm9' } })),
+        on('GET', `${R}/git/trees/m9?recursive=1`, () => json({ truncated: false, tree: [] })),
+      ]);
+      await expect(gw.bringInDefault(repo, 'b1')).resolves.toMatchObject({ kind: 'updated', headSha: 'm9' });
+      expect(requests.find((r) => r.method === 'PATCH')?.body).toEqual({ sha: 'm9', force: false });
+      expect(requests.some((r) => r.url.endsWith('/merges'))).toBe(false);
+    });
+
+    it('does nothing when the working branch already has the default branch', async () => {
+      const { gw, requests } = gateway([
+        on('GET', `${R}/git/ref/heads/galley/ana`, () => json({ object: { sha: 'b1' } })),
+        on('GET', `${R}/compare/main...galley/ana`, () => json({ ahead_by: 2, behind_by: 0, base_commit: { sha: 'm9' } })),
+      ]);
+      await expect(gw.bringInDefault(repo, 'b1')).resolves.toEqual({ kind: 'current' });
+      expect(requests.some((r) => r.method !== 'GET')).toBe(false);
+    });
+
+    it('moves to the new default head when the working branch does not exist yet, writing nothing', async () => {
+      const { gw, requests } = gateway([
+        on('GET', `${R}/git/ref/heads/galley/ana`, () => json({ message: 'Not Found' }, 404)),
+        on('GET', `${R}/git/ref/heads/main`, () => json({ object: { sha: 'm9' } })),
+        on('GET', `${R}/git/trees/m9?recursive=1`, () => json({ truncated: false, tree: [] })),
+      ]);
+      await expect(gw.bringInDefault(repo, 'm1')).resolves.toMatchObject({ kind: 'updated', headSha: 'm9' });
+      await expect(gw.bringInDefault(repo, 'm9')).resolves.toEqual({ kind: 'current' });
+      expect(requests.some((r) => r.method !== 'GET')).toBe(false);
+    });
+
+    it('reports a working branch that moved elsewhere as ConflictError', async () => {
+      const { gw } = gateway([on('GET', `${R}/git/ref/heads/galley/ana`, () => json({ object: { sha: 'other' } }))]);
+      await expect(gw.bringInDefault(repo, 'b1')).rejects.toBeInstanceOf(ConflictError);
+    });
   });
 });
 

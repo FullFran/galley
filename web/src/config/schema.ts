@@ -40,7 +40,11 @@ export interface GalleyConfig {
   /** Friendly names for files, keyed by path. */
   labels: Record<string, string>;
   preview: { autoCompile: boolean };
+  /** Editor defaults; each person can still choose their own. */
+  editor?: { defaultMode?: EditorMode };
 }
+
+export type EditorMode = 'writing' | 'code';
 
 export interface ConfigProblem {
   severity: 'error' | 'warning';
@@ -56,9 +60,10 @@ export interface ParsedConfig {
 type Record_ = Record<string, unknown>;
 const isRecord = (v: unknown): v is Record_ => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-const TOP_KEYS = ['version', 'title', 'entry', 'editable', 'uploads', 'labels', 'preview'];
+const TOP_KEYS = ['version', 'title', 'entry', 'editable', 'uploads', 'labels', 'preview', 'editor'];
 const UPLOAD_KEYS = ['folder', 'accept', 'max_size_mb'];
 const PREVIEW_KEYS = ['auto_compile'];
+const EDITOR_KEYS = ['default_mode'];
 
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u0008\u000b-\u001f\u007f]/;
@@ -165,6 +170,19 @@ export function parseConfig(text: string): ParsedConfig {
     }
   }
 
+  if (doc.editor !== undefined) {
+    if (!isRecord(doc.editor)) error('"editor" must be a mapping.');
+    else {
+      for (const key of Object.keys(doc.editor)) if (!EDITOR_KEYS.includes(key)) warn(`Unknown setting "editor.${key}" is ignored.`);
+      const mode = doc.editor.default_mode;
+      // A wrong mode only loses this default; the rest of the file still applies.
+      if (mode !== undefined && mode !== 'writing' && mode !== 'code') {
+        warn('"editor.default_mode" must be writing or code; it is ignored.');
+        config.editor = {};
+      } else config.editor = mode === undefined ? {} : { defaultMode: mode };
+    }
+  }
+
   return problems.some((p) => p.severity === 'error') ? { problems } : { config, problems };
 }
 
@@ -229,5 +247,6 @@ export function serializeConfig(config: GalleyConfig): string {
     .sort();
   if (labels.length > 0) out.labels = Object.fromEntries(labels.map((k) => [k, config.labels[k]]));
   out.preview = { auto_compile: config.preview.autoCompile };
+  if (config.editor?.defaultMode) out.editor = { default_mode: config.editor.defaultMode };
   return dump(out, { lineWidth: -1, noRefs: true });
 }

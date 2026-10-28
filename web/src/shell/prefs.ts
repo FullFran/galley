@@ -8,7 +8,13 @@ export type ContentsTab = 'outline' | 'files';
 export interface Prefs {
   /** Auto-compile for repositories where the user has not chosen yet. */
   autoCompile?: boolean;
+  /** Writing or Code; unset means "use the project default". */
+  editorMode?: EditorMode;
+  /** Vim key bindings in the editor (loaded only when on). */
+  vim?: boolean;
 }
+
+export type EditorMode = 'writing' | 'code';
 
 type Store = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -60,13 +66,31 @@ export function readPrefs(store: Store | undefined = local()): Prefs {
   try {
     const parsed: unknown = JSON.parse(read(store, PREFS_KEY) ?? '{}');
     if (!parsed || typeof parsed !== 'object') return {};
-    const auto = (parsed as Record<string, unknown>).autoCompile;
-    return typeof auto === 'boolean' ? { autoCompile: auto } : {};
+    const { autoCompile, editorMode, vim } = parsed as Record<string, unknown>;
+    const prefs: Prefs = {};
+    if (typeof autoCompile === 'boolean') prefs.autoCompile = autoCompile;
+    if (editorMode === 'writing' || editorMode === 'code') prefs.editorMode = editorMode;
+    if (typeof vim === 'boolean') prefs.vim = vim;
+    return prefs;
   } catch {
     return {};
   }
 }
 
+const listeners = new Set<(prefs: Prefs) => void>();
+
+/** Calls `listener` after every `writePrefs` in this tab; returns the unsubscribe. */
+export function onPrefsChange(listener: (prefs: Prefs) => void): () => void {
+  listeners.add(listener);
+  return () => void listeners.delete(listener);
+}
+
 export function writePrefs(prefs: Prefs, store: Store | undefined = local()): void {
   write(store, PREFS_KEY, JSON.stringify(prefs));
+  for (const listener of listeners) listener(prefs);
+}
+
+/** The person's own choice, else `.galley.yml`'s `editor.default_mode`, else Code for admins and Writing for co-authors. */
+export function resolveEditorMode(chosen: EditorMode | undefined, configured: EditorMode | undefined, admin: boolean): EditorMode {
+  return chosen ?? configured ?? (admin ? 'code' : 'writing');
 }

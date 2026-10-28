@@ -55,7 +55,7 @@ edit it, but anyone with write access could still change it on GitHub).
   shell); collapsible sidebar (Paper outline/files, Proposals, Settings for
   admins, Help with the guided tour); fix the usability audit findings; a
   professional, scientific-looking sign-in/landing screen; visible author
-  credit ("Built by Francisco Olmedo", links to https://www.fullfran.com and
+  credit ("Built by FullFran", originally "Francisco Olmedo"; links to https://www.fullfran.com and
   the GitHub repo) in the landing footer, the sidebar footer and an About
   dialog, so galley can serve as a portfolio piece.
 - CX-i18n Spanish/English UI (Fran, 2026-10-28), after CX-UI: follow the
@@ -146,7 +146,14 @@ edit it, but anyone with write access could still change it on GitHub).
 - [ ] CX-UX Shell usability pass and hash routes (`feat/shell-usability`).
   Route: delegated (2+ non-trivial files: shell, sidebar, header, router,
   every container). Implemented and checked; pending review, commit and PR.
-- [ ] CX2 Writing feel, uploads and autocomplete.
+- [ ] CX2 Writing feel, uploads and autocomplete. Route: delegated (2+
+  non-trivial files).
+  - [x] CX2a (`feat/cx2-editor`): sync with the default branch (watch and
+    offer, merge before every save, roadmap 1), Writing | Code modes with
+    `editor.default_mode`, lazy Vim (roadmap 10), autocomplete, inline
+    warnings and go to definition; credit reads "FullFran". Implemented and
+    checked; pending review, commit and PR.
+  - [ ] CX2b: paper outline polish, figure upload, New section (roadmap 13).
 - [ ] CX3 Guided tour.
 - [ ] CX4 References manager.
 - [ ] C4 Drafts.
@@ -443,6 +450,67 @@ edit it, but anyone with write access could still change it on GitHub).
   - Not done: Writing | Code slot and Vim (CX2), notifications, Download PDF
     and History in ⋯, and the admin panel tabs (C6) beyond their declaration.
 
+- 2026-10-28, CX2a (`feat/cx2-editor`):
+  - Sync with main, as refined by Fran: while editing galley polls the
+    default branch head every 60 s while the tab is visible and on focus, and
+    shows "main has N new changes · Bring them in" with a dismiss; it never
+    merges while you type. Bring in and every save use the merges API
+    (`POST /repos/{o}/{r}/merges`, Contents: write per GitHub's "Permissions
+    required for GitHub Apps" page), or a fast-forward when the branch is only
+    behind; 409 gives a non-blocking conflict banner with a GitHub link;
+    nothing is forced. Edited files keep the user's text (only the base moves,
+    with a warning); a save stops if main changed a file the user edited. The
+    open-time fast-forward and squash-merge recovery are unchanged.
+  - Editor: Writing (paper font 16px/1.7, 72ch centred, no gutter, quiet
+    headings/math/citations) and Code; header Writing | Code (⋯ on phones);
+    per-person choice in `galley:prefs`, else `editor.default_mode`, else
+    Writing for co-authors and Code for admins; Preferences → Editor has the
+    mode and a Vim switch. `@replit/codemirror-vim` 6.4.0 loads only when on.
+  - Autocomplete on `@` (bib keys with author/year/title, labels with number
+    and caption), include and figure path completion, warnings for unknown
+    keys and dangling crossrefs, go to definition (double-click,
+    Ctrl/Cmd+click, F12) with screen-reader announcements; the index is built
+    in `indexWorker.ts`.
+  - Credit: "galley · by FullFran", "Built by FullFran", "Hecho por FullFran".
+  - Tests first: RED observed for the gateway merge tests (8 failing before
+    the code), the editor-mode schema (3) and prefs tests (5), the
+    `shouldOffer` prompt test, and missing-module failures for the upstream,
+    index client, assist and UI tests; then GREEN: 51 files, 498 tests.
+  - `npm ci --ignore-scripts`, lint, typecheck, test and build pass. Headless
+    Chromium against the production build with mocked APIs
+    (`pw/cx2-check.mjs`, screenshots in `shots-cx2a/`, light/dark at
+    1440/390): 0 failed checks, no CSP violations, no page errors. Checked:
+    co-authors start in Writing (no gutter, 16px paper font), Code shows line
+    numbers, the bring-in prompt and its dismissal, the autocomplete popup on
+    `@` lists bib keys and labels, an unknown key is underlined,
+    double-clicking an include opens `02-model.qmd` and announces it,
+    Ctrl+click on a figure path opens the lightbox, Vim's chunk is not
+    requested until the switch is on and then gives the block cursor.
+  - Bundle: initial JS 521 kB (gzip 174) → main 269 kB + shared CodeMirror
+    chunk 293 kB = 562 kB (gzip 187). Lazy: `editorAssist` 43 kB (gzip 15),
+    Vim 131 kB (gzip 42), `indexWorker` 9 kB.
+
+- 2026-10-28, CX2a review correction (one scoped round):
+  - Blocker fixed: an edited file that main also changed is now merged
+    three-way (base the user started from, user text, new text) with
+    `node-diff3` 3.2.1; clean merges go into the buffer with a notice,
+    conflicts show a resolution view (Their version / Your version / Keep
+    both, en + es) and block saving until every place is chosen. Both "Bring
+    them in" and the save path go through `bringIn` + `rebase`.
+  - A merge that landed is applied for every save outcome (also when the
+    commit fails); "edited" is judged from the snapshot before the reads and
+    typing during the fetch counts as edited; the index caches text by blob
+    SHA with at most 6 reads in flight; a merge commit with the wrong first
+    parent is a moved branch; figure size is checked from the tree before
+    downloading; a wrong `editor.default_mode` is a warning and is ignored.
+  - RED observed: 7 rebase/save tests, 2 `bringIn` tests, 4 gateway tests
+    (blobs, first parent), 1 schema test, and missing-module failures for
+    `merge3`, `textCache` and `MergeResolver`; GREEN: 53 files, 519 tests.
+  - Headless (`pw/cx2-check.mjs`, `shots-cx2a/`): all earlier checks plus a
+    conflict (resolution view, no markers, save blocked, Keep both) and a
+    clean merge (both changes kept, notice); 0 failed, no CSP violations.
+  - Bundle: main 269 → 278 kB (gzip 92.5 → 95.4); lazy chunks unchanged.
+
 ## Next step
 
-Review, commit and open the CX-UX pull request; then CX2.
+Review, commit and open the CX2a pull request; then CX2b.
