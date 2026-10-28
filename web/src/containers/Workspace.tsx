@@ -727,6 +727,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
                 mode={mode}
                 vim={prefs.vim === true}
                 onVimFailed={() => setNotice(t.editor.vimFailed)}
+                onSave={() => setNoteRequest((n) => n + 1)}
                 assist={assist}
                 indexVersion={indexState.version}
                 onChange={(text) => setBuffers((b) => ({ ...b, [openPath]: { base: b[openPath]?.base ?? '', text } }))}

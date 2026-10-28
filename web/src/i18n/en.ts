@@ -77,7 +77,7 @@ export const en = {
     editorModeHint: 'Writing hides code colours and line numbers. "Paper default" follows each paper’s settings.',
     paperDefault: 'Paper default',
     vim: 'Vim key bindings',
-    vimHint: 'Loaded only when you turn it on.',
+    vimHint: 'Loaded only when you turn it on. :w opens Save for review.',
     appearance: 'Appearance',
     done: 'Done',
   },

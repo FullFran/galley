@@ -6,6 +6,7 @@ import { markdownKeymap } from '@codemirror/lang-markdown';
 import { yaml } from '@codemirror/lang-yaml';
 import { markdownSupport } from './editorStyle';
 import { loadVim, modeExtension } from './editorModes';
+import { vimSave } from './vimCommands';
 import type { AssistOptions } from './editorAssist';
 
 type AssistModule = typeof import('./editorAssist');
@@ -32,6 +33,8 @@ export interface EditorProps {
   /** Vim key bindings; the Vim package loads only when this is true. */
   vim?: boolean;
   onVimFailed?: () => void;
+  /** Vim `:w`, `:wq` and `:x`: open Save for review. */
+  onSave?: () => void;
   /** Autocomplete, warnings and go to definition. */
   assist?: Omit<AssistOptions, 'path'>;
   /** Changes when the project index is rebuilt, so warnings are checked again. */
@@ -81,7 +84,7 @@ const theme = EditorView.theme({
 });
 
 /** CodeMirror 6 editor. Owns the EditorView for its lifetime. */
-export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim = false, onVimFailed, assist, indexVersion }: EditorProps) {
+export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim = false, onVimFailed, onSave, assist, indexVersion }: EditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView>(undefined);
   const onChangeRef = useRef(onChange);
@@ -90,6 +93,8 @@ export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim 
   assistRef.current = assist;
   const onVimFailedRef = useRef(onVimFailed);
   onVimFailedRef.current = onVimFailed;
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
   // The accessible name, the mode and Vim change without recreating the view.
   const labelling = useRef(new Compartment());
   const looks = useRef(new Compartment());
@@ -109,6 +114,7 @@ export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim 
         extensions: [
           // Vim first, so its keys win over the default keymap.
           keys.current.of([]),
+          vimSave.of(() => onSaveRef.current?.()),
           theme,
           looks.current.of(modeExtension(mode)),
           history(),
