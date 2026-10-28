@@ -85,7 +85,7 @@ func (c *Client) InstalledRepos(ctx context.Context, token string) (map[int64]co
 				}
 				p := r.Permissions
 				push := p.Push || p.Maintain || p.Admin
-				out[r.ID] = comments.RepoPermission{FullName: r.FullName, Pull: push || p.Pull || p.Triage, Push: push}
+				out[r.ID] = comments.RepoPermission{FullName: r.FullName, Pull: push || p.Pull || p.Triage, Push: push, Admin: p.Admin}
 			}
 			if len(out) >= maxRepositories {
 				return 0, 0, nil // stop paging

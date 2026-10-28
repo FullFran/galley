@@ -110,6 +110,22 @@ func (a *CachedAccess) Permission(ctx context.Context, userID string, repoID int
 	if p, err, ok := a.lookup(u, repoID); ok {
 		return p, err
 	}
+	return a.fetchLocked(ctx, u, userID, repoID)
+}
+
+// FreshPermission answers from a new GitHub listing, bypassing the cached
+// list (for privileged actions such as admin changes), and stores the
+// result in the cache. It counts against the same per-user miss limiter.
+func (a *CachedAccess) FreshPermission(ctx context.Context, userID string, repoID int64) (RepoPermission, error) {
+	u := a.user(userID)
+	u.fetch.Lock()
+	defer u.fetch.Unlock()
+	return a.fetchLocked(ctx, u, userID, repoID)
+}
+
+// fetchLocked lists the user's repositories and caches them; u.fetch is
+// held.
+func (a *CachedAccess) fetchLocked(ctx context.Context, u *userAccess, userID string, repoID int64) (RepoPermission, error) {
 	if !a.cfg.MissLimiter.Allow(userID) {
 		return RepoPermission{}, ErrRateLimited
 	}
