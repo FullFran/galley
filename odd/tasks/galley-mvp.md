@@ -67,7 +67,7 @@ CI status in-app.
   open or update PR). Tests against a fake gateway/HTTP.
 - [x] T4 UI: login, repo picker, file tree, CodeMirror 6 editor, save button with
   PR link and conflict message.
-- [ ] T5 Deploy: Pages workflow with CNAME, Traefik/compose for the API, docs for
+- [x] T5 Deploy: Pages workflow with CNAME, Traefik/compose for the API, docs for
   the manual steps (create GitHub App, Cloudflare DNS records, verify
   `fullfran.com` in Pages, branch protection on the paper repo).
 
@@ -122,6 +122,20 @@ CI status in-app.
   check typecheck + test: pass; phone-width screenshot reviewed.
   Cosmetic follow-up: markdown headings render underlined in the editor.
 
+- T4 committed: `c016f1b` on `feat/mvp-ui`.
+- 2026-10-28 T5 implemented on `feat/mvp-deploy` (delegated writer, files only,
+  no remote access): Pages workflow, distroless non-root Dockerfile, Traefik
+  compose (admin paths behind an IP allowlist, loopback port for SSH tunnel,
+  hardened container), `docs/deploy.md` runbook. Checks: `docker build` ok;
+  container starts, health returns ok under read-only/cap-drop; `docker compose
+  config` ok with scratch env; both workflows parse. Not run: actionlint (not
+  installed; Docker run blocked). `PB_ENCRYPTION_KEY` must be exactly 32
+  characters (`openssl rand -base64 24`).
+  Unverified, marked in the runbook: Traefik network/certresolver names,
+  whether sd-api is Cloudflare-proxied, PocketBase trusted proxy header,
+  `repository_id` scoping after refresh.
+
 ## Next step
 
-T5 on `feat/mvp-deploy`, stacked on `feat/mvp-ui`.
+Push the stacked branches and open the PRs (Fran's decision), then follow
+`docs/deploy.md` for the manual steps and the live first-run checklist.

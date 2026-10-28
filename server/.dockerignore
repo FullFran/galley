@@ -1,0 +1,9 @@
+# Keep local data, secrets and editor files out of the build context.
+pb_data/
+.env
+.env.*
+!.env.example
+*_test.go
+**/testdata/
+.git
+*.swp

@@ -124,14 +124,20 @@ only superusers can read them through the PocketBase API. A second migration
 sets every API rule of PocketBase's built-in `users` collection to superuser
 only, because its default create rule allows anyone to sign up.
 
-The PocketBase admin UI (`/_/`) is served by the same process. Access to it is
-restricted at the reverse proxy (Traefik), which is set up with the deployment
-(task T5); until then, do not expose the server publicly.
+The PocketBase admin UI (`/_/`) is served by the same process. In production,
+Traefik refuses `/_/` and `/api/collections/_superusers` to public clients;
+the admin UI is reached over an SSH tunnel (see [docs/deploy.md](docs/deploy.md)).
 
 `POST token` answers 401 only when the session or the stored GitHub token is
 no longer usable (sign in again). Transient failures (database, GitHub outage,
 timeout) answer 503; the client should retry. A refresh that GitHub has
 already rotated is saved even if the browser aborts the request.
+
+## Deployment
+
+See [docs/deploy.md](docs/deploy.md) for the GitHub App, DNS, Pages and VPS
+steps. Artifacts: `.github/workflows/pages.yml`, `server/Dockerfile` and
+`deploy/compose.yml`.
 
 ## Frontend
 
