@@ -2873,3 +2873,137 @@ a.line-banner-action {
     transition-delay: 0ms !important;
   }
 }
+
+/* Admin panel (C6): People, Access, Shared drafts, Activity log. */
+
+.admin-section > * + * {
+  margin-top: var(--space-3);
+}
+
+.admin-section h2 {
+  margin-top: var(--space-5);
+  font-size: 1rem;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+}
+
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+
+.admin-table th,
+.admin-table td {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-table thead th {
+  color: var(--fg-muted);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.admin-table tbody tr:last-child > * {
+  border-bottom: 0;
+}
+
+.admin-table tbody th {
+  font-weight: 600;
+}
+
+.admin-login {
+  overflow-wrap: anywhere;
+}
+
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+button.danger {
+  color: var(--danger-fg);
+}
+
+.admin-empty {
+  margin-top: var(--space-5);
+}
+
+.admin-form .form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: var(--space-3);
+}
+
+.admin-form label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.admin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.admin-list li button {
+  margin-left: auto;
+}
+
+.admin-filter select {
+  margin-left: var(--space-2);
+}
+
+.shared-viewer-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.shared-text {
+  max-height: 60vh;
+  margin: 0;
+  padding: var(--space-3);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.proposals-filter button {
+  margin-left: var(--space-2);
+}
+
+/* Six admin tabs: one scrolling row on narrow screens. */
+.admin-area .tabs {
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.admin-area .tab {
+  flex: none;
+  white-space: nowrap;
+}
