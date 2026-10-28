@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { render } from 'preact-render-to-string';
 import { App } from './App';
+import type { Session } from './auth/session';
+import type { RepoGateway } from './domain';
 
 describe('App', () => {
-  it('renders the product name as the page heading', () => {
-    expect(render(<App />)).toBe('<h1>galley</h1>');
+  it('shows a loading state until the session is checked', () => {
+    const session = {} as Session;
+    const gateway = {} as RepoGateway;
+    expect(render(<App session={session} gateway={gateway} />)).toContain('Loading');
   });
 });

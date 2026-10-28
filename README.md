@@ -29,6 +29,29 @@ npm run build      # production build in web/dist
 The production build adds a strict Content-Security-Policy `<meta>` tag. The dev
 server does not, because Vite's hot reload needs inline scripts.
 
+The editor (CodeMirror 6) is mounted in a shadow root. CodeMirror injects its
+styles at runtime; in a shadow root it uses a constructed stylesheet
+(`adoptedStyleSheets`), which `style-src 'self'` allows, while a `<style>`
+element in the document would be blocked.
+
+### Run the whole app locally
+
+1. Create a GitHub App (see [Server configuration](#server-configuration)) with
+   callback URL `http://127.0.0.1:8090/api/galley/auth/callback`, and install it
+   on a test repository.
+2. Start the API with the variables below, `GALLEY_FRONTEND_ORIGIN=http://127.0.0.1:5173`
+   and `GALLEY_PUBLIC_URL=http://127.0.0.1:8090`:
+   `cd server && go run . serve --origins=http://127.0.0.1:5173`
+3. Start the frontend: `cd web && npm run dev -- --host 127.0.0.1`, then open
+   `http://127.0.0.1:5173` in Chrome or Firefox and choose **Sign in with GitHub**.
+   Use `127.0.0.1` for both, not `localhost`: the session cookie is
+   `SameSite=Strict`, and `localhost` and `127.0.0.1` are different sites.
+
+The development frontend talks to `http://127.0.0.1:8090` by default. The
+production build only connects to the origins in its CSP (`api.github.com` and
+`galley-api.fullfran.com`), so build it with
+`VITE_API_BASE=https://galley-api.fullfran.com`.
+
 Server (Go 1.27):
 
 ```sh
@@ -109,6 +132,16 @@ restricted at the reverse proxy (Traefik), which is set up with the deployment
 no longer usable (sign in again). Transient failures (database, GitHub outage,
 timeout) answer 503; the client should retry. A refresh that GitHub has
 already rotated is saved even if the browser aborts the request.
+
+## Frontend
+
+The UI avoids git terms: a save is "Save" and the pull request is "a proposal
+for review", with a link to it on GitHub. Containers in `web/src/containers/`
+own state and call the gateway; components in `web/src/ui/` only render props.
+Edited files are kept in memory until saved, and the page warns before closing
+with unsaved changes. If someone else changed the branch since it was opened,
+the save is refused and the user's text stays visible so it can be copied after
+reloading. If the session ends, unsaved text is shown on the sign-in screen.
 
 ## Frontend data layer
 
