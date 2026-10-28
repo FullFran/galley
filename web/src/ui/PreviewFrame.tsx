@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { Diagnostic, PreviewAsset } from '../render';
 import { PREVIEW_RENDER, createReadyGate, parseFrameMessage, type RenderMessage } from '../preview/protocol';
 
@@ -24,7 +24,10 @@ export function PreviewFrame({ seq, html, assets, diagnostics, status }: Preview
   // Counts accepted ready messages, so a reloaded frame receives the current content again.
   const [ready, setReady] = useState(0);
 
-  useEffect(() => {
+  // A layout effect runs in the same task as the commit that creates the frame,
+  // so the listener exists before the frame can post its first `ready`. With a
+  // plain effect (run after paint) a fast, cached frame could post it too early.
+  useLayoutEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.source !== frame.current?.contentWindow || event.origin !== 'null') return;
       if (parseFrameMessage(event.data) && gate.current.ready()) setReady((n) => n + 1);

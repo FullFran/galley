@@ -3,6 +3,7 @@ import {
   GatewayError,
   NotFoundError,
   PermissionError,
+  RejectedError,
   TransientError,
 } from '../domain';
 
@@ -116,5 +117,6 @@ async function toError(res: Response): Promise<GatewayError> {
   if (rateLimited || res.status >= 500) return new TransientError(detail);
   if (res.status === 404) return new NotFoundError(detail);
   if (res.status === 403) return new PermissionError(detail);
+  if (res.status === 422) return new RejectedError(detail);
   return new GatewayError(detail);
 }

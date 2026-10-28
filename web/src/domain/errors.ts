@@ -23,3 +23,22 @@ export class PermissionError extends GatewayError {}
 
 /** The file is not valid UTF-8 text (binary or another encoding); it cannot be edited. */
 export class NotTextError extends GatewayError {}
+
+/** What was being done when GitHub answered 422, so the message can say why. */
+export type RejectedAction = 'comment' | 'review' | 'reviewers' | 'assignees' | 'branch';
+
+/** GitHub refused the request as invalid (HTTP 422), for example a reviewer without access. */
+export class RejectedError extends GatewayError {
+  readonly action?: RejectedAction;
+
+  constructor(message: string, action?: RejectedAction) {
+    super(message);
+    this.action = action;
+  }
+}
+
+/** GitHub refused to merge (not mergeable, blocked by rules or checks). */
+export class NotMergeableError extends GatewayError {}
+
+/** The file changed since the suggestion was written; it cannot be applied as is. */
+export class SuggestionMismatchError extends GatewayError {}
