@@ -233,6 +233,20 @@ export function ConfigForm({ mode, files, draft, repoProblems, branch, saving, e
         </label>
       </fieldset>
 
+      <fieldset>
+        <legend>{m.structure}</legend>
+        <label>
+          {m.structureWho}
+          <select
+            value={draft.structure ?? 'write'}
+            onChange={(e) => onChange({ ...draft, structure: e.currentTarget.value === 'admin' ? 'admin' : 'write' })}
+          >
+            <option value="write">{m.structureWrite}</option>
+            <option value="admin">{m.structureAdmin}</option>
+          </select>
+        </label>
+      </fieldset>
+
       {problems.length > 0 && <ProblemList problems={problems} />}
       {error && (
         <p class="banner banner-error" role="alert">

@@ -13,11 +13,16 @@ export interface TreeFolder {
 
 export type TreeNode = TreeFile | TreeFolder;
 
-/** Builds a folder tree from flat file paths; folders first, then names in order. */
-export function buildTree(paths: string[]): TreeNode[] {
+/**
+ * Builds a folder tree from flat file paths; folders first, then names in
+ * order. `folders` (e.g. upload folders, `figures/`) appear even when empty.
+ */
+export function buildTree(paths: string[], folders: readonly string[] = []): TreeNode[] {
   const root: TreeFolder = { kind: 'folder', name: '', path: '', children: [] };
-  for (const path of paths) {
-    const parts = path.split('/');
+  const entries = [...paths.map((p) => ({ path: p, file: true })), ...folders.map((f) => ({ path: f.replace(/\/+$/, ''), file: false }))];
+  for (const { path, file } of entries) {
+    if (path === '') continue;
+    const parts = file ? path.split('/') : [...path.split('/'), ''];
     let folder = root;
     parts.slice(0, -1).forEach((name, i) => {
       let next = folder.children.find((c): c is TreeFolder => c.kind === 'folder' && c.name === name);
@@ -27,7 +32,7 @@ export function buildTree(paths: string[]): TreeNode[] {
       }
       folder = next;
     });
-    folder.children.push({ kind: 'file', name: parts[parts.length - 1] ?? path, path });
+    if (file) folder.children.push({ kind: 'file', name: parts[parts.length - 1] ?? path, path });
   }
   sortFolder(root);
   return root.children;

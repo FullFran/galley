@@ -57,9 +57,17 @@ export async function createCommit(
     repositoryId: repo.id,
   });
   const modes = new Map(baseTree.data.tree.map((e) => [e.path, e.mode]));
+  // Uploaded files become blobs first (base64 keeps the bytes exact); text
+  // stays inline. Everything still lands in one tree and one commit.
+  const blobs = new Map<string, string>();
+  for (const change of changes) {
+    if (change.encoding !== 'base64') continue;
+    const blob = await gh.request<{ sha: string }>(`${base}/git/blobs`, { ...opts, body: { content: change.content, encoding: 'base64' } });
+    blobs.set(change.path, blob.data.sha);
+  }
   const tree = await gh.request<{ sha: string }>(`${base}/git/trees`, {
     ...opts,
-    body: { base_tree: parent.data.tree.sha, tree: changes.map((c) => toTreeEntry(c, modes.get(c.path))) },
+    body: { base_tree: parent.data.tree.sha, tree: changes.map((c) => toTreeEntry(c, modes.get(c.path), blobs.get(c.path))) },
   });
   const commit = await gh.request<{ sha: string }>(`${base}/git/commits`, {
     ...opts,
@@ -80,6 +88,6 @@ export async function fastForward(gh: GitHubClient, repo: Repository, branch: st
 }
 
 /** Existing files keep their mode (for example 100755); new files get 100644. */
-function toTreeEntry(change: FileChange, mode = '100644') {
-  return { path: change.path, mode, type: 'blob', content: change.content };
+function toTreeEntry(change: FileChange, mode = '100644', sha?: string) {
+  return sha === undefined ? { path: change.path, mode, type: 'blob', content: change.content } : { path: change.path, mode, type: 'blob', sha };
 }

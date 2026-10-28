@@ -34,6 +34,7 @@ preview:
   auto_compile: false
 editor:
   default_mode: writing
+structure: write
 ```
 
 ## Fields
@@ -51,9 +52,77 @@ editor:
 | `labels` | no | map of path to text, at most 500 | none | Friendly names shown for files. |
 | `preview.auto_compile` | no | `true` or `false` | `false` | Default for people who have not chosen; each person can toggle it. |
 | `editor.default_mode` | no | `writing` or `code` | Writing for co-authors, Code for admins | Editor mode for people who have not chosen one. |
+| `structure` | no | `admin` or `write` | `write` | Who may add sections and subsections in galley: everyone with write access, or only admins. |
 
-`uploads` and `labels` are read and validated now; figure upload and friendly
-names in the file list arrive with the writing-feel work (CX2).
+## Uploads
+
+Each folder in `uploads` gets an "Upload to …" row in Files and accepts files
+dropped onto it; an image dropped onto the editor goes to the first folder and
+`![](figures/name.png){#fig-name}` is inserted where it was dropped.
+
+- The file name, its extension (`accept`) and its size (`max_size_mb`) are
+  checked before galley reads the file. After reading, the first bytes must
+  match the extension (PNG, JPEG, GIF, WebP, PDF signatures; SVG must start
+  with `<`).
+- The name is cleaned: only the base name, transliterated, letters, digits,
+  `-` and `_`, with a lower-case extension (`Glow Curve.PNG` becomes
+  `Glow-Curve.png`).
+- If a file with that name exists, galley asks: Replace, or Keep both (saved
+  as `name-2.png`, `name-3.png`).
+- Images are previewed as an `<img>` from a `blob:` URL; SVG is never put in
+  the page as markup, so its scripts cannot run.
+- After adding, Insert figure asks for a caption and inserts
+  `![Caption](figures/name.png){#fig-name}` at the cursor (the path is relative
+  to the main file, where includes are expanded).
+- Uploads wait for your next save, count as unsaved changes and are listed
+  under "In this save" in the save note, where each can be removed. They are
+  saved as base64 blobs in the same single commit as your text.
+
+## Friendly names
+
+`labels` names are shown instead of file names in Files and in the Outline;
+the path stays in the tooltip.
+
+## New section
+
+The Outline offers "New section after …" and "New subsection in …" in each
+row's ⋯ menu, a + between the sections of the main file, and "New section…"
+at the bottom. The dialog asks for a title, the kind and the position (by
+default after the section that is open), with the file name and id under
+Advanced.
+
+- **Section**: a new file starting `# Title {#sec-slug}`, an
+  `{{< include … >}}` at that position in the main file and, if you may edit
+  `.galley.yml` (admins), a `labels` entry for the file. Admins also get an
+  `editable` item when no pattern covers the new file. Co-authors cannot change
+  `.galley.yml`, so the new file must match an `editable` pattern; otherwise
+  galley stops and says to ask an admin.
+- **Subsection**: `## Title {#sec-slug}` (one level below its parent) at the
+  end of the parent section.
+- **Names**: the slug is the title transliterated (NFKD), lower case, `a-z`,
+  `0-9` and `-`, at most 40 characters. The file follows the paper's existing
+  includes: their folder, a leading `_`, `.qmd` or `.md`. Without includes it
+  is `sections/_slug.qmd`. When most includes are numbered (`01-intro.qmd`),
+  the new file is numbered too without renumbering any other file: between
+  `02-` and `03-` it gets `02a-` (then `02b-`), at the end the next number, at
+  the start the number before the first. Without numbered siblings a slug that
+  starts with a digit gets `section-` in front.
+- **Stops**: an empty title, `{ }` or line breaks in it, a file that exists, a
+  reserved name (`index`, `references`, `README`, Windows device names), an id
+  already used in the paper, an invalid file name or id, and a main file whose
+  includes galley cannot place a line next to (an include inside a paragraph,
+  an empty or outside-the-repository include).
+- **Warnings**: another file already has the same friendly name.
+- Everything goes into your next save as one commit, summarised in plain
+  words ("New section “Methods” after “Introduction”"), which is also the
+  default commit message. The order of sections is the include list; files
+  are never renamed.
+- `structure: admin` hides these actions for co-authors (and an invalid
+  `.galley.yml` hides them too). As with `editable`, this is a galley view,
+  not a GitHub permission.
+- Edits to `.galley.yml` keep its comments and layout when the `labels` and
+  `editable` blocks are in block style; otherwise galley rewrites the file in
+  its fixed key order.
 
 ## Patterns
 

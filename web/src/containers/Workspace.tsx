@@ -22,6 +22,7 @@ import {
 import { resolvedText, type MergeRegion } from '../workspace/merge3';
 import { MergeResolver } from '../ui/MergeResolver';
 import { useProjectIndex } from './useProjectIndex';
+import { useAuthoring } from './useAuthoring';
 import { EditorModeSwitch } from '../ui/EditorModeSwitch';
 import { FigureLightbox, type FigureState } from '../ui/FigureLightbox';
 import { UpstreamBanner, type UpstreamBannerState } from '../ui/UpstreamBanner';
@@ -187,7 +188,28 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   }, [load]);
 
   const dirty = dirtyPaths(buffers);
-  const hasDirty = dirty.length > 0;
+  // Figure uploads and new sections: pending changes for the next save.
+  const [insertReq, setInsertReq] = useState<{ text: string; at?: number; block?: boolean; seq: number }>();
+  // Values computed further down this render; read through a ref (the previous render's until then).
+  const late = useRef<{ main?: string; label: (path: string) => string; ids: ReadonlySet<string> }>({ label: (p) => p, ids: new Set() });
+  const authoring = useAuthoring({
+    gateway,
+    repo,
+    working,
+    project,
+    admin,
+    buffers,
+    setBuffers,
+    openPath,
+    main: () => late.current.main,
+    labelOf: (path) => late.current.label(path),
+    ids: () => late.current.ids,
+    onReplaced: (path) => path === openPathRef.current && setEditorRev((n) => n + 1),
+    notify: setNotice,
+    insert: (text, at) => setInsertReq((r) => ({ text, at, block: true, seq: (r?.seq ?? 0) + 1 })),
+    canInsert: !adminTab && openPath !== undefined && /\.(qmd|md|markdown)$/i.test(openPath) && !buffers[openPath]?.merge,
+  });
+  const hasDirty = dirty.length > 0 || authoring.uploads.length > 0;
   useEffect(() => onDirtyChange(hasDirty), [hasDirty, onDirtyChange]);
   useEffect(() => {
     if (!hasDirty) return;
@@ -199,12 +221,12 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
     return () => window.removeEventListener('beforeunload', warn);
   }, [hasDirty]);
 
-  const visible = working ? filesInView(working.files, project, admin, viewAs) : [];
+  const visible = working ? filesInView([...working.files, ...authoring.created], project, admin, viewAs) : [];
   const changeViewAs = (mode: ViewAs) => {
     setViewAs(mode);
     writeViewAs(repo.fullName, mode);
   };
-  const labels = project.kind === 'valid' ? project.config.labels : {};
+  const labels = { ...(project.kind === 'valid' ? project.config.labels : {}), ...authoring.labels };
   const label = (path: string) => labels[path] ?? path.slice(path.lastIndexOf('/') + 1);
   const entry = project.kind === 'valid' ? project.config.entry : undefined;
   const main = mainDocument(visible.filter((p) => fileKind(p) !== 'binary'), entry);
@@ -334,6 +356,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   );
   const indexRef = useRef(indexState.index);
   indexRef.current = indexState.index;
+  late.current = { main, label, ids: new Set((indexState.index?.labels ?? []).map((l) => l.id)) };
   const announce = (text: string) => setAnnouncement(text);
 
   const openAt = async (path: string, line?: number) => {
@@ -392,8 +415,10 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   const save = async () => {
     if (!working || !hasDirty || status.kind === 'saving') return;
     setStatus({ kind: 'saving' });
+    const extra = authoring.extra();
+    const note = message.trim() || authoring.defaultMessage || defaultMessage(dirty, t);
     // The default branch comes in first; the save lands on top of it.
-    const outcome = await saveWithUpstream(gateway, repo, buffers, message.trim() || defaultMessage(dirty, t), working.headSha, t);
+    const outcome = await saveWithUpstream(gateway, repo, buffers, note, working.headSha, t, extra.changes);
     // Whatever happened to the commit, a merge that landed is the new head.
     if ('upstream' in outcome && outcome.upstream) moveToUpstream(outcome.upstream);
     switch (outcome.kind) {
@@ -416,10 +441,13 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
               ...w,
               headSha: outcome.headSha,
               branchExists: true,
+              // New sections and uploads are now in the repository.
+              files: [...new Set([...w.files, ...savedPaths])].sort(),
               blobs: Object.fromEntries(Object.entries(w.blobs).filter(([p]) => !savedPaths.has(p))),
             },
         );
         setBuffers((b) => applySaved(b, outcome.saved));
+        authoring.committed(extra.ids);
         setMessage('');
         setStatus({ kind: 'saved', pullRequestUrl: outcome.pullRequestUrl });
         onSaved?.();
@@ -609,9 +637,10 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
           {!adminTab && <EditorModeSwitch mode={mode} onMode={changeMode} />}
           {!adminTab && <ViewSwitch view={view} onView={setView} />}
           <SaveControl
-            dirtyCount={dirty.length}
+            dirtyCount={dirty.length + authoring.uploads.length}
             message={message}
-            placeholder={hasDirty ? defaultMessage(dirty, t) : t.save.describe}
+            placeholder={hasDirty ? (authoring.defaultMessage ?? defaultMessage(dirty, t)) : t.save.describe}
+            pending={authoring.pending}
             saving={status.kind === 'saving'}
             noteRequest={noteRequest}
             onMessage={setMessage}
@@ -649,12 +678,22 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
               label={label}
               onOpenFile={(p) => void openFile(p)}
               onHeading={goToHeading}
+              structure={authoring.structure}
             />
           }
           files={
             <>
               {working.truncated && <p class="muted panel-note">{t.files.truncated}</p>}
-              <FileTree paths={visible} openPath={openPath} dirty={new Set(dirty)} labels={labels} onOpen={(p) => void openFile(p)} />
+              <FileTree
+                paths={visible}
+                openPath={openPath}
+                dirty={new Set(dirty)}
+                labels={labels}
+                onOpen={(p) => void openFile(p)}
+                uploads={authoring.uploadRules}
+                pending={authoring.pendingPaths}
+                onUpload={authoring.onUpload}
+              />
             </>
           }
         />
@@ -729,6 +768,8 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
                 onVimFailed={() => setNotice(t.editor.vimFailed)}
                 assist={assist}
                 indexVersion={indexState.version}
+                onDropFiles={authoring.onEditorDrop}
+                insert={insertReq}
                 onChange={(text) => setBuffers((b) => ({ ...b, [openPath]: { base: b[openPath]?.base ?? '', text } }))}
               />
             ) : (
@@ -740,10 +781,10 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
           </section>
           <section class="preview-pane" aria-label={t.workspace.previewRegion} data-tour="preview">
             <Preview
-              gateway={gateway}
+              gateway={authoring.previewGateway}
               repo={repo}
               headSha={working.headSha}
-              files={working.files}
+              files={authoring.pendingPaths.size ? [...working.files, ...authoring.pendingPaths] : working.files}
               buffers={buffers}
               entry={entry}
               autoCompileDefault={userAuto ?? (project.kind === 'valid' && project.config.preview.autoCompile)}
@@ -753,6 +794,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
           </section>
         </div>
       )}
+      {authoring.dialogs}
       <FigureLightbox path={figure?.path} state={figure?.state ?? { kind: 'loading' }} onClose={() => setFigure(undefined)} />
     </AppShell>
   );

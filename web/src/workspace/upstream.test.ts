@@ -239,6 +239,24 @@ describe('saving with the default branch brought in first', () => {
     expect(out).toMatchObject({ kind: 'saved', merged: ['a.qmd'] });
   });
 
+  it('adds pending uploads to the same save, after the merge, and keeps them out of the text copies', async () => {
+    const upload: FileChange = { path: 'figures/a.png', content: 'AQID', encoding: 'base64' };
+    const { gateway, log } = fakeGateway(updated, { 'mg:a.qmd': 'a\n' });
+    const out = await saveWithUpstream(gateway, repo, edited, 'Edit', 'w1', undefined, [upload]);
+    expect(log).toEqual(['bring w1', 'save mg a.qmd="a edited\\n",figures/a.png="AQID"']);
+    expect(out).toMatchObject({ kind: 'saved' });
+    const failing = fakeGateway(async () => ({ kind: 'current' }), {}, new ConflictError('moved'));
+    const conflict = await saveWithUpstream(failing.gateway, repo, edited, 'Edit', 'w1', undefined, [upload]);
+    expect(conflict).toEqual({ kind: 'conflict', copies: [{ path: 'a.qmd', content: 'a edited\n' }] });
+  });
+
+  it('saves only uploads when no text changed', async () => {
+    const upload: FileChange = { path: 'figures/a.png', content: 'AQID', encoding: 'base64' };
+    const { gateway, log } = fakeGateway(async () => ({ kind: 'current' }));
+    await saveWithUpstream(gateway, repo, {}, 'Add figure', 'w1', undefined, [upload]);
+    expect(log).toEqual(['bring w1', 'save w1 figures/a.png="AQID"']);
+  });
+
   it('saves on the same head when there is nothing to bring in', async () => {
     const { gateway, log } = fakeGateway(async () => ({ kind: 'current' }));
     const out = await saveWithUpstream(gateway, repo, edited, 'Edit', 'w1');
