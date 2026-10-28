@@ -6,6 +6,9 @@ import { createGitHubGateway } from './github/gateway';
 import { createGitHubHistoryGateway } from './github/history';
 import { createGitHubReviewGateway } from './github/review';
 import { createHttpCommentsGateway } from './comments/http';
+import { createHttpDraftSharesGateway } from './admin/api';
+import { createHttpDraftsGateway } from './drafts/http';
+import { createHttpChatGateway } from './chat/http';
 import { LocaleProvider } from './i18n/LocaleProvider';
 import './styles.css';
 
@@ -17,11 +20,14 @@ const session = createSession();
 const gateway = createGitHubGateway({ tokens: session });
 const reviews = createGitHubReviewGateway({ tokens: session });
 const comments = createHttpCommentsGateway();
+const drafts = createHttpDraftsGateway();
+const chat = createHttpChatGateway();
 const ci = createGitHubCiGateway({ tokens: session });
 const history = createGitHubHistoryGateway({ tokens: session });
+const shares = createHttpDraftSharesGateway();
 render(
   <LocaleProvider>
-    <App session={session} gateway={gateway} reviews={reviews} comments={comments} ci={ci} history={history} />
+    <App session={session} gateway={gateway} reviews={reviews} comments={comments} drafts={drafts} chat={chat} ci={ci} shares={shares} history={history} />
   </LocaleProvider>,
   root,
 );

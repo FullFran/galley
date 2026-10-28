@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks'
 import type { FileChange, Person, RepoAccess, RepoGateway, Repository, ReviewGateway } from './domain';
 import type { Session } from './auth/session';
 import type { CommentsGateway } from './domain/comments';
+import type { DraftSharesGateway } from './admin/api';
 import { requestCommentsPanel } from './comments/panelRequest';
+import { requestChatPanel } from './chat/panelRequest';
+import type { DraftsGateway } from './drafts/http';
+import type { ChatGateway } from './chat/http';
 import { useTRef } from './i18n';
 import { startView } from './containers/boot';
 import { Proposals } from './containers/Proposals';
@@ -18,6 +22,9 @@ import type { ShellContext } from './ui/shell/AppShell';
 import { CurrentLanguageSwitch } from './ui/shell/LanguageSwitch';
 import { Skeleton } from './ui/shell/Skeleton';
 import { SignedOut } from './ui/SignedOut';
+import { Modal } from './ui/shell/Modal';
+import { clearUserDrafts, prepareSignOut } from './drafts/signout';
+import { draftStore } from './drafts/store';
 
 export interface AppProps {
   session: Session;
@@ -25,8 +32,14 @@ export interface AppProps {
   reviews: ReviewGateway;
   /** galley's comments API (comments anywhere). */
   comments?: CommentsGateway;
+  /** galley's drafts API (drafts on other devices). */
+  drafts?: DraftsGateway;
+  /** galley's chat API (chat per paper). */
+  chat?: ChatGateway;
   /** CI builds: status chips and the compiled PDF. */
   ci?: CiGateway;
+  /** Owner's draft sharing with the repository's admins. */
+  shares?: DraftSharesGateway;
   /** Versions of the default branch, labels and comparisons (History). */
   history?: HistoryGateway;
 }
@@ -36,7 +49,7 @@ type View =
   | { name: 'signedOut'; loginFailed: boolean; notice?: string; httpsUrl?: string; unsaved?: FileChange[] }
   | { name: 'repos' }
   | { name: 'workspace'; repo: Repository; route: Extract<RepoRoute, { name: 'workspace' | 'admin' | 'history' }> }
-  | { name: 'proposals'; repo: Repository; number?: number };
+  | { name: 'proposals'; repo: Repository; number?: number; author?: string };
 
 const sameRepo = (r: Repository, route: RepoRoute) => r.fullName.toLowerCase() === `${route.owner}/${route.repo}`.toLowerCase();
 
@@ -45,12 +58,16 @@ const sameRepo = (r: Repository, route: RepoRoute) => r.fullName.toLowerCase() =
  * link or the back button lands where the person was. Leaving the workspace
  * with unsaved edits asks first, also on back and forward.
  */
-export function App({ session, gateway, reviews, comments, ci, history }: AppProps) {
+export function App({ session, gateway, reviews, comments, drafts, chat, ci, shares, history }: AppProps) {
   // Stable callbacks read the catalog through a ref, so a language switch does
   // not re-run the screens' effects (the workspace would reload and lose edits).
   const tRef = useTRef();
   const [view, setView] = useState<View>({ name: 'loading' });
   const [user, setUser] = useState<Person>();
+  const userRef = useRef(user);
+  userRef.current = user;
+  /** Drafts that only exist on this device, while the sign-out question is open. */
+  const [signOutAsk, setSignOutAsk] = useState<number>();
   const [admin, setAdmin] = useState(false);
   const [proposals, setProposals] = useState<ShellContext['proposals']>();
   const [proposalsTick, setProposalsTick] = useState(0);
@@ -88,7 +105,7 @@ export function App({ session, gateway, reviews, comments, ci, history }: AppPro
         shown.current = '#/';
         return setView({ name: 'repos' });
       }
-      if (route.name === 'proposals') return setView({ name: 'proposals', repo: found, number: route.number });
+      if (route.name === 'proposals') return setView({ name: 'proposals', repo: found, number: route.number, author: route.author });
       setView({ name: 'workspace', repo: found, route });
     },
     [gateway],
@@ -204,6 +221,9 @@ export function App({ session, gateway, reviews, comments, ci, history }: AppPro
   const signedOut = useCallback(
     (unsaved: FileChange[] = []) => {
       dirty.current = false;
+      // The session ended: drafts the server holds leave this browser; the others stay so nothing is lost.
+      const login = userRef.current?.login;
+      if (login) void clearUserDrafts(login, draftStore(), { keepUnsynced: true });
       setView({ name: 'signedOut', loginFailed: false, notice: tRef.current.app.sessionEnded, unsaved });
     },
     [tRef],
@@ -214,7 +234,21 @@ export function App({ session, gateway, reviews, comments, ci, history }: AppPro
   const refreshProposals = useCallback(() => setProposalsTick((n) => n + 1), []);
 
   const signOut = async () => {
-    if (!canLeave()) return;
+    const login = user?.login;
+    if (!login) {
+      if (!canLeave()) return;
+      return finishSignOut();
+    }
+    // Edits are drafts: what reached the server survives; what only exists here needs a yes.
+    const { unsynced } = await prepareSignOut(login, draftStore());
+    if (unsynced > 0) setSignOutAsk(unsynced);
+    else await finishSignOut();
+  };
+
+  const finishSignOut = async () => {
+    setSignOutAsk(undefined);
+    const login = userRef.current?.login;
+    if (login) await clearUserDrafts(login, draftStore());
     dirty.current = false;
     await session.logout().catch(() => undefined);
     setUser(undefined);
@@ -232,8 +266,10 @@ export function App({ session, gateway, reviews, comments, ci, history }: AppPro
     else if (id === 'comments') {
       requestCommentsPanel();
       go({ name: 'workspace', ...base });
-    }
-    else go({ name: 'workspace', ...base });
+    } else if (id === 'chat') {
+      requestChatPanel();
+      go({ name: 'workspace', ...base });
+    } else go({ name: 'workspace', ...base });
   };
 
   if (view.name === 'loading') {
@@ -271,45 +307,74 @@ export function App({ session, gateway, reviews, comments, ci, history }: AppPro
     onSignOut: () => void signOut(),
     ci,
   };
+  const m = tRef.current.drafts;
+  const signOutDialog = (
+    <Modal open={signOutAsk !== undefined} onClose={() => setSignOutAsk(undefined)} labelledBy="signout-title" class="signout-dialog">
+      <h2 id="signout-title">{m.signOutTitle}</h2>
+      <p>{m.signOutUnsynced(signOutAsk ?? 0)}</p>
+      <div class="actions">
+        <button type="button" onClick={() => setSignOutAsk(undefined)}>
+          {m.signOutCancel}
+        </button>
+        <button type="button" class="primary" onClick={() => void finishSignOut()}>
+          {m.signOutDelete}
+        </button>
+      </div>
+    </Modal>
+  );
   if (view.name === 'repos') {
     return (
-      <RepoPicker
-        gateway={gateway}
-        shell={shell}
-        onOpen={(r) => go({ name: 'workspace', ...repoRoute(r.fullName) })}
-        onAuthRequired={signedOut}
-      />
+      <>
+        {signOutDialog}
+        <RepoPicker
+          gateway={gateway}
+          shell={shell}
+          onOpen={(r) => go({ name: 'workspace', ...repoRoute(r.fullName) })}
+          onAuthRequired={signedOut}
+        />
+      </>
     );
   }
   if (view.name === 'proposals') {
     const base = repoRoute(view.repo.fullName);
     return (
-      <Proposals
-        key={view.repo.id}
-        repos={gateway}
-        reviews={reviews}
-        repo={view.repo}
-        number={view.number}
-        onOpen={(number) => go({ name: 'proposals', ...base, number })}
-        shell={shell}
-        onAuthRequired={signedOut}
-      />
+      <>
+        {signOutDialog}
+        <Proposals
+          key={view.repo.id}
+          repos={gateway}
+          reviews={reviews}
+          repo={view.repo}
+          number={view.number}
+          author={view.author}
+          onOpen={(number) => go({ name: 'proposals', ...base, number })}
+          onAllAuthors={() => go({ name: 'proposals', ...base })}
+          shell={shell}
+          onAuthRequired={signedOut}
+        />
+      </>
     );
   }
   return (
-    <Workspace
-      key={view.repo.id}
-      gateway={gateway}
-      repo={view.repo}
-      route={view.route}
-      onRoute={go}
-      access={access}
-      shell={shell}
-      onAuthRequired={signedOut}
-      onDirtyChange={onDirtyChange}
-      onSaved={refreshProposals}
-      comments={comments}
-      history={history}
-    />
+    <>
+      {signOutDialog}
+      <Workspace
+        key={view.repo.id}
+        gateway={gateway}
+        repo={view.repo}
+        route={view.route}
+        onRoute={go}
+        access={access}
+        shell={shell}
+        onAuthRequired={signedOut}
+        onDirtyChange={onDirtyChange}
+        onSaved={refreshProposals}
+        comments={comments}
+        drafts={drafts}
+        chat={chat}
+        shares={shares}
+        history={history}
+      />
+    </>
   );
 }

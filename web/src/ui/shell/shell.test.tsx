@@ -6,6 +6,7 @@ import { AboutDialog } from './AboutDialog';
 import { AdminArea } from './AdminArea';
 import { AppShell, type ShellContext } from './AppShell';
 import { Credit } from './Credit';
+import { SaveControl } from './SaveControl';
 import { RepoList } from '../RepoList';
 import { SignedOut } from '../SignedOut';
 import { ProposalList } from '../review/ProposalList';
@@ -124,6 +125,23 @@ describe('AppShell', () => {
     expect(page).toMatch(/aria-expanded="true"[^>]*aria-controls="nav-group-review"/);
   });
 
+  it('shows Chat in the Review group with an unread badge and label', () => {
+    const page = render(
+      <AppShell shell={{ ...shell, chat: { unread: 3 } }} active="proposals" crumbs={[]}>
+        x
+      </AppShell>,
+    );
+    expect(page).toMatch(/aria-label="Chat, 3 unread"/);
+    expect(page).toMatch(/<span class="nav-label">Chat<\/span><span class="nav-meta nav-badge" aria-hidden="true">3<\/span>/);
+    const none = render(
+      <AppShell shell={{ ...shell, chat: { unread: 0 } }} active="proposals" crumbs={[]}>
+        x
+      </AppShell>,
+    );
+    expect(none).toMatch(/aria-label="Chat"/);
+    expect(none).not.toContain('nav-badge');
+  });
+
   it('never collapses groups in the icon rail', () => {
     const rail = render(
       <AppShell shell={{ ...shell, sidebar: { ...shell.sidebar, state: initialSidebar(900) } }} active="contents" crumbs={[]}>
@@ -213,7 +231,13 @@ describe('AdminArea', () => {
     expect(html).toMatch(/role="tab"[^>]*aria-selected="true"[^>]*>Project settings/);
     expect(html).toContain('View as co-author');
     expect(html).toContain('SETTINGS');
-    for (const later of ['People', 'Sessions', 'Allowlist']) expect(html).not.toContain(later);
+    for (const tab of ['People', 'Access', 'Shared drafts', 'Activity log']) expect(html).toContain(`>${tab}</button>`);
+  });
+
+  it('shows the admin panel on its tabs', () => {
+    const html = render(<AdminArea {...props} admin tab="people" panel={<p>PANEL</p>} />);
+    expect(html).toContain('PANEL');
+    expect(html).not.toContain('SETTINGS');
   });
 
   it('shows the view-as switch on its tab', () => {
@@ -226,6 +250,7 @@ describe('AdminArea', () => {
     const html = render(<AdminArea {...props} admin={false} />);
     expect(html).not.toContain('SETTINGS');
     expect(html).not.toContain('role="tablist"');
+    expect(html).not.toContain('People');
     expect(html).toContain('Only admins');
   });
 });
@@ -270,5 +295,18 @@ describe('ProposalList', () => {
       />,
     );
     expect(html).toMatch(/class="chip chip-ok"[^>]*>Approved/);
+  });
+});
+
+describe('SaveControl draft state', () => {
+  const props = { message: '', placeholder: '', saving: false, onMessage: noop, onSave: noop };
+  it('says the unsaved files are kept as a draft', () => {
+    const html = render(<SaveControl {...props} dirtyCount={2} draftSaved />);
+    expect(html).toContain('Draft saved · 2 unsaved');
+    expect(html).toContain('Draft saved · 2 unsaved files');
+  });
+  it('shows the plain state without a draft or without edits', () => {
+    expect(render(<SaveControl {...props} dirtyCount={2} />)).not.toContain('Draft saved');
+    expect(render(<SaveControl {...props} dirtyCount={0} draftSaved />)).not.toContain('Draft saved');
   });
 });
