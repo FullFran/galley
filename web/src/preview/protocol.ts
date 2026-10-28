@@ -198,3 +198,31 @@ export function parseRevealMessage(data: unknown): RevealMessage | undefined {
   if (type !== PREVIEW_REVEAL || typeof path !== 'string' || !isSafePath(path) || !isLine(line)) return undefined;
   return { type, path, line };
 }
+
+// Parent to frame: print the preview. The frame is sandboxed without
+// allow-same-origin, so galley cannot reach into it; it asks, and the frame
+// calls window.print() on its own document (which needs `allow-modals` in the
+// sandbox: Chromium ignores print() from a sandboxed frame without it). The
+// note is plain text, set with textContent and shown only on paper.
+
+export const PREVIEW_PRINT = 'galley-preview:print';
+export const MAX_PRINT_NOTE = 200;
+
+export interface PrintMessage {
+  type: typeof PREVIEW_PRINT;
+  note: string;
+}
+
+export function printMessage(note: string): PrintMessage {
+  return { type: PREVIEW_PRINT, note: note.slice(0, MAX_PRINT_NOTE) };
+}
+
+export function parsePrintMessage(data: unknown): PrintMessage | undefined {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) return undefined;
+  const record = data as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.length !== 2 || !Object.hasOwn(record, 'type') || !Object.hasOwn(record, 'note')) return undefined;
+  const { type, note } = record;
+  if (type !== PREVIEW_PRINT || typeof note !== 'string' || note.length > MAX_PRINT_NOTE) return undefined;
+  return { type, note };
+}

@@ -65,6 +65,9 @@ import { useChat } from './Chat';
 import type { HistoryGateway } from '../github/history';
 import { prepareRestore, type RestoreChange } from '../history/restore';
 import { LastVisitBannerView, useLastVisit, useRestore } from './useHistory';
+import type { EditorView } from '@codemirror/view';
+import { useSymbolPalette } from './useSymbolPalette';
+import { useFindReplace } from './useFindReplace';
 
 // The YAML parser, the wizard and the settings form load on demand.
 type SettingsModule = typeof import('./ProjectSettings');
@@ -688,6 +691,21 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   const active: NavId = adminTab ? 'admin' : historyRoute ? 'history' : 'contents';
   // Admin and History replace the editor: no editor actions in the header.
   const away = adminTab !== undefined || historyRoute !== undefined;
+  // Symbol palette and find in files (editing extras).
+  const editorView = useRef<EditorView>(undefined);
+  const symbols = useSymbolPalette({ enabled: !away, view: () => editorView.current, notify: setNotice });
+  const find = useFindReplace({
+    enabled: !away && working !== undefined,
+    gateway,
+    repo,
+    working,
+    visible,
+    buffers: () => buffersRef.current,
+    setBuffers,
+    onReplaced: (paths) => openPathRef.current && paths.includes(openPathRef.current) && setEditorRev((n) => n + 1),
+    onOpenAt: (path, line) => void openAt(path, line),
+    notify: setNotice,
+  });
 
   if (loadError) {
     return (
@@ -796,6 +814,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
       actions={
         <>
           {!away && <EditorModeSwitch mode={mode} onMode={changeMode} />}
+          {symbols.button}
           {!away && <ViewSwitch view={view} onView={setView} />}
           {!away && comments.toggleButton}
           <SaveControl
@@ -821,6 +840,8 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
                           onSelect: () => changeMode(mode === 'writing' ? 'code' : 'writing'),
                         },
                         ...(draftShare.item ? [draftShare.item] : []),
+                        ...(symbols.menuItem ? [symbols.menuItem] : []),
+                        ...(find.menuItem ? [find.menuItem] : []),
                       ]),
                   { label: t.save.addNoteMenu, narrowOnly: true, onSelect: () => setNoteRequest((n) => n + 1) },
                 ]}
@@ -971,6 +992,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
                 applyEdit={comments.applyEdit}
                 onDropFiles={authoring.onEditorDrop}
                 insert={insertReq}
+                onView={(v) => (editorView.current = v)}
                 onChange={(text) => setBuffers((b) => ({ ...b, [openPath]: { base: b[openPath]?.base ?? '', text } }))}
               />
             ) : (
@@ -1000,6 +1022,8 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
         </div>
       )}
       {authoring.dialogs}
+      {symbols.dialog}
+      {find.panel}
       <FigureLightbox path={figure?.path} state={figure?.state ?? { kind: 'loading' }} onClose={() => setFigure(undefined)} />
     </AppShell>
   );

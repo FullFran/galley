@@ -53,7 +53,11 @@ proposals and review. No real-time co-editing of the same file.
    app; the org must approve the new permission). Done in C8 (`feat/ci-pdf`):
    CI chips per proposal, "Download PDF of this proposal" and "Download latest
    PDF" (default branch), unzipped in the browser.
-8. **Symbol palette** with KaTeX previews.
+8. **Symbol palette** with KaTeX previews. Done in `feat/editing-extras`:
+   Σ button, ⋯ menu or Ctrl/Cmd+Shift+S; searchable groups (Greek, operators,
+   relations, arrows, accents, delimiters, constructs incl. matrices), KaTeX
+   previews rendered as they scroll into view (lazy chunk, trust off), insert
+   at the cursor wrapped in `$…$` outside math, recent symbols in localStorage.
 9. **Dark theme.**
 10. **Vim mode** toggle (CodeMirror keymap).
 11. **Chat per paper** on PocketBase realtime (persistent history, private,
@@ -63,6 +67,14 @@ proposals and review. No real-time co-editing of the same file.
     paginated history, composer (4 KB), EventSource with backoff and resync.
 12. Also from the research: "accept all suggestions", find and replace across
     files, print-to-PDF from the preview as an unofficial copy.
+    Done in `feat/editing-extras`: "Apply all N suggestions" on a proposal (one
+    fast-forward commit, exact-lines check per suggestion, skipped ones
+    reported, one Co-authored-by per suggester); Find in files
+    (Ctrl/Cmd+Shift+F: plain/case/whole word/regex in a worker with a 2 s
+    timeout, grouped results with context, replace one/in file/all as unsaved
+    edits with Undo); Print in the preview toolbar (the frame prints itself;
+    needs `allow-modals` in its sandbox, Chromium ignores print() without it;
+    A4 print stylesheet with an "unofficial copy" note).
 
 13. **New section** (Fran, 2026-10-28; goes with CX2 next to figure upload):
     "New section" / "New subsection" from the paper outline. Asks for title and

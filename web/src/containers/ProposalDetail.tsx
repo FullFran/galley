@@ -21,6 +21,7 @@ import { describeReviewError } from '../review/labels';
 import { splitByHead } from '../review/pending';
 import { reviewerStatuses } from '../review/status';
 import { applySuggestion, suggestionBlock } from '../review/suggestion';
+import { applyAllSuggestions, applyAllSummary, openSuggestions } from '../review/applyAll';
 import { groupThreads } from '../review/threads';
 import type { Buffers } from '../workspace/model';
 import { FileDiff, type CommentDraft } from '../ui/review/FileDiff';
@@ -280,6 +281,19 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
     void act(() => applySuggestion({ repos, reviews }, repo, proposal, access, comment), m.suggestionApplied);
   };
 
+  // Apply all suggestions: one commit with every open suggestion that still matches.
+  const suggestions = canApply ? openSuggestions(data.comments, threadStates) : [];
+  const applyAll = () => {
+    if (!window.confirm(t.applyAll.confirm(suggestions.length))) return;
+    let summary: { ok: boolean; text: string } | undefined;
+    void act(async () => {
+      const result = await applyAllSuggestions({ repos, reviews }, repo, proposal, access, suggestions);
+      summary = { ok: result.sha !== undefined, text: applyAllSummary(result, t.applyAll) };
+    }).then((done) => {
+      if (done && summary) setNotice({ kind: summary.ok ? 'ok' : 'error', text: summary.text });
+    });
+  };
+
   const merge = () => {
     if (!window.confirm(m.confirmMerge(proposal.title, proposal.baseBranch))) return;
     void act(() => reviews.merge(repo, number, proposal.headSha, method), m.merged);
@@ -335,6 +349,11 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
           <button type="button" disabled={busy} onClick={() => void act(async () => undefined)}>
             {m.reload}
           </button>
+          {suggestions.length > 1 && (
+            <button type="button" class="primary" disabled={busy} onClick={applyAll}>
+              {t.applyAll.action(suggestions.length)}
+            </button>
+          )}
         </div>
         {preview?.sha === proposal.headSha && (
           <section class="proposal-preview" aria-label={m.previewOf}>

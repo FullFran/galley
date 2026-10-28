@@ -1,5 +1,6 @@
 import { useT } from '../i18n';
 import { formatClock } from '../i18n/format';
+import './editing/toolbar.css';
 
 export interface CompileBarProps {
   compiling: boolean;
@@ -9,6 +10,8 @@ export interface CompileBarProps {
   auto: boolean;
   onRecompile: () => void;
   onAuto: (auto: boolean) => void;
+  /** Print / save as PDF (an unofficial copy); not offered without it. */
+  onPrint?: () => void;
 }
 
 /**
@@ -16,7 +19,7 @@ export interface CompileBarProps {
  * only while the preview is behind the editor, an "Out of date" badge. The
  * last compile time sits in the button's tooltip.
  */
-export function CompileBar({ compiling, stale, lastCompiledAt, auto, onRecompile, onAuto }: CompileBarProps) {
+export function CompileBar({ compiling, stale, lastCompiledAt, auto, onRecompile, onAuto, onPrint }: CompileBarProps) {
   const t = useT();
   const m = t.compile;
   const tooltip = lastCompiledAt !== undefined ? `${m.shortcut} · ${m.compiledAt(formatClock(lastCompiledAt, t.meta.lang))}` : m.shortcut;
@@ -43,6 +46,11 @@ export function CompileBar({ compiling, stale, lastCompiledAt, auto, onRecompile
           </span>
         )}
       </span>
+      {onPrint && (
+        <button type="button" class="secondary compile-print" onClick={onPrint} disabled={compiling} title={t.print.hint}>
+          {t.print.action}
+        </button>
+      )}
     </div>
   );
 }

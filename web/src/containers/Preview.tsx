@@ -46,6 +46,7 @@ export function Preview({ gateway, repo, headSha, files, buffers, entry, autoCom
   // Kept as data, so the text follows a language switch.
   const [status, setStatus] = useState<{ kind: 'loading' } | { kind: 'failed'; error: unknown } | undefined>({ kind: 'loading' });
   const [compile, setCompile] = useState<CompileState>({ compiling: false, stale: false });
+  const [printReq, setPrintReq] = useState<{ note: string; seq: number }>();
   const [auto, setAuto] = useState(() => readAutoCompile(repo.fullName, autoCompileDefault));
   const seq = useRef(0);
   const client = useRef<ReturnType<typeof createRenderClient>>(undefined);
@@ -144,6 +145,7 @@ export function Preview({ gateway, repo, headSha, files, buffers, entry, autoCom
         lastCompiledAt={compile.lastCompiledAt}
         auto={auto}
         onRecompile={() => compiler.current?.recompile()}
+        onPrint={result?.html ? () => setPrintReq((r) => ({ note: t.print.note, seq: (r?.seq ?? 0) + 1 })) : undefined}
         onAuto={(next) => {
           setAuto(next);
           writeAutoCompile(repo.fullName, next);
@@ -162,6 +164,7 @@ export function Preview({ gateway, repo, headSha, files, buffers, entry, autoCom
               : t.preview.unavailable(describeError(status.error, t))
         }
         scrollTo={scrollTo}
+        print={printReq}
         {...frameLinks}
       />
     </>

@@ -10,6 +10,7 @@ import {
   parseRevealMessage,
   parseScrollMessage,
   parseSrc,
+  parsePrintMessage,
   type JumpMessage,
   type ReadyMessage,
   type SelectionMessage,
@@ -108,6 +109,8 @@ function scrollToHeading(id: string, text: string) {
 
 window.addEventListener('message', (event) => {
   if (event.source !== window.parent || event.origin !== galleyOrigin) return;
+  const print = parsePrintMessage(event.data);
+  if (print) return printPage(print.note);
   const scroll = parseScrollMessage(event.data);
   if (scroll) return scrollToHeading(scroll.id, scroll.text);
   const reveal = parseRevealMessage(event.data);
@@ -141,6 +144,27 @@ const fitWidth = () => {
 };
 window.addEventListener('resize', fitWidth);
 fitWidth();
+
+// Print / save as PDF: the sheet at full size on A4 (preview.css @media
+// print), with a plain-text note that this is an unofficial copy. The note
+// is set with textContent, never parsed as markup.
+function printPage(note: string) {
+  if (!page?.childElementCount) return;
+  let el = document.getElementById('galley-print-note');
+  if (!el) {
+    el = document.createElement('p');
+    el.id = 'galley-print-note';
+    el.className = 'galley-print-note';
+    document.body.prepend(el);
+  }
+  el.textContent = note;
+  document.body.style.zoom = '';
+  try {
+    window.print();
+  } finally {
+    fitWidth();
+  }
+}
 
 // Source tags (`data-src="path:line"`, `data-src-end`) link blocks to the
 // source: a selection is reported with the tags of the blocks it starts and

@@ -38,8 +38,8 @@ describe('keyboard shortcuts', () => {
 
   it('lists every action once for the shortcuts dialog', () => {
     const actions = SHORTCUTS.map((s) => s.action);
-    expect(new Set(actions)).toEqual(new Set(['toggleSidebar', 'recompile', 'save', 'help']));
-    expect(actions.length).toBe(4);
+    expect(new Set(actions)).toEqual(new Set(['toggleSidebar', 'recompile', 'save', 'help', 'symbols', 'findAll']));
+    expect(actions.length).toBe(6);
   });
 
   describe('typing detection across the editor shadow root', () => {

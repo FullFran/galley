@@ -3,7 +3,7 @@
 
 import type { Messages } from '../i18n';
 
-export type ShortcutAction = 'toggleSidebar' | 'recompile' | 'save' | 'help';
+export type ShortcutAction = 'toggleSidebar' | 'recompile' | 'save' | 'help' | 'symbols' | 'findAll';
 
 export interface KeyLike {
   key: string;
@@ -18,6 +18,8 @@ export const SHORTCUTS: readonly { action: ShortcutAction; keys: string[] }[] = 
   { action: 'recompile', keys: ['Ctrl', 'Enter'] },
   { action: 'save', keys: ['Ctrl', 'S'] },
   { action: 'help', keys: ['?'] },
+  { action: 'symbols', keys: ['Ctrl', 'Shift', 'S'] },
+  { action: 'findAll', keys: ['Ctrl', 'Shift', 'F'] },
 ];
 
 export function shortcutLabel(action: ShortcutAction, t: Messages): string {
@@ -36,6 +38,12 @@ export function matchShortcut(e: KeyLike, typing: boolean): ShortcutAction | und
     if (key === 'b') return typing ? undefined : 'toggleSidebar';
     if (key === 'enter') return 'recompile';
     if (key === 's') return 'save';
+    return undefined;
+  }
+  // Ctrl/Cmd+Shift+S (symbol palette) and Ctrl/Cmd+Shift+F (find in files) work while typing too.
+  if (mod && e.shiftKey && !e.altKey) {
+    if (key === 's') return 'symbols';
+    if (key === 'f') return 'findAll';
     return undefined;
   }
   if (e.key === '?' && !mod && !e.altKey) return typing ? undefined : 'help';

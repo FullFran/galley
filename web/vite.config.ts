@@ -68,7 +68,8 @@ const FRAME_PATHS = {
     /^\/node_modules\/\.vite\/deps\//,
     /^\/node_modules\/katex\/dist\//,
   ],
-  preview: [/^\/preview\.html$/, /^\/assets\/(preview|protocol|cmu-serif|KaTeX)[\w.-]*$/],
+  // katex-*.css: KaTeX's stylesheet, shared by the frame and the symbol palette chunk.
+  preview: [/^\/preview\.html$/, /^\/assets\/(preview|protocol|cmu-serif|KaTeX|katex)[\w.-]*$/],
 };
 
 interface Req {
