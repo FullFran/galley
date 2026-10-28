@@ -159,6 +159,9 @@ edit it, but anyone with write access could still change it on GitHub).
     subsection from the Outline (roadmap 13, `structure: admin|write`),
     friendly names with path tooltips. Implemented and checked; pending
     review, commit and PR.
+- [ ] CX-C Comments UI phase 1, review thread resolve, click-to-jump
+  (`feat/comments-ui`; roadmap 2, 3, 5). Route: delegated (2+ non-trivial
+  files). Implemented and checked; pending review, commit and PR.
 - [ ] CX3 Guided tour.
 - [ ] CX4 References manager.
 - [ ] C4 Drafts.
@@ -516,6 +519,19 @@ edit it, but anyone with write access could still change it on GitHub).
     clean merge (both changes kept, notice); 0 failed, no CSP violations.
   - Bundle: main 269 → 278 kB (gzip 92.5 → 95.4); lazy chunks unchanged.
 
+- 2026-10-28, CX-C comments UI (`feat/comments-ui`):
+  - `CommentsGateway` port + HTTP adapter (cookie credentials, CSRF header,
+    typed 401/403/404/409/413/422/429/5xx errors, field-by-field response
+    checks); anchors with 32-character quote context; renderer `data-src`
+    tags through includes and front matter; validated frame `selection`,
+    `jump` and `reveal` messages; threads panel; suggestions applied to the
+    buffer only; GraphQL resolve/unresolve of review threads.
+  - RED observed (missing modules / functions) for the adapter, anchors,
+    preview mapping, suggestions, source tags, frame messages, panel gating
+    and GraphQL; GREEN: 60 files, 593 tests.
+  - Headless (`pw/comments-check.mjs`, `shots-comments/`): 43 checks, 0
+    failed, no CSP violations (the API and GraphQL are already in
+    `connect-src`).
 - 2026-10-28, CX2b (`feat/cx2-structure`). Route: delegated writer (2+
   non-trivial files: gateway, upstream save, workspace, outline, files,
   dialogs, catalogs).

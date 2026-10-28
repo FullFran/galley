@@ -19,7 +19,7 @@ describe('navigation data', () => {
     const groups = visibleNav({ repoOpen: true, admin: false });
     expect(ids(groups)).toEqual([
       ['write', ['contents']],
-      ['review', ['proposals']],
+      ['review', ['proposals', 'comments']],
     ]);
     expect(groups.flatMap((g) => g.items).some((i) => i.id === 'admin')).toBe(false);
   });
@@ -28,7 +28,7 @@ describe('navigation data', () => {
     const groups = visibleNav({ repoOpen: true, admin: true });
     expect(ids(groups)).toEqual([
       ['write', ['contents']],
-      ['review', ['proposals']],
+      ['review', ['proposals', 'comments']],
       ['admin', ['admin']],
     ]);
     expect(groups[2]?.separated).toBe(true);

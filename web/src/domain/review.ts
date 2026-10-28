@@ -109,6 +109,18 @@ export interface RepoAccess {
   mergeMethods: MergeMethod[];
 }
 
+/** GitHub's resolution state of one review thread (GraphQL `PullRequestReviewThread`). */
+export interface ReviewThreadState {
+  /** GraphQL node id, for resolveReviewThread / unresolveReviewThread. */
+  id: string;
+  /** REST id of the thread's first comment, to match `ReviewComment.id`. */
+  rootCommentId: number;
+  resolved: boolean;
+  /** GitHub's own check (`viewerCanResolve`), so galley never guesses the permission. */
+  canResolve: boolean;
+  canUnresolve: boolean;
+}
+
 export interface ProposalFiles {
   files: string[];
   truncated: boolean;
@@ -123,6 +135,10 @@ export interface ReviewGateway {
   listChangedFiles(repo: Repository, number: number): Promise<ChangedFile[]>;
   listReviewComments(repo: Repository, number: number): Promise<ReviewComment[]>;
   listReviews(repo: Repository, number: number): Promise<Review[]>;
+  /** Whether each review thread is resolved, and whether the user may change that. */
+  listReviewThreads(repo: Repository, number: number): Promise<ReviewThreadState[]>;
+  /** Resolves (true) or reopens (false) a review thread by its node id. */
+  setThreadResolved(repo: Repository, threadId: string, resolved: boolean): Promise<ReviewThreadState>;
   /** File paths at a commit, to preview a proposal's version. */
   listFiles(repo: Repository, ref: string): Promise<ProposalFiles>;
   addComment(repo: Repository, number: number, commitId: string, comment: NewComment): Promise<ReviewComment>;

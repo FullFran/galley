@@ -1,4 +1,5 @@
-import type { ChangedFile, DiffSide, NewComment, ReviewComment } from '../../domain';
+import { useState } from 'preact/hooks';
+import type { ChangedFile, DiffSide, NewComment, ReviewComment, ReviewThreadState } from '../../domain';
 import { anchorOf, parsePatch, type DiffLine } from '../../review/diff';
 import { parseSuggestion, withoutSuggestion } from '../../review/suggestion';
 import { placeThreads, type Thread } from '../../review/threads';
@@ -36,6 +37,9 @@ export interface FileDiffProps {
   onReplyDraft: (rootId: number, text: string) => void;
   onReply: (rootId: number) => void;
   onApply: (comment: ReviewComment) => void;
+  /** GitHub's resolution state per thread, by the REST id of its first comment. */
+  threadStates?: Record<number, ReviewThreadState>;
+  onResolveThread?: (state: ReviewThreadState, resolve: boolean) => void;
 }
 
 const statusLabel = (status: string, t: Messages): string =>
@@ -143,8 +147,36 @@ function ThreadView(props: FileDiffProps & { thread: Thread }) {
   const m = useT().diff;
   const { thread, replyDrafts, busy } = props;
   const draft = replyDrafts[thread.root.id] ?? '';
+  const state = props.threadStates?.[thread.root.id];
+  const [expanded, setExpanded] = useState(false);
+  const toggle = state && (state.resolved ? state.canUnresolve : state.canResolve) && props.onResolveThread && (
+    <button type="button" disabled={busy} onClick={() => props.onResolveThread?.(state, !state.resolved)}>
+      {state.resolved ? m.unresolveThread : m.resolveThread}
+    </button>
+  );
+  if (state?.resolved && !expanded) {
+    return (
+      <div class="thread thread-resolved">
+        <span class="muted">
+          {m.resolvedThread} · {thread.root.author?.login ?? m.someone}
+        </span>{' '}
+        <button type="button" class="link-button" onClick={() => setExpanded(true)}>
+          {m.showThread}
+        </button>{' '}
+        {toggle}
+      </div>
+    );
+  }
   return (
     <div class="thread">
+      {state?.resolved && (
+        <p class="muted">
+          {m.resolvedThread}{' '}
+          <button type="button" class="link-button" onClick={() => setExpanded(false)}>
+            {m.hideThread}
+          </button>
+        </p>
+      )}
       {[thread.root, ...thread.replies].map((c) => (
         <CommentView key={c.id} comment={c} canApply={props.canApply} busy={busy} onApply={props.onApply} />
       ))}
@@ -159,6 +191,7 @@ function ThreadView(props: FileDiffProps & { thread: Thread }) {
         <button type="button" disabled={busy || draft.trim() === ''} onClick={() => props.onReply(thread.root.id)}>
           {m.reply}
         </button>
+        {toggle}
       </div>
     </div>
   );

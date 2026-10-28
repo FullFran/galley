@@ -15,6 +15,7 @@ import {
   type Review,
   type ReviewComment,
   type ReviewGateway,
+  type ReviewThreadState,
 } from '../domain';
 import { githubUrl } from '../review/status';
 import { GitHubClient, type TokenSource } from './client';
@@ -27,6 +28,8 @@ import { branchHead, createCommit, fastForward, listTree, repoBase } from './git
 //   assignees (GET)                                    Issues or Pull requests: read
 //   repos/{o}/{r} (GET; merge settings need Contents)  Metadata: read
 //   pulls/{n}/merge (PUT), git data (POST/PATCH)       Contents: write
+//   GraphQL reviewThreads (query)                      Pull requests: read
+//   GraphQL resolve/unresolveReviewThread (mutation)   Pull requests: write
 
 export interface GitHubReviewGatewayOptions {
   tokens: TokenSource;
@@ -157,6 +160,39 @@ export function createGitHubReviewGateway(options: GitHubReviewGatewayOptions): 
       });
     },
 
+    async listReviewThreads(repo, n) {
+      const out: ReviewThreadState[] = [];
+      let after: string | null = null;
+      for (let page = 0; page < MAX_THREAD_PAGES; page++) {
+        const data: GqlThreadsPage = await gh.graphql<GqlThreadsPage>(
+          THREADS_QUERY,
+          { owner: repo.owner, name: repo.name, number: n, after },
+          repo.id,
+        );
+        const conn = data.repository?.pullRequest?.reviewThreads;
+        if (!conn) break;
+        for (const node of conn.nodes ?? []) {
+          const state = toThreadState(node);
+          if (state) out.push(state);
+        }
+        if (!conn.pageInfo?.hasNextPage || !conn.pageInfo.endCursor) break;
+        after = conn.pageInfo.endCursor;
+      }
+      return out;
+    },
+
+    async setThreadResolved(repo, threadId, resolved) {
+      const field = resolved ? 'resolveReviewThread' : 'unresolveReviewThread';
+      const data = await gh.graphql<Record<string, { thread?: GqlThread } | null>>(
+        resolved ? RESOLVE_MUTATION : UNRESOLVE_MUTATION,
+        { id: threadId },
+        repo.id,
+      );
+      const state = toThreadState(data[field]?.thread);
+      if (!state) throw new RejectedError('GitHub did not return the review thread', 'comment');
+      return state;
+    },
+
     listFiles: (repo, ref) => listTree(gh, repo, ref),
 
     async addComment(repo, n, commitId, comment) {
@@ -233,6 +269,57 @@ export function createGitHubReviewGateway(options: GitHubReviewGatewayOptions): 
       if ((await branchHead(gh, repo, proposal.headBranch)) !== expectedHeadSha) throw moved();
       throw new RejectedError(`${proposal.headBranch} cannot be updated`, 'branch');
     },
+  };
+}
+
+// Review thread resolution exists only in GraphQL. Fields per
+// https://docs.github.com/en/graphql/reference/pulls (PullRequestReviewThread:
+// id, isResolved, viewerCanResolve, viewerCanUnresolve, comments; mutations
+// resolveReviewThread / unresolveReviewThread with input { threadId }). The
+// docs list no permission for the mutations; galley shows the buttons only
+// when GitHub says the viewer can (viewerCanResolve / viewerCanUnresolve),
+// which in practice means write access or being the pull request's author.
+const THREAD_FIELDS = 'id isResolved viewerCanResolve viewerCanUnresolve comments(first: 1) { nodes { databaseId } }';
+const THREADS_QUERY = `query ($owner: String!, $name: String!, $number: Int!, $after: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $number) {
+      reviewThreads(first: 100, after: $after) {
+        pageInfo { hasNextPage endCursor }
+        nodes { ${THREAD_FIELDS} }
+      }
+    }
+  }
+}`;
+const RESOLVE_MUTATION = `mutation ($id: ID!) { resolveReviewThread(input: { threadId: $id }) { thread { ${THREAD_FIELDS} } } }`;
+const UNRESOLVE_MUTATION = `mutation ($id: ID!) { unresolveReviewThread(input: { threadId: $id }) { thread { ${THREAD_FIELDS} } } }`;
+/** At most 1,000 threads per proposal. */
+const MAX_THREAD_PAGES = 10;
+
+interface GqlThread {
+  id?: unknown;
+  isResolved?: unknown;
+  viewerCanResolve?: unknown;
+  viewerCanUnresolve?: unknown;
+  comments?: { nodes?: { databaseId?: unknown }[] | null } | null;
+}
+
+interface GqlThreadsPage {
+  repository?: {
+    pullRequest?: {
+      reviewThreads?: { pageInfo?: { hasNextPage?: boolean; endCursor?: string | null }; nodes?: GqlThread[] | null } | null;
+    } | null;
+  } | null;
+}
+
+function toThreadState(node: GqlThread | null | undefined): ReviewThreadState | undefined {
+  const root = node?.comments?.nodes?.[0]?.databaseId;
+  if (!node || typeof node.id !== 'string' || !/^[\w=-]{1,200}$/.test(node.id) || typeof root !== 'number') return undefined;
+  return {
+    id: node.id,
+    rootCommentId: root,
+    resolved: node.isResolved === true,
+    canResolve: node.viewerCanResolve === true,
+    canUnresolve: node.viewerCanUnresolve === true,
   };
 }
 

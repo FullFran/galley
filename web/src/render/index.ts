@@ -4,7 +4,8 @@ import { parseBibtex, type CslItem } from './bibtex';
 import { formatCitations, type Cluster } from './citations';
 import { renderTitleBlock } from './frontMatter';
 import { createMarkdown, walk, type Attrs, type Crossref, type Env, type Label, type RenderContext } from './markdown';
-import { dirname, expandIncludes, removeShortcodes, resolvePath, splitFrontMatter } from './source';
+import { bodyFirstLine, dirname, expandIncludesMapped, removeShortcodesMapped, resolvePath, splitFrontMatter } from './source';
+import { tagBlocks } from './srcTags';
 import { MAX_ASSETS, MAX_HTML_LENGTH } from '../preview/protocol';
 
 // Client-side Quarto preview: turns a project (entry file, includes,
@@ -337,13 +338,18 @@ async function renderProject(project: ProjectSource, diagnostics: Diagnostic[]):
     return { html: '', assets: [], diagnostics };
   }
 
-  const { yaml, body } = splitFrontMatter(await project.readText(entry));
+  const entryText = await project.readText(entry);
+  const { yaml, body } = splitFrontMatter(entryText);
   const front = yaml ? parseYaml(yaml, entry, diagnostics) : {};
   const format = isRecord(config.format) && isRecord(config.format.html) ? config.format.html : {};
   const meta: Meta = { ...config, ...format, ...front };
   const entryDir = dirname(entry);
 
-  const expanded = removeShortcodes(await expandIncludes(body, entry, project, diagnostics), diagnostics);
+  const mapped = removeShortcodesMapped(
+    await expandIncludesMapped(body, entry, bodyFirstLine(entryText, body), project, diagnostics),
+    diagnostics,
+  );
+  const expanded = mapped.text;
   const ctx: RenderContext = {
     diagnostics,
     labels: new Map(),
@@ -357,6 +363,7 @@ async function renderProject(project: ProjectSource, diagnostics: Diagnostic[]):
   const env: Env = { galley: ctx };
   const abstractEnv: Env = { galley: ctx };
   const tokens = md().parse(expanded, env);
+  tagBlocks(tokens, mapped.origins);
   const abstractSource = str(front.abstract);
   const abstractTokens = abstractSource ? md().parse(abstractSource, abstractEnv) : [];
 

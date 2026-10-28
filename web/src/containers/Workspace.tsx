@@ -54,6 +54,8 @@ import { Skeleton } from '../ui/shell/Skeleton';
 import { Toast } from '../ui/shell/Toasts';
 import { ViewSwitch, type PaneView } from '../ui/shell/ViewSwitch';
 import type { ConfigSaved } from './ProjectSettings';
+import type { CommentsGateway } from '../domain/comments';
+import { useComments } from './Comments';
 
 // The YAML parser, the wizard and the settings form load on demand.
 type SettingsModule = typeof import('./ProjectSettings');
@@ -74,12 +76,14 @@ export interface WorkspaceProps {
   onDirtyChange: (dirty: boolean) => void;
   /** A save created or updated a proposal. */
   onSaved?: () => void;
+  /** galley's comments API; without it the comments panel is not offered. */
+  comments?: CommentsGateway;
 }
 
 type Heading = Extract<OutlineItem, { kind: 'heading' }>;
 const NO_FILES: string[] = [];
 
-export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuthRequired, onDirtyChange, onSaved }: WorkspaceProps) {
+export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuthRequired, onDirtyChange, onSaved, comments: commentsGateway }: WorkspaceProps) {
   const t = useT();
   // Callbacks read the catalog through a ref: a language switch must not
   // re-create `load` (that would reload the repository and drop edits).
@@ -412,6 +416,23 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
     [tRef],
   );
 
+  const comments = useComments({
+    gateway: commentsGateway,
+    repo,
+    headSha: working?.headSha,
+    openPath,
+    openText,
+    access,
+    readText: async (path) => {
+      if (!working || !visible.includes(path) || fileKind(path) === 'binary') return undefined;
+      return buffersRef.current[path]?.text ?? gateway.readFile(repo, path, working.headSha);
+    },
+    onOpenAt: (path, line) => void openAt(path, line),
+    onShowPreview: () => setView('preview'),
+    onNotice: setNotice,
+    onAuthRequired: () => onAuthRequired(unsavedChanges(buffersRef.current)),
+  });
+
   const save = async () => {
     if (!working || !hasDirty || status.kind === 'saving') return;
     setStatus({ kind: 'saving' });
@@ -501,13 +522,17 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   // Contents and Admin live on this screen; Proposals is App's.
   const navigate = (id: NavId) => {
     if (id === 'admin') return openSettings();
+    if (id === 'comments' && comments.enabled) {
+      if (adminTab) toEditor();
+      return comments.toggle();
+    }
     if (id === 'contents') {
       if (adminTab) toEditor();
       return;
     }
     shell.onNavigate(id);
   };
-  const screenShell: ShellContext = { ...shell, admin, onNavigate: navigate };
+  const screenShell: ShellContext = { ...shell, admin, onNavigate: navigate, comments: comments.enabled ? { unread: comments.unread } : undefined };
 
   const chooseTab = (tab: ContentsTab) => {
     setContentsTab(tab);
@@ -636,6 +661,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
         <>
           {!adminTab && <EditorModeSwitch mode={mode} onMode={changeMode} />}
           {!adminTab && <ViewSwitch view={view} onView={setView} />}
+          {!adminTab && comments.toggleButton}
           <SaveControl
             dirtyCount={dirty.length + authoring.uploads.length}
             message={message}
@@ -746,7 +772,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
           }
         />
       ) : (
-        <div class="workspace" data-view={view}>
+        <div class="workspace" data-view={view} data-comments={comments.panel ? 'open' : undefined}>
           <section class="editor-pane" aria-label={t.workspace.editorRegion} data-tour="editor">
             {openPath && open?.merge ? (
               <MergeResolver
@@ -769,6 +795,8 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
                 onSave={() => setNoteRequest((n) => n + 1)}
                 assist={assist}
                 indexVersion={indexState.version}
+                comments={comments.editorComments}
+                applyEdit={comments.applyEdit}
                 onDropFiles={authoring.onEditorDrop}
                 insert={insertReq}
                 onChange={(text) => setBuffers((b) => ({ ...b, [openPath]: { base: b[openPath]?.base ?? '', text } }))}
@@ -791,8 +819,11 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
               autoCompileDefault={userAuto ?? (project.kind === 'valid' && project.config.preview.autoCompile)}
               scrollTo={jump}
               recompileSeq={recompileSeq}
+              {...comments.preview}
             />
+            {comments.previewAction}
           </section>
+          {comments.panel}
         </div>
       )}
       {authoring.dialogs}

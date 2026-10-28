@@ -1,7 +1,19 @@
 import DOMPurify, { type Config } from 'dompurify';
 import 'katex/dist/katex.min.css';
 import './preview.css';
-import { FRAME_READY, parseRenderMessage, parseScrollMessage, type ReadyMessage } from './protocol';
+import {
+  FRAME_JUMP,
+  FRAME_READY,
+  FRAME_SELECTION,
+  MAX_SELECTION_TEXT,
+  parseRenderMessage,
+  parseRevealMessage,
+  parseScrollMessage,
+  parseSrc,
+  type JumpMessage,
+  type ReadyMessage,
+  type SelectionMessage,
+} from './protocol';
 
 // Runs inside <iframe sandbox="allow-scripts">: the document has an opaque
 // origin, so it cannot read galley's storage, cookies or DOM, and its CSP
@@ -98,6 +110,8 @@ window.addEventListener('message', (event) => {
   if (event.source !== window.parent || event.origin !== galleyOrigin) return;
   const scroll = parseScrollMessage(event.data);
   if (scroll) return scrollToHeading(scroll.id, scroll.text);
+  const reveal = parseRevealMessage(event.data);
+  if (reveal) return revealSource(reveal.path, reveal.line);
   const message = parseRenderMessage(event.data);
   if (!message || message.seq <= lastSeq) return;
   lastSeq = message.seq;
@@ -127,6 +141,69 @@ const fitWidth = () => {
 };
 window.addEventListener('resize', fitWidth);
 fitWidth();
+
+// Source tags (`data-src="path:line"`, `data-src-end`) link blocks to the
+// source: a selection is reported with the tags of the blocks it starts and
+// ends in (comments from the preview), a double-click asks galley to show
+// that line in the editor, and galley can ask for the block of a line.
+const toParent = (message: SelectionMessage | JumpMessage) => {
+  if (window.parent !== window) window.parent.postMessage(message, galleyOrigin);
+};
+
+const blockOf = (node: Node | null | undefined): HTMLElement | null => {
+  const el = node instanceof Element ? node : (node?.parentElement ?? null);
+  const block = el?.closest<HTMLElement>('[data-src]') ?? null;
+  return block && page?.contains(block) ? block : null;
+};
+
+let lastSelection = '';
+function reportSelection() {
+  const sel = document.getSelection();
+  const text = sel && !sel.isCollapsed ? sel.toString().trim().slice(0, MAX_SELECTION_TEXT) : '';
+  let message: SelectionMessage = { type: FRAME_SELECTION, text: '', src: '', endSrc: '' };
+  if (sel && text) {
+    let first = blockOf(sel.anchorNode);
+    let last = blockOf(sel.focusNode);
+    if (first && last && first.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_PRECEDING) [first, last] = [last, first];
+    const src = first?.dataset.src ?? '';
+    const lastTag = last ? parseSrc(last.dataset.src ?? '') : undefined;
+    const endLine = Number(last?.dataset.srcEnd);
+    const endSrc = lastTag ? `${lastTag.path}:${Number.isSafeInteger(endLine) && endLine >= lastTag.line ? endLine : lastTag.line}` : '';
+    if (parseSrc(src) && parseSrc(endSrc)) message = { type: FRAME_SELECTION, text, src, endSrc };
+  }
+  const key = `${message.src}\n${message.endSrc}\n${message.text}`;
+  if (key === lastSelection) return;
+  lastSelection = key;
+  toParent(message);
+}
+let selectionTimer: ReturnType<typeof setTimeout> | undefined;
+document.addEventListener('selectionchange', () => {
+  clearTimeout(selectionTimer);
+  selectionTimer = setTimeout(reportSelection, 200);
+});
+
+document.addEventListener('dblclick', (event) => {
+  const src = blockOf(event.target as Node | null)?.dataset.src ?? '';
+  if (parseSrc(src)) toParent({ type: FRAME_JUMP, src });
+});
+
+/** Scrolls to the innermost block of `path` that holds `line` (else the nearest one before it) and flashes it. */
+function revealSource(path: string, line: number) {
+  if (!page) return;
+  let best: { el: HTMLElement; start: number; span: number } | undefined;
+  for (const el of page.querySelectorAll<HTMLElement>('[data-src]')) {
+    const tag = parseSrc(el.dataset.src ?? '');
+    if (!tag || tag.path !== path || tag.line > line) continue;
+    const end = Number(el.dataset.srcEnd) || tag.line;
+    const span = end >= line ? end - tag.line : Number.MAX_SAFE_INTEGER;
+    if (!best || span < best.span || (span === best.span && tag.line > best.start)) best = { el, start: tag.line, span };
+  }
+  if (!best) return;
+  best.el.scrollIntoView({ block: 'center' });
+  const el = best.el;
+  el.classList.add('galley-flash');
+  setTimeout(() => el.classList.remove('galley-flash'), 1500);
+}
 
 if (window.parent !== window) {
   const ready: ReadyMessage = { type: FRAME_READY };

@@ -14,6 +14,7 @@ import {
   type ReviewComment,
   type ReviewEvent,
   type ReviewGateway,
+  type ReviewThreadState,
 } from '../domain';
 import { rightLines } from '../review/diff';
 import { describeReviewError } from '../review/labels';
@@ -77,6 +78,7 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice>();
   const [preview, setPreview] = useState<ProposalFiles & { sha: string }>();
+  const [threadStates, setThreadStates] = useState<Record<number, ReviewThreadState>>({});
 
   const fail = useCallback(
     (err: unknown, show: (text: string) => void) => {
@@ -96,6 +98,11 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
       ]);
       setLoadError(undefined);
       setData({ proposal, files, comments, reviews: list });
+      // Optional: without GraphQL the threads simply have no Resolve button.
+      reviews.listReviewThreads(repo, number).then(
+        (states) => setThreadStates(Object.fromEntries(states.map((s) => [s.rootCommentId, s]))),
+        () => undefined,
+      );
     } catch (err) {
       fail(err, setLoadError);
     }
@@ -257,6 +264,12 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
     }
   };
 
+  const resolveThread = (state: ReviewThreadState, resolve: boolean) =>
+    void act(async () => {
+      const next = await reviews.setThreadResolved(repo, state.id, resolve);
+      setThreadStates((s) => ({ ...s, [next.rootCommentId]: next }));
+    });
+
   const apply = (comment: ReviewComment) => {
     if (!window.confirm(m.confirmApply)) return;
     void act(() => applySuggestion({ repos, reviews }, repo, proposal, access, comment), m.suggestionApplied);
@@ -336,6 +349,8 @@ export function ProposalDetail({ repos, reviews, repo, number, onBack, onAuthReq
             onReplyDraft={(id, text) => setReplyDrafts((d) => ({ ...d, [id]: text }))}
             onReply={(id) => void reply(id)}
             onApply={apply}
+            threadStates={threadStates}
+            onResolveThread={resolveThread}
           />
         ))}
       </div>

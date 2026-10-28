@@ -8,6 +8,7 @@ import { markdownSupport } from './editorStyle';
 import { loadVim, modeExtension } from './editorModes';
 import { vimSave } from './vimCommands';
 import type { AssistOptions } from './editorAssist';
+import { commentsExtension, setCommentMarks, type CommentHandlers, type CommentMark } from './editorComments';
 
 type AssistModule = typeof import('./editorAssist');
 let assistChunk: Promise<AssistModule> | undefined;
@@ -39,6 +40,10 @@ export interface EditorProps {
   assist?: Omit<AssistOptions, 'path'>;
   /** Changes when the project index is rebuilt, so warnings are checked again. */
   indexVersion?: number;
+  /** Comment actions and the lines that have open threads. */
+  comments?: CommentHandlers & { marks: CommentMark[] };
+  /** A change applied as an ordinary edit (undoable); `seq` changes for every edit. */
+  applyEdit?: { from: number; to: number; insert: string; seq: number };
   /** Files dropped onto the text, with the document position of the drop. */
   onDropFiles?: (files: File[], pos: number) => void;
   /**
@@ -91,7 +96,19 @@ const theme = EditorView.theme({
 });
 
 /** CodeMirror 6 editor. Owns the EditorView for its lifetime. */
-export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim = false, onVimFailed, onSave, assist, indexVersion, onDropFiles, insert }: EditorProps) {
+export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim = false, onVimFailed, onSave, assist, indexVersion, onDropFiles, insert, comments, applyEdit }: EditorProps) {
+  const commentsRef = useRef(comments);
+  commentsRef.current = comments;
+  const commenting = useRef(new Compartment());
+  const commentExtension = (m: EditorMode): Extension =>
+    commentsRef.current
+      ? commentsExtension(m, {
+          onComment: (...a) => commentsRef.current?.onComment(...a),
+          onOpenThread: (id) => commentsRef.current?.onOpenThread(id),
+          onShowInPreview: (line) => commentsRef.current?.onShowInPreview(line),
+          labels: () => commentsRef.current?.labels() ?? { comment: '', showInPreview: '', thread: '' },
+        })
+      : [];
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView>(undefined);
   const onChangeRef = useRef(onChange);
@@ -130,6 +147,7 @@ export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim 
           drawSelection(),
           EditorView.lineWrapping,
           helpers.current.of([]),
+          commenting.current.of(commentExtension(mode)),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           language(path),
           labelling.current.of(named(label)),
@@ -184,8 +202,24 @@ export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim 
   }, [label]);
 
   useEffect(() => {
-    viewRef.current?.dispatch({ effects: looks.current.reconfigure(modeExtension(mode)) });
+    viewRef.current?.dispatch({
+      effects: [looks.current.reconfigure(modeExtension(mode)), commenting.current.reconfigure(commentExtension(mode))],
+    });
   }, [mode]);
+
+  const marks = comments?.marks;
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: setCommentMarks.of(marks ?? []) });
+  }, [marks]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !applyEdit) return;
+    const length = view.state.doc.length;
+    if (applyEdit.from < 0 || applyEdit.to > length || applyEdit.to < applyEdit.from) return;
+    view.dispatch({ changes: { from: applyEdit.from, to: applyEdit.to, insert: applyEdit.insert }, userEvent: 'input.suggestion' });
+    view.focus();
+  }, [applyEdit?.seq]);
 
   useEffect(() => {
     if (!vim) {
