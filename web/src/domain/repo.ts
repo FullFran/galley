@@ -50,7 +50,9 @@ export type BringInResult =
 
 export interface FileChange {
   path: string;
+  /** UTF-8 text, or base64 bytes when `encoding` is `base64` (an uploaded file). */
   content: string;
+  encoding?: 'base64';
 }
 
 export interface SaveResult {

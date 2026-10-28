@@ -20,6 +20,21 @@ preview:
   auto_compile: true
 `;
 
+describe('parseConfig: structure', () => {
+  it('defaults to write and reads structure: admin', () => {
+    expect(parseConfig('version: 1\neditable: []\n').config?.structure).toBeUndefined();
+    expect(parseConfig('version: 1\neditable: []\nstructure: admin\n').config?.structure).toBe('admin');
+    expect(parseConfig('version: 1\neditable: []\nstructure: write\n').config?.structure).toBe('write');
+  });
+
+  it('rejects other values and writes admin back', () => {
+    expect(errors('version: 1\neditable: []\nstructure: everyone\n')).toEqual(['"structure" must be admin or write.']);
+    const config = parseConfig('version: 1\neditable: []\nstructure: admin\n').config as GalleyConfig;
+    expect(serializeConfig(config)).toContain('structure: admin');
+    expect(serializeConfig({ ...config, structure: 'write' })).not.toContain('structure');
+  });
+});
+
 describe('parseConfig: editor', () => {
   it('reads editor.default_mode', () => {
     expect(parseConfig('version: 1\neditable: []\neditor:\n  default_mode: writing\n').config?.editor).toEqual({ defaultMode: 'writing' });

@@ -39,6 +39,13 @@ export interface EditorProps {
   assist?: Omit<AssistOptions, 'path'>;
   /** Changes when the project index is rebuilt, so warnings are checked again. */
   indexVersion?: number;
+  /** Files dropped onto the text, with the document position of the drop. */
+  onDropFiles?: (files: File[], pos: number) => void;
+  /**
+   * Inserts `text` at `at` (or the cursor); `seq` changes for every insertion.
+   * `block` puts it in a paragraph of its own (a figure).
+   */
+  insert?: { text: string; at?: number; block?: boolean; seq: number };
 }
 
 function language(path: string): Extension {
@@ -84,7 +91,7 @@ const theme = EditorView.theme({
 });
 
 /** CodeMirror 6 editor. Owns the EditorView for its lifetime. */
-export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim = false, onVimFailed, onSave, assist, indexVersion }: EditorProps) {
+export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim = false, onVimFailed, onSave, assist, indexVersion, onDropFiles, insert }: EditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView>(undefined);
   const onChangeRef = useRef(onChange);
@@ -93,6 +100,8 @@ export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim 
   assistRef.current = assist;
   const onVimFailedRef = useRef(onVimFailed);
   onVimFailedRef.current = onVimFailed;
+  const onDropRef = useRef(onDropFiles);
+  onDropRef.current = onDropFiles;
   const onSaveRef = useRef(onSave);
   onSaveRef.current = onSave;
   // The accessible name, the mode and Vim change without recreating the view.
@@ -126,6 +135,18 @@ export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim 
           labelling.current.of(named(label)),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) onChangeRef.current(update.state.doc.toString());
+          }),
+          // Dropped files (figures) go to the parent with the drop position;
+          // dropped text keeps CodeMirror's own handling.
+          EditorView.domEventHandlers({
+            drop(event, view) {
+              const files = [...(event.dataTransfer?.files ?? [])];
+              if (files.length === 0 || !onDropRef.current) return false;
+              event.preventDefault();
+              const pos = view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head;
+              onDropRef.current(files, pos);
+              return true;
+            },
           }),
         ],
       }),
@@ -194,6 +215,28 @@ export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim 
     view.dispatch({ selection: { anchor: line.from }, effects: EditorView.scrollIntoView(line.from, { y: 'start', yMargin: 16 }) });
     view.focus();
   }, [jumpTo?.seq]);
+
+  // An insertion made before this editor mounted (another file) is not repeated here.
+  const insertedSeq = useRef(insert?.seq);
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view || !insert || insert.seq === insertedSeq.current) return;
+    insertedSeq.current = insert.seq;
+    const doc = view.state.doc;
+    const at = Math.min(Math.max(0, insert.at ?? view.state.selection.main.head), doc.length);
+    let text = insert.text;
+    let caret = text.length;
+    if (insert.block) {
+      const before = doc.sliceString(Math.max(0, at - 2), at);
+      const after = doc.sliceString(at, at + 2);
+      const lead = at === 0 || before.endsWith('\n\n') ? '' : before.endsWith('\n') ? '\n' : '\n\n';
+      const tail = at === doc.length ? '\n' : after.startsWith('\n\n') ? '' : after.startsWith('\n') ? '\n' : '\n\n';
+      text = `${lead}${text}${tail}`;
+      caret = text.length;
+    }
+    view.dispatch({ changes: { from: at, insert: text }, selection: { anchor: at + caret }, scrollIntoView: true });
+    view.focus();
+  }, [insert?.seq]);
 
   return <div class="editor" ref={host} data-mode={mode} />;
 }

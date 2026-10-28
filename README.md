@@ -321,8 +321,8 @@ server write and read timeouts (per-write deadline, read deadline cleared).
 ## Project configuration
 
 A paper repository can hold a `.galley.yml` that chooses which files
-co-authors edit in galley, the upload folders, friendly file names and the
-preview default. Repository admins set it up from galley. See
+co-authors edit in galley, the upload folders, friendly file names, who may
+add sections and the preview default. Repository admins set it up from galley. See
 [docs/galley-yml.md](docs/galley-yml.md).
 
 ## Deployment
@@ -408,6 +408,31 @@ http on `localhost` and `127.0.0.1` keeps working for local development.
   screen readers. The index (BibTeX parser and label scan) is built in a small
   worker (`indexWorker.ts`), refreshed 500 ms after edits stop; autocomplete,
   warnings and go to definition load in their own chunk after the editor.
+- **Figures and sections** (`web/src/uploads/`, `web/src/structure/`,
+  `web/src/containers/useAuthoring.tsx`, dialogs in `web/src/ui/authoring/`):
+  upload folders from `.galley.yml` show "Upload to figures/" in Files and take
+  dropped files; dropping an image onto the editor uploads it to the first
+  upload folder and inserts `![](figures/name.png){#fig-name}` at the drop
+  point. The name, type and `max_size_mb` are checked before the file is read,
+  the bytes are checked against the extension after reading, and the file name
+  is cleaned (base name only, transliterated, `[A-Za-z0-9_-]`). The dialog
+  previews images with an `<img>` from a `blob:` URL (SVG never inline), asks
+  Replace or Keep both (`-2`, `-3`) when the name exists, and then offers
+  Insert figure with a caption. The Outline offers New section after… and New
+  subsection in… on each row (⋯), a + between sections, and New section… at
+  the bottom, unless `.galley.yml` says `structure: admin`. A section is a new
+  file `# Title {#sec-slug}`, an include at the chosen place in the main file
+  and, for admins, a `labels` entry (and an `editable` item when no pattern
+  covers it) written into `.galley.yml` keeping its comments. File names follow
+  the paper's includes (folder, `_` prefix, numbers; `sections/_slug.qmd` when
+  there are none). Numbered files are never renumbered: a new file between
+  `02-` and `03-` gets `02a-`, at the end the next number, at the start the one
+  before the first. Uploads and new sections are pending changes: they count
+  as unsaved, are listed in the save note popover ("In this save"; uploads can
+  be removed there) and become part of the next save's single commit, whose
+  default message is the plain-language summary ("New section “Methods” after
+  “Introduction”"). Friendly names from `labels` show in Files and Outline,
+  with the path as tooltip.
 - **Header**: breadcrumb whose repository segment opens the switcher and whose
   folder segments show the Files tab; save state with a dot (role=status, full
   wording in the tooltip); a ⋯ menu (Recompile now, Keyboard shortcuts) and a
@@ -530,7 +555,9 @@ is no branch yet: it is created from the current default head. The project
 index caches file text by blob SHA, so a new commit re-reads only changed
 files, at most six at a time.
 
-Saved files keep their existing mode; new files are `100644`. A save is one
+Saved files keep their existing mode; new files are `100644`. Uploaded files
+are sent as blobs first (`POST /git/blobs` with `encoding: base64`) and join
+the text changes in the same tree and commit. A save is one
 commit whose parent is the head the user opened, and the branch is moved
 fast-forward only (never forced). If the branch moved in the meantime, the save
 fails with a conflict. After a save, the open pull request from the working

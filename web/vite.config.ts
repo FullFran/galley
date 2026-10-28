@@ -6,7 +6,8 @@ const APP_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self'",
-  "img-src 'self' data:",
+  // blob: for the upload preview (an <img> of the chosen file, created in this page).
+  "img-src 'self' data: blob:",
   "connect-src 'self' https://api.github.com https://galley-api.fullfran.com",
   "frame-src 'self'",
   "worker-src 'self'",

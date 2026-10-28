@@ -42,7 +42,11 @@ export interface GalleyConfig {
   preview: { autoCompile: boolean };
   /** Editor defaults; each person can still choose their own. */
   editor?: { defaultMode?: EditorMode };
+  /** Who may add sections and subsections in galley; undefined means `write`. */
+  structure?: StructureRole;
 }
+
+export type StructureRole = 'admin' | 'write';
 
 export type EditorMode = 'writing' | 'code';
 
@@ -60,7 +64,7 @@ export interface ParsedConfig {
 type Record_ = Record<string, unknown>;
 const isRecord = (v: unknown): v is Record_ => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-const TOP_KEYS = ['version', 'title', 'entry', 'editable', 'uploads', 'labels', 'preview', 'editor'];
+const TOP_KEYS = ['version', 'title', 'entry', 'editable', 'uploads', 'labels', 'preview', 'editor', 'structure'];
 const UPLOAD_KEYS = ['folder', 'accept', 'max_size_mb'];
 const PREVIEW_KEYS = ['auto_compile'];
 const EDITOR_KEYS = ['default_mode'];
@@ -183,6 +187,11 @@ export function parseConfig(text: string): ParsedConfig {
     }
   }
 
+  if (doc.structure !== undefined) {
+    if (doc.structure !== 'admin' && doc.structure !== 'write') error('"structure" must be admin or write.');
+    else config.structure = doc.structure;
+  }
+
   return problems.some((p) => p.severity === 'error') ? { problems } : { config, problems };
 }
 
@@ -248,5 +257,6 @@ export function serializeConfig(config: GalleyConfig): string {
   if (labels.length > 0) out.labels = Object.fromEntries(labels.map((k) => [k, config.labels[k]]));
   out.preview = { auto_compile: config.preview.autoCompile };
   if (config.editor?.defaultMode) out.editor = { default_mode: config.editor.defaultMode };
+  if (config.structure === 'admin') out.structure = 'admin';
   return dump(out, { lineWidth: -1, noRefs: true });
 }

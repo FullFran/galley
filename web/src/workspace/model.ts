@@ -51,7 +51,10 @@ export function unsavedChanges(buffers: Buffers): FileChange[] {
   return dirtyPaths(buffers).map((path) => ({ path, content: buffers[path]?.text ?? '' }));
 }
 
-/** Saves every edited buffer as one change on top of `headSha`. */
+/**
+ * Saves every edited buffer, plus `extra` changes (uploaded files), as one
+ * change on top of `headSha`. Conflict copies hold only the text changes.
+ */
 export async function runSave(
   gateway: RepoGateway,
   repo: Repository,
@@ -59,13 +62,15 @@ export async function runSave(
   message: string,
   headSha: string,
   t: Messages = en,
+  extra: FileChange[] = [],
 ): Promise<SaveOutcome> {
-  const changes = unsavedChanges(buffers);
+  const text = unsavedChanges(buffers);
+  const changes = [...text, ...extra];
   try {
     const result = await gateway.save(repo, changes, message, headSha);
     return { kind: 'saved', headSha: result.commitSha, pullRequestUrl: result.pullRequestUrl, saved: changes };
   } catch (err) {
-    if (err instanceof ConflictError) return { kind: 'conflict', copies: changes };
+    if (err instanceof ConflictError) return { kind: 'conflict', copies: text };
     if (err instanceof AuthRequiredError) return { kind: 'auth' };
     return { kind: 'error', message: describeError(err, t) };
   }
