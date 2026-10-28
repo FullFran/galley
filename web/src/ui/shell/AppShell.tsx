@@ -23,6 +23,8 @@ export interface ShellContext {
   user?: Person;
   /** Open proposals of the repository, and how many are the user's own. */
   proposals?: { count: number; mine: number };
+  /** Unread comments in the open repository (workspace only). */
+  comments?: { unread: number };
   sidebar: SidebarControl;
   onNavigate: (id: NavId) => void;
   /** The repository switcher (the repository list). */
@@ -148,8 +150,13 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
     return mine > 0 ? `${count} · ${t.nav.mine(mine)}` : `${count}`;
   };
 
+  const unreadComments = shell.comments?.unread ?? 0;
   const itemLabel = (item: NavItem) =>
-    item.id === 'proposals' && shell.proposals ? t.nav.proposalsCount(shell.proposals.count) : navLabel(item.id, t);
+    item.id === 'proposals' && shell.proposals
+      ? t.nav.proposalsCount(shell.proposals.count)
+      : item.id === 'comments' && unreadComments > 0
+        ? t.comments.unreadNav(unreadComments)
+        : navLabel(item.id, t);
 
   return (
     <UiContext.Provider value={{ openShortcuts: () => setShortcuts(true) }}>
@@ -252,6 +259,11 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
                           {item.id === 'proposals' && proposalsMeta() && (
                             <span class="nav-meta" aria-hidden="true">
                               {proposalsMeta()}
+                            </span>
+                          )}
+                          {item.id === 'comments' && unreadComments > 0 && (
+                            <span class="nav-meta nav-badge" aria-hidden="true">
+                              {unreadComments}
                             </span>
                           )}
                         </button>

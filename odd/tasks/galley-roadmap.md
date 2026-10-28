@@ -23,13 +23,24 @@ proposals and review. No real-time co-editing of the same file.
    backend (PocketBase) is the sensible default; research what GitHub offers
    first (commit comments, review threads, issues, discussions, git notes,
    files in the repo) and record the trade-offs.
+   Progress (2026-10-28): design in `docs/comments-design.md`; backend phase 1
+   plus resolve/reopen built (`feat/comments-api`); UI phase 1 built
+   (`feat/comments-ui`): comment from the editor and from the preview,
+   gutter/highlight markers, threads panel with replies, edit/delete own,
+   resolve/reopen with push, unread counts, suggestions applied to the
+   buffer. Pending: re-anchoring, PR export, AI authors (MCP/CLI).
 3. **Resolve/reopen review threads** (GitHub GraphQL `resolveReviewThread`).
+   Done in `feat/comments-ui`: `reviewThreads` query plus
+   `resolveReviewThread`/`unresolveReviewThread`, gated on
+   `viewerCanResolve`/`viewerCanUnresolve`.
 4. **Email notifications**, only for direct asks: review requested from you,
    assigned to you, invited to a paper. No digests and no emails for ordinary
    activity (Fran: don't bother anyone). Reuse the Resend account already used
    by Shadow Dungeon.
 5. **Click-to-jump** between preview and source, both ways (renderer tags blocks
    with `file:line`).
+   Done in `feat/comments-ui`: `data-src="path:line"` tags, double-click in
+   the preview jumps to the source, "Show in preview" (Ctrl/Cmd+Alt+P).
 6. **History**: versions = commits on main, labels = tags, compare with the
    existing diff view, restore = a proposal (PR), zip download.
 7. **Download the CI-compiled PDF** from galley (needs Actions/Checks read on the

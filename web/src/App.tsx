@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { FileChange, Person, RepoAccess, RepoGateway, Repository, ReviewGateway } from './domain';
 import type { Session } from './auth/session';
+import type { CommentsGateway } from './domain/comments';
+import { requestCommentsPanel } from './comments/panelRequest';
 import { useTRef } from './i18n';
 import { startView } from './containers/boot';
 import { Proposals } from './containers/Proposals';
@@ -19,6 +21,8 @@ export interface AppProps {
   session: Session;
   gateway: RepoGateway;
   reviews: ReviewGateway;
+  /** galley's comments API (comments anywhere). */
+  comments?: CommentsGateway;
 }
 
 type View =
@@ -35,7 +39,7 @@ const sameRepo = (r: Repository, route: RepoRoute) => r.fullName.toLowerCase() =
  * link or the back button lands where the person was. Leaving the workspace
  * with unsaved edits asks first, also on back and forward.
  */
-export function App({ session, gateway, reviews }: AppProps) {
+export function App({ session, gateway, reviews, comments }: AppProps) {
   // Stable callbacks read the catalog through a ref, so a language switch does
   // not re-run the screens' effects (the workspace would reload and lose edits).
   const tRef = useTRef();
@@ -218,6 +222,10 @@ export function App({ session, gateway, reviews }: AppProps) {
     const base = repoRoute(repo.fullName);
     if (id === 'proposals') go({ name: 'proposals', ...base });
     else if (id === 'admin') go({ name: 'admin', ...base, tab: DEFAULT_ADMIN_TAB });
+    else if (id === 'comments') {
+      requestCommentsPanel();
+      go({ name: 'workspace', ...base });
+    }
     else go({ name: 'workspace', ...base });
   };
 
@@ -292,6 +300,7 @@ export function App({ session, gateway, reviews }: AppProps) {
       onAuthRequired={signedOut}
       onDirtyChange={onDirtyChange}
       onSaved={refreshProposals}
+      comments={comments}
     />
   );
 }

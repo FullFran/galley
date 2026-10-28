@@ -8,6 +8,7 @@ import {
 } from '../domain';
 
 export const GITHUB_API = 'https://api.github.com';
+export const GITHUB_GRAPHQL = `${GITHUB_API}/graphql`;
 
 /** Supplies GitHub user access tokens; implemented by the auth session client. */
 export interface TokenSource {
@@ -30,7 +31,7 @@ export interface GitHubResponse<T> {
   headers: Headers;
 }
 
-/** Minimal GitHub REST client. Only ever sends requests to api.github.com. */
+/** Minimal GitHub REST and GraphQL client. Only ever sends requests to api.github.com. */
 export class GitHubClient {
   private readonly tokens: TokenSource;
   private readonly fetch: typeof globalThis.fetch;
@@ -57,6 +58,31 @@ export class GitHubClient {
       throw new TransientError(`malformed GitHub response (${res.status})`);
     }
     return { status: res.status, data, headers: res.headers };
+  }
+
+  /**
+   * Runs a GraphQL query or mutation at api.github.com/graphql (the same
+   * origin as REST, so the same host check holds). GraphQL reports most
+   * failures as `errors` in a 200 response; those are mapped like REST errors.
+   */
+  async graphql<T>(query: string, variables: Record<string, unknown>, repositoryId?: number): Promise<T> {
+    const res = await this.request<{ data?: T | null; errors?: { type?: unknown; message?: unknown }[] }>(GITHUB_GRAPHQL, {
+      method: 'POST',
+      body: { query, variables },
+      repositoryId,
+    });
+    const errors = Array.isArray(res.data?.errors) ? res.data.errors : [];
+    if (errors.length > 0) {
+      const type = typeof errors[0]?.type === 'string' ? errors[0].type : '';
+      const message = typeof errors[0]?.message === 'string' ? errors[0].message : '';
+      const detail = `GitHub GraphQL ${type || 'error'}${message ? `: ${message}` : ''}`;
+      if (type === 'NOT_FOUND') throw new NotFoundError(detail);
+      if (type === 'FORBIDDEN' || type === 'INSUFFICIENT_SCOPES') throw new PermissionError(detail);
+      if (type === 'RATE_LIMITED') throw new TransientError(detail);
+      throw new GatewayError(detail);
+    }
+    if (res.data?.data === undefined || res.data.data === null) throw new TransientError('empty GitHub GraphQL response');
+    return res.data.data;
   }
 
   /** Fetches every page of a list endpoint, following the Link `next` relation. */

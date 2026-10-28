@@ -241,7 +241,7 @@ describe('citations', () => {
 describe('other Quarto syntax', () => {
   it('renders callouts and footnotes', async () => {
     const { html } = await doc('::: {.callout-note}\n## Heads up\nCheck this.\n:::\n\nA claim.^[A footnote.]\n');
-    expect(html).toMatch(/<div class="callout callout-note">[\s\S]*Heads up[\s\S]*Check this\./);
+    expect(html).toMatch(/<div class="callout callout-note"[^>]*>[\s\S]*Heads up[\s\S]*Check this\./);
     expect(html).toMatch(/class="footnote-ref"/);
     expect(text(html)).toContain('A footnote.');
   });

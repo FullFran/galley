@@ -1,6 +1,7 @@
 import MarkdownIt from 'markdown-it';
 import type { MarkdownIt as MarkdownItInstance, StateBlock, StateCore, StateInline, Token } from 'markdown-it';
 import footnote from 'markdown-it-footnote';
+import { installSourceTags } from './srcTags';
 import katex from 'katex';
 import type { Diagnostic } from './index';
 
@@ -614,6 +615,7 @@ export function createMarkdown(): MarkdownItInstance {
   md.core.ruler.after('inline_attrs', 'figures', figures);
   md.core.ruler.after('figures', 'divs', divs);
   installRenderers(md);
+  installSourceTags(md);
   return md;
 }
 

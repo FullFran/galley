@@ -1,7 +1,33 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { Diagnostic, PreviewAsset } from '../render';
 import { useT } from '../i18n';
-import { PREVIEW_RENDER, PREVIEW_SCROLL, MAX_SCROLL_TEXT, createReadyGate, parseFrameMessage, type RenderMessage, type ScrollMessage } from '../preview/protocol';
+import {
+  PREVIEW_RENDER,
+  PREVIEW_REVEAL,
+  PREVIEW_SCROLL,
+  MAX_SCROLL_TEXT,
+  createReadyGate,
+  isSafePath,
+  parseFrameMessage,
+  parseJumpMessage,
+  parseSelectionMessage,
+  parseSrc,
+  type RenderMessage,
+  type RevealMessage,
+  type ScrollMessage,
+} from '../preview/protocol';
+
+/** Text selected in the preview, with the source lines of the blocks it spans. */
+export interface PreviewTextSelection {
+  text: string;
+  start: { path: string; line: number };
+  end: { path: string; line: number };
+}
+
+export interface SourceLine {
+  path: string;
+  line: number;
+}
 
 export interface PreviewFrameProps {
   /** Increases with every new render, so the frame ignores stale messages. */
@@ -13,6 +39,12 @@ export interface PreviewFrameProps {
   status?: string;
   /** A heading to scroll to; `seq` changes for every jump. */
   scrollTo?: { id?: string; text: string; seq: number };
+  /** The reader selected text (undefined: the selection was cleared). */
+  onSelection?: (selection: PreviewTextSelection | undefined) => void;
+  /** The reader double-clicked a block. */
+  onJump?: (target: SourceLine) => void;
+  /** A source line whose block the frame scrolls to; `seq` changes every time. */
+  reveal?: SourceLine & { seq: number };
 }
 
 /**
@@ -21,10 +53,12 @@ export interface PreviewFrameProps {
  * can never reach galley's DOM, storage or GitHub token. The frame and galley
  * talk only through validated postMessage calls.
  */
-export function PreviewFrame({ seq, html, assets, diagnostics, status, scrollTo }: PreviewFrameProps) {
+export function PreviewFrame({ seq, html, assets, diagnostics, status, scrollTo, onSelection, onJump, reveal }: PreviewFrameProps) {
   const t = useT();
   const frame = useRef<HTMLIFrameElement>(null);
   const gate = useRef(createReadyGate());
+  const callbacks = useRef({ onSelection, onJump });
+  callbacks.current = { onSelection, onJump };
   // Counts accepted ready messages, so a reloaded frame receives the current content again.
   const [ready, setReady] = useState(0);
 
@@ -34,7 +68,20 @@ export function PreviewFrame({ seq, html, assets, diagnostics, status, scrollTo 
   useLayoutEffect(() => {
     const onMessage = (event: MessageEvent) => {
       if (event.source !== frame.current?.contentWindow || event.origin !== 'null') return;
-      if (parseFrameMessage(event.data) && gate.current.ready()) setReady((n) => n + 1);
+      if (parseFrameMessage(event.data)) {
+        if (gate.current.ready()) setReady((n) => n + 1);
+        return;
+      }
+      const selection = parseSelectionMessage(event.data);
+      if (selection) {
+        const start = parseSrc(selection.src);
+        const end = parseSrc(selection.endSrc);
+        callbacks.current.onSelection?.(selection.text && start && end ? { text: selection.text, start, end } : undefined);
+        return;
+      }
+      const jump = parseJumpMessage(event.data);
+      const target = jump && parseSrc(jump.src);
+      if (target) callbacks.current.onJump?.(target);
     };
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
@@ -62,6 +109,13 @@ export function PreviewFrame({ seq, html, assets, diagnostics, status, scrollTo 
     const message: ScrollMessage = { type: PREVIEW_SCROLL, id, text: scrollTo.text.slice(0, MAX_SCROLL_TEXT) };
     target.postMessage(message, '*');
   }, [scrollTo?.seq]);
+
+  useEffect(() => {
+    const target = frame.current?.contentWindow;
+    if (!reveal || !target || !gate.current.canPost() || !isSafePath(reveal.path)) return;
+    const message: RevealMessage = { type: PREVIEW_REVEAL, path: reveal.path, line: reveal.line };
+    target.postMessage(message, '*');
+  }, [reveal?.seq]);
 
   const problems = diagnostics.filter((d) => d.severity !== 'info').length;
   return (
