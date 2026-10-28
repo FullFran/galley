@@ -12,6 +12,7 @@ import {
   parseJumpMessage,
   parseSelectionMessage,
   parseSrc,
+  printMessage,
   type RenderMessage,
   type RevealMessage,
   type ScrollMessage,
@@ -45,6 +46,8 @@ export interface PreviewFrameProps {
   onJump?: (target: SourceLine) => void;
   /** A source line whose block the frame scrolls to; `seq` changes every time. */
   reveal?: SourceLine & { seq: number };
+  /** Print the frame with this plain-text note on the paper; `seq` changes for every request. */
+  print?: { note: string; seq: number };
 }
 
 /**
@@ -53,7 +56,7 @@ export interface PreviewFrameProps {
  * can never reach galley's DOM, storage or GitHub token. The frame and galley
  * talk only through validated postMessage calls.
  */
-export function PreviewFrame({ seq, html, assets, diagnostics, status, scrollTo, onSelection, onJump, reveal }: PreviewFrameProps) {
+export function PreviewFrame({ seq, html, assets, diagnostics, status, scrollTo, onSelection, onJump, reveal, print }: PreviewFrameProps) {
   const t = useT();
   const frame = useRef<HTMLIFrameElement>(null);
   const gate = useRef(createReadyGate());
@@ -117,6 +120,12 @@ export function PreviewFrame({ seq, html, assets, diagnostics, status, scrollTo,
     target.postMessage(message, '*');
   }, [reveal?.seq]);
 
+  useEffect(() => {
+    const target = frame.current?.contentWindow;
+    if (!print || !target || !gate.current.canPost()) return;
+    target.postMessage(printMessage(print.note), '*');
+  }, [print?.seq]);
+
   const problems = diagnostics.filter((d) => d.severity !== 'info').length;
   return (
     <div class="preview">
@@ -125,7 +134,10 @@ export function PreviewFrame({ seq, html, assets, diagnostics, status, scrollTo,
         class="preview-frame"
         title={t.preview.frameTitle}
         src={`${import.meta.env.BASE_URL}preview.html`}
-        sandbox="allow-scripts"
+        // allow-modals: only so the frame can call window.print() on itself
+        // (Chromium ignores print() in a sandbox without it). No same-origin,
+        // popups, forms or top navigation.
+        sandbox="allow-scripts allow-modals"
         referrerpolicy="no-referrer"
         onLoad={() => gate.current.loaded()}
       />

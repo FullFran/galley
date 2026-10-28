@@ -381,3 +381,71 @@ code {
   background-color: rgba(255, 214, 10, 0.18);
   transition: background-color 0.4s;
 }
+
+/*
+ * Print / save as PDF from the preview toolbar: the sheet at full size on A4,
+ * margins close to the elsarticle preprint (384pt text block), page numbers
+ * in the bottom margin where the browser supports page margin boxes, and the
+ * "unofficial copy" note on top. No app chrome is in this document.
+ */
+.galley-print-note {
+  display: none;
+}
+
+@page {
+  size: A4;
+  margin: 30mm 37mm;
+
+  @bottom-center {
+    content: counter(page);
+    font-family: 'CMU Serif', serif;
+    font-size: 10pt;
+  }
+}
+
+@media print {
+  :root,
+  body {
+    background: #fff;
+  }
+
+  body {
+    padding: 0;
+    zoom: 1 !important;
+  }
+
+  .page {
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  .galley-print-note {
+    display: block;
+    margin: 0 0 6mm;
+    padding-bottom: 2mm;
+    border-bottom: 0.4pt solid #888;
+    font: italic 8pt/1.3 'CMU Serif', serif;
+    color: #555;
+  }
+
+  .galley-flash {
+    background: none !important;
+    outline: none !important;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    break-after: avoid;
+  }
+
+  figure,
+  table,
+  .katex-display {
+    break-inside: avoid;
+  }
+}

@@ -52,6 +52,8 @@ export interface EditorProps {
    * `block` puts it in a paragraph of its own (a figure).
    */
   insert?: { text: string; at?: number; block?: boolean; seq: number };
+  /** The live view while mounted (undefined once destroyed), for the symbol palette. */
+  onView?: (view: EditorView | undefined) => void;
   /** The browser's spellcheck (Writing mode only) and the paper's language. */
   spellcheck?: { on: boolean; lang: string };
 }
@@ -99,7 +101,9 @@ const theme = EditorView.theme({
 });
 
 /** CodeMirror 6 editor. Owns the EditorView for its lifetime. */
-export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim = false, onVimFailed, onSave, assist, indexVersion, onDropFiles, insert, comments, applyEdit, spellcheck }: EditorProps) {
+export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim = false, onVimFailed, onSave, assist, indexVersion, onDropFiles, insert, comments, applyEdit, spellcheck, onView }: EditorProps) {
+  const onViewRef = useRef(onView);
+  onViewRef.current = onView;
   const spelling = useRef(new Compartment());
   const spellOn = spellcheck?.on === true && isProse(path);
   const spellLang = spellcheck?.lang ?? 'en';
@@ -177,6 +181,7 @@ export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim 
       }),
     });
     viewRef.current = view;
+    onViewRef.current?.(view);
     // Autocomplete, warnings and go to definition load after the first paint,
     // in their own chunk, and only for Markdown files.
     let alive = true;
@@ -199,6 +204,7 @@ export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim 
     return () => {
       alive = false;
       viewRef.current = undefined;
+      onViewRef.current?.(undefined);
       view.destroy();
     };
     // The view is created once per mount; the parent remounts it per file.

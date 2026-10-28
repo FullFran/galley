@@ -107,8 +107,10 @@ describe('FileTree', () => {
 describe('PreviewFrame', () => {
   it('isolates the preview in a sandbox without same-origin access', () => {
     const html = render(<PreviewFrame seq={1} html="" assets={[]} diagnostics={[]} />);
-    expect(html).toMatch(/<iframe[^>]* sandbox="allow-scripts"/);
+    // allow-modals lets the frame call window.print() on itself (Print in the preview toolbar).
+    expect(html).toMatch(/<iframe[^>]* sandbox="allow-scripts allow-modals"/);
     expect(html).not.toContain('allow-same-origin');
+    expect(html).not.toMatch(/allow-(popups|top-navigation|forms|downloads)/);
     expect(html).toContain('src="/preview.html"');
     expect(html).not.toContain('preview note');
   });

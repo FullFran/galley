@@ -603,7 +603,8 @@ http on `localhost` and `127.0.0.1` keeps working for local development.
   file name, Edit | Preview, ⋯ (with "Add a note…") and "Save".
 - **Keyboard shortcuts** (`web/src/shell/shortcuts.ts`, dialog on `?`):
   Ctrl/Cmd+B sidebar, Ctrl/Cmd+Enter recompile, Ctrl/Cmd+S opens Save for
-  review (never the browser's save), `?` this list.
+  review (never the browser's save), Ctrl/Cmd+Shift+S symbol palette,
+  Ctrl/Cmd+Shift+F find in files, `?` this list.
 - **Workspace**: the main document opens on its own (`.galley.yml` `entry`,
   else `index.qmd`, else the first top-level document). Editor and preview sit
   side by side from 1024px; below that an Edit | Preview switch in the header
@@ -964,6 +965,47 @@ silently.
 The port is `HistoryGateway` in `web/src/github/history.ts`; version and
 label mapping, label name rules, the restore plan and the last-visit store are
 plain functions in `web/src/history/`.
+
+## Editing extras
+
+- **Symbol palette** (Σ in the header, the ⋯ menu or Ctrl/Cmd+Shift+S): a
+  searchable catalog of LaTeX math (Greek, operators, relations, arrows,
+  accents and fonts, delimiters, fractions/sums/integrals/matrices) in
+  `web/src/editor/symbols.ts`. The dialog and KaTeX are one lazy chunk
+  (`web/src/ui/editing/SymbolPalette.tsx`); previews render with
+  `katex.render` (DOM + CSSOM, allowed by `style-src 'self'`, trust off) as
+  they scroll into view. Insertion goes at the cursor, wrapped in `$…$` when
+  the cursor is not in math (`$`, `$$`, `\(`, `\[`; code spans and fences
+  ignored); a selection goes into the first `{}`. Recent symbols live in
+  `localStorage` (`galley.symbols.recent`, guarded).
+- **Find in files** (⋯ menu or Ctrl/Cmd+Shift+F): searches every text file in
+  view, open buffers as they are, repository text otherwise. Plain text, match
+  case, whole word or a regular expression; the search runs in a worker
+  (`web/src/editor/findRunner.ts`) that is terminated after 2 s, so a
+  backtracking pattern cannot freeze the page. Results are grouped by file
+  with a context line, plain text only; click to open the file at the line.
+  Replace one, replace in a file or replace all (with a confirmation): each
+  file becomes an unsaved edit (never a commit), matches that moved since the
+  search are left alone and counted, files with an unresolved merge are
+  skipped, and Undo restores the files not edited since. There is no
+  CodeMirror search panel in the editor; Ctrl/Cmd+F stays the browser's own.
+- **Apply all suggestions** (proposal page, two or more open suggestions):
+  one commit on the head branch with every suggestion from unresolved threads
+  whose lines still match, applied bottom-up per file; the ones whose lines
+  changed, that overlap one taken earlier or that refer to an older version
+  are skipped and listed in the notice. One `Co-authored-by` trailer per
+  suggester; same rules as a single apply (same repository, push permission,
+  fast-forward only). Code in `web/src/review/applyAll.ts`.
+- **Print** (preview toolbar): prints the preview as an unofficial copy (the
+  PDF from GitHub Actions is the official one). galley posts a validated
+  `galley-preview:print` message (type and a plain-text note only) and the
+  frame calls `window.print()` on itself. Chromium ignores `print()` in a
+  sandboxed frame without `allow-modals` ("Ignored call to 'print()'"), so the
+  preview sandbox is `allow-scripts allow-modals`: still an opaque origin with
+  no same-origin, popups, forms or top navigation, and the frame CSP still
+  runs only galley's own script. The print stylesheet in `preview.css` sets
+  A4 with elsarticle-like margins, page numbers in `@bottom-center` where the
+  browser supports page margin boxes, no sheet shadow, and the note on top.
 
 ## Team
 

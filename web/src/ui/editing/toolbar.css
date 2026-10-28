@@ -1,0 +1,11 @@
+/* Editing extras in the main bundle: the preview Print action and the symbols button. */
+
+.compile-print {
+  margin-left: auto;
+}
+
+.symbol-button {
+  font-family: var(--font-serif, Georgia, serif);
+  font-size: 1.1rem;
+  line-height: 1;
+}
