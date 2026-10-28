@@ -129,6 +129,8 @@ export function useComments(o: UseCommentsOptions) {
     };
   }, [gateway, repo]);
 
+  const closePanel = useCallback(() => setOpen(false), []);
+
   const replaceThread = (next: CommentThread) => setThreads((list) => list.map((t) => (t.id === next.id ? next : t)));
 
   const markRead = (id: string) => {
@@ -343,6 +345,7 @@ export function useComments(o: UseCommentsOptions) {
     enabled: gateway !== undefined,
     open,
     toggle: () => setOpen((v) => !v),
+    close: closePanel,
     toggleButton: toggle,
     panel,
     unread: unread.comments,

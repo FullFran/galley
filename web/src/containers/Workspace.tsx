@@ -58,6 +58,10 @@ import { ViewSwitch, type PaneView } from '../ui/shell/ViewSwitch';
 import type { ConfigSaved } from './ProjectSettings';
 import type { CommentsGateway } from '../domain/comments';
 import { useComments } from './Comments';
+import type { DraftsGateway } from '../drafts/http';
+import type { ChatGateway } from '../chat/http';
+import { useDrafts } from './useDrafts';
+import { useChat } from './Chat';
 
 // The YAML parser, the wizard and the settings form load on demand.
 type SettingsModule = typeof import('./ProjectSettings');
@@ -85,12 +89,16 @@ export interface WorkspaceProps {
   comments?: CommentsGateway;
   /** Owner's draft sharing with admins; without it the ⋯ menu entry is not offered. */
   shares?: DraftSharesGateway;
+  /** galley's drafts API; without it drafts stay in this browser. */
+  drafts?: DraftsGateway;
+  /** galley's chat API; without it the chat is not offered. */
+  chat?: ChatGateway;
 }
 
 type Heading = Extract<OutlineItem, { kind: 'heading' }>;
 const NO_FILES: string[] = [];
 
-export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuthRequired, onDirtyChange, onSaved, comments: commentsGateway, shares }: WorkspaceProps) {
+export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuthRequired, onDirtyChange, onSaved, comments: commentsGateway, drafts: draftsGateway, chat: chatGateway, shares }: WorkspaceProps) {
   const t = useT();
   // Callbacks read the catalog through a ref: a language switch must not
   // re-create `load` (that would reload the repository and drop edits).
@@ -99,7 +107,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   const [project, setProject] = useState<ProjectConfig>({ kind: 'missing' });
   const [admin, setAdmin] = useState(false);
   const [settings, setSettings] = useState<SettingsModule>();
-  const [panels, setPanels] = useState<PanelsModule>();
+  const [adminPanels, setAdminPanels] = useState<PanelsModule>();
   const [buffers, setBuffers] = useState<Buffers>({});
   const [openPath, setOpenPath] = useState<string>();
   const [fileError, setFileError] = useState<string>();
@@ -441,6 +449,30 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
     onAuthRequired: () => onAuthRequired(unsavedChanges(buffersRef.current)),
   });
 
+  // Drafts: kept while typing, restored on open, deleted once saved (applySaved makes the buffers clean).
+  const drafts = useDrafts({
+    gateway: draftsGateway,
+    repos: gateway,
+    repo,
+    user: shell.user?.login,
+    working,
+    visible,
+    buffers,
+    setBuffers,
+    label,
+    onReplaced: (path) => path === openPathRef.current && setEditorRev((n) => n + 1),
+  });
+  const chat = useChat({ gateway: chatGateway, repo, onAuthRequired: () => onAuthRequired(unsavedChanges(buffersRef.current)) });
+  // One side panel at a time: the one opened last wins.
+  const panels = useRef({ comments: false, chat: false });
+  useEffect(() => {
+    const before = panels.current;
+    panels.current = { comments: comments.open, chat: chat.open };
+    if (!comments.open || !chat.open) return;
+    if (!before.comments) chat.close();
+    else if (!before.chat) comments.close();
+  });
+
   const save = async () => {
     if (!working || !hasDirty || status.kind === 'saving') return;
     setStatus({ kind: 'saving' });
@@ -521,9 +553,9 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
 
   // The admin panel loads on demand too; a confirmed non-admin is sent back to the paper.
   useEffect(() => {
-    if (!admin || !isPanelTab(adminTab) || panels) return;
-    loadPanels().then(setPanels, (err: unknown) => fail(err, setFileError));
-  }, [admin, adminTab, panels, fail]);
+    if (!admin || !isPanelTab(adminTab) || adminPanels) return;
+    loadPanels().then(setAdminPanels, (err: unknown) => fail(err, setFileError));
+  }, [admin, adminTab, adminPanels, fail]);
   useEffect(() => {
     if (loaded && leaveAdminArea(adminTab, admin)) onRoute({ name: 'workspace', ...base });
   }, [loaded, adminTab, admin]);
@@ -570,13 +602,17 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
       if (adminTab) toEditor();
       return comments.toggle();
     }
+    if (id === 'chat' && chat.enabled) {
+      if (adminTab) toEditor();
+      return chat.toggle();
+    }
     if (id === 'contents') {
       if (adminTab) toEditor();
       return;
     }
     shell.onNavigate(id);
   };
-  const screenShell: ShellContext = { ...shell, admin, onNavigate: navigate, comments: comments.enabled ? { unread: comments.unread } : undefined };
+  const screenShell: ShellContext = { ...shell, admin, onNavigate: navigate, comments: comments.enabled ? { unread: comments.unread } : undefined, chat: chat.enabled ? { unread: chat.unread } : undefined };
 
   const chooseTab = (tab: ContentsTab) => {
     setContentsTab(tab);
@@ -713,6 +749,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
             pending={authoring.pending}
             saving={status.kind === 'saving'}
             noteRequest={noteRequest}
+            draftSaved={drafts.saved}
             onMessage={setMessage}
             onSave={() => void save()}
             more={
@@ -784,6 +821,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
               <p role="alert">{fileError}</p>
             </Toast>
           )}
+          {drafts.toasts}
           {notice && (
             <Toast onDismiss={() => setNotice(undefined)}>
               <p>{notice}</p>
@@ -801,8 +839,8 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
           onCoauthorView={(on) => changeViewAs(on ? 'coauthor' : 'all')}
           coauthorCount={visibleFiles(working.files, project, false).length}
           panel={
-            admin && panels && isPanelTab(adminTab) ? (
-              <panels.AdminPanels
+            admin && adminPanels && isPanelTab(adminTab) ? (
+              <adminPanels.AdminPanels
                 tab={adminTab}
                 repoId={repo.id}
                 me={shell.user?.login}
@@ -831,7 +869,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
           }
         />
       ) : (
-        <div class="workspace" data-view={view} data-comments={comments.panel ? 'open' : undefined}>
+        <div class="workspace" data-view={view} data-comments={comments.panel || chat.panel ? 'open' : undefined}>
           <section class="editor-pane" aria-label={t.workspace.editorRegion} data-tour="editor">
             {openPath && open?.merge ? (
               <MergeResolver
@@ -883,6 +921,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
             {comments.previewAction}
           </section>
           {comments.panel}
+          {chat.panel}
         </div>
       )}
       {authoring.dialogs}

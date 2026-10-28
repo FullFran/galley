@@ -9,11 +9,11 @@
 
 import type { Messages } from '../i18n';
 
-export type NavId = 'contents' | 'proposals' | 'comments' | 'admin';
+export type NavId = 'contents' | 'proposals' | 'comments' | 'chat' | 'admin';
 
 export type GroupId = 'write' | 'review' | 'admin';
 
-export type IconName = 'library' | 'outline' | 'folder' | 'proposals' | 'comment' | 'settings' | 'help' | 'info';
+export type IconName = 'library' | 'outline' | 'folder' | 'proposals' | 'comment' | 'chat' | 'settings' | 'help' | 'info';
 
 export interface NavItem {
   id: NavId;
@@ -38,6 +38,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { id: 'contents', icon: 'outline', group: 'write', requires: 'repo' },
   { id: 'proposals', icon: 'proposals', group: 'review', requires: 'repo', tour: 'proposals' },
   { id: 'comments', icon: 'comment', group: 'review', requires: 'repo' },
+  { id: 'chat', icon: 'chat', group: 'review', requires: 'repo' },
   { id: 'admin', icon: 'settings', group: 'admin', requires: 'admin' },
 ];
 

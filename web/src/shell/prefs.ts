@@ -12,6 +12,8 @@ export interface Prefs {
   editorMode?: EditorMode;
   /** Vim key bindings in the editor (loaded only when on). */
   vim?: boolean;
+  /** Unsaved drafts also go to the galley server (other devices); unset means on. */
+  serverDrafts?: boolean;
 }
 
 export type EditorMode = 'writing' | 'code';
@@ -66,11 +68,12 @@ export function readPrefs(store: Store | undefined = local()): Prefs {
   try {
     const parsed: unknown = JSON.parse(read(store, PREFS_KEY) ?? '{}');
     if (!parsed || typeof parsed !== 'object') return {};
-    const { autoCompile, editorMode, vim } = parsed as Record<string, unknown>;
+    const { autoCompile, editorMode, vim, serverDrafts } = parsed as Record<string, unknown>;
     const prefs: Prefs = {};
     if (typeof autoCompile === 'boolean') prefs.autoCompile = autoCompile;
     if (editorMode === 'writing' || editorMode === 'code') prefs.editorMode = editorMode;
     if (typeof vim === 'boolean') prefs.vim = vim;
+    if (typeof serverDrafts === 'boolean') prefs.serverDrafts = serverDrafts;
     return prefs;
   } catch {
     return {};

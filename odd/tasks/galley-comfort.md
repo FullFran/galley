@@ -164,7 +164,13 @@ edit it, but anyone with write access could still change it on GitHub).
   files). Implemented and checked; pending review, commit and PR.
 - [ ] CX3 Guided tour.
 - [ ] CX4 References manager.
-- [ ] C4 Drafts.
+- [ ] C4 Drafts. Server API merged. UI (`feat/drafts-chat-ui`, with roadmap
+  11 chat): IndexedDB autosave (~1 s), restore with notice and Undo, server
+  sync (~5 s, If-Match, 409 "Use it / Keep mine", never overwrites), offer of
+  other devices' drafts, three-way merge on a moved base, deletion after
+  save, "Keep drafts on the server" preference, header "Draft saved".
+  Route: delegated (2+ non-trivial files). Implemented and checked; pending
+  review, commit and PR.
 - [ ] C5 Changed since last visit.
 - [ ] C6 Admin panel. Server side: Admin API (`feat/admin-api`, PR #21).
   - [x] C6-UI (`feat/admin-ui`): Admin tabs People, Access, Shared drafts,
