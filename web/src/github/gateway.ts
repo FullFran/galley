@@ -4,12 +4,13 @@ import {
   NotFoundError,
   NotTextError,
   type RepoGateway,
+  type BringInResult,
   type Repository,
   type SaveResult,
   type WorkingState,
 } from '../domain';
 import { GitHubClient, type TokenSource } from './client';
-import { branchHead as headOf, createCommit, fastForward, listTree, refPath, repoBase, seg } from './git';
+import { branchHead as headOf, createCommit, fastForward, listBlobs, refPath, repoBase, seg } from './git';
 
 export interface GitHubGatewayOptions {
   tokens: TokenSource;
@@ -51,6 +52,11 @@ export function createGitHubGateway(options: GitHubGatewayOptions): RepoGateway 
   const workingBranch = async () => `galley/${await userLogin()}`;
 
   const branchHead = (repo: Repository, branch: string) => headOf(gh, repo, branch);
+  const defaultHead = async (repo: Repository): Promise<string> => {
+    const sha = await branchHead(repo, repo.defaultBranch);
+    if (sha === undefined) throw new NotFoundError(`branch ${repo.defaultBranch} not found`);
+    return sha;
+  };
 
   const pulls = (repo: Repository, branch: string, query: string) =>
     gh.request<GhPull[]>(
@@ -130,8 +136,55 @@ export function createGitHubGateway(options: GitHubGatewayOptions): RepoGateway 
       const branchExists = headSha !== undefined;
       headSha ??= await branchHead(repo, repo.defaultBranch);
       if (headSha === undefined) throw new NotFoundError(`branch ${repo.defaultBranch} not found`);
-      const { files, truncated } = await listTree(gh, repo, headSha);
-      return { branch, branchExists, headSha, files, truncated };
+      const { files, truncated, blobs } = await listBlobs(gh, repo, headSha);
+      return { branch, branchExists, headSha, files, truncated, blobs };
+    },
+
+    defaultHead,
+
+    async upstream(repo, headSha) {
+      const [{ data }, head] = await Promise.all([
+        gh.request<{ ahead_by: number }>(`${base(repo)}/compare/${seg(headSha)}...${refPath(repo.defaultBranch)}`, {
+          repositoryId: repo.id,
+        }),
+        defaultHead(repo),
+      ]);
+      return { defaultHead: head, behind: data.ahead_by };
+    },
+
+    async bringInDefault(repo, expectedHeadSha): Promise<BringInResult> {
+      const branch = await workingBranch();
+      const current = await branchHead(repo, branch);
+      const moved = async (sha: string): Promise<BringInResult> => ({ kind: 'updated', headSha: sha, ...(await listBlobs(gh, repo, sha)) });
+      if (current === undefined) {
+        // No branch yet: the first save creates it from the newest default head.
+        const latest = await defaultHead(repo);
+        return latest === expectedHeadSha ? { kind: 'current' } : moved(latest);
+      }
+      if (current !== expectedHeadSha) throw new ConflictError(`${branch} moved since it was opened`);
+      const { data } = await gh.request<{ ahead_by: number; behind_by: number; base_commit: { sha: string } }>(
+        `${base(repo)}/compare/${refPath(repo.defaultBranch)}...${refPath(branch)}`,
+        { repositoryId: repo.id },
+      );
+      if (data.behind_by === 0) return { kind: 'current' };
+      if (data.ahead_by === 0) {
+        if (!(await fastForward(gh, repo, branch, data.base_commit.sha))) throw new ConflictError(`${branch} moved since it was opened`);
+        return moved(data.base_commit.sha);
+      }
+      // POST /merges needs the Contents: write permission, like every save.
+      // 409: conflicts a person must resolve; nothing was changed.
+      const res = await gh.request<{ sha: string; parents?: { sha: string }[] }>(`${base(repo)}/merges`, {
+        repositoryId: repo.id,
+        method: 'POST',
+        allow: [409],
+        body: { base: branch, head: repo.defaultBranch, commit_message: `Merge ${repo.defaultBranch} into ${branch}` },
+      });
+      if (res.status === 409) return { kind: 'conflict' };
+      if (res.status === 204) return { kind: 'current' };
+      // The branch could have moved between the check and the merge; then the
+      // merge is not on top of what the user opened.
+      if (res.data.parents?.[0]?.sha !== expectedHeadSha) throw new ConflictError(`${branch} moved since it was opened`);
+      return moved(res.data.sha);
     },
 
     async readFile(repo, path, ref) {

@@ -1,4 +1,4 @@
-import type { FileChange, Repository } from '../domain';
+import type { BlobInfo, FileChange, Repository } from '../domain';
 import type { GitHubClient } from './client';
 
 // Git data helpers shared by the editing and the review gateways.
@@ -9,7 +9,7 @@ export const repoBase = (repo: Repository) => `/repos/${seg(repo.owner)}/${seg(r
 
 export interface GhTree {
   truncated: boolean;
-  tree: { path: string; type: string; mode: string }[];
+  tree: { path: string; type: string; mode: string; sha?: string; size?: number }[];
 }
 
 /** Returns the commit SHA a branch points at, or undefined if it does not exist. */
@@ -27,6 +27,17 @@ export async function listTree(gh: GitHubClient, repo: Repository, sha: string) 
     repositoryId: repo.id,
   });
   return { files: data.tree.filter((e) => e.type === 'blob').map((e) => e.path), truncated: data.truncated };
+}
+
+/** Blob paths of the tree at a commit, with each blob's SHA and size. */
+export async function listBlobs(gh: GitHubClient, repo: Repository, sha: string) {
+  const { data } = await gh.request<GhTree>(`${repoBase(repo)}/git/trees/${seg(sha)}?recursive=1`, {
+    repositoryId: repo.id,
+  });
+  const entries = data.tree.filter((e) => e.type === 'blob');
+  const blobs: Record<string, BlobInfo> = {};
+  for (const e of entries) if (typeof e.sha === 'string') blobs[e.path] = typeof e.size === 'number' ? { sha: e.sha, size: e.size } : { sha: e.sha };
+  return { files: entries.map((e) => e.path), truncated: data.truncated, blobs };
 }
 
 /** Creates (without moving any branch) one commit with `changes` on top of `parentSha`. */

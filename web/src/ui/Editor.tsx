@@ -1,11 +1,23 @@
 import { useEffect, useRef } from 'preact/hooks';
 import { Compartment, EditorState, type Extension } from '@codemirror/state';
-import { EditorView, drawSelection, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view';
+import { EditorView, drawSelection, keymap } from '@codemirror/view';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { syntaxHighlighting } from '@codemirror/language';
 import { markdownKeymap } from '@codemirror/lang-markdown';
 import { yaml } from '@codemirror/lang-yaml';
-import { highlightStyle, markdownSupport } from './editorStyle';
+import { markdownSupport } from './editorStyle';
+import { loadVim, modeExtension } from './editorModes';
+import type { AssistOptions } from './editorAssist';
+
+type AssistModule = typeof import('./editorAssist');
+let assistChunk: Promise<AssistModule> | undefined;
+const loadAssist = () => {
+  assistChunk ??= import('./editorAssist');
+  assistChunk.catch(() => (assistChunk = undefined));
+  return assistChunk;
+};
+const isProse = (path: string) => /\.(qmd|md|markdown)$/i.test(path);
+import type { EditorMode } from '../shell/prefs';
+import { en } from '../i18n/en';
 
 export interface EditorProps {
   path: string;
@@ -16,6 +28,14 @@ export interface EditorProps {
   onChange: (text: string) => void;
   /** Moves the cursor to this line and scrolls it to the top; `seq` changes for every jump. */
   jumpTo?: { line: number; seq: number };
+  mode?: EditorMode;
+  /** Vim key bindings; the Vim package loads only when this is true. */
+  vim?: boolean;
+  onVimFailed?: () => void;
+  /** Autocomplete, warnings and go to definition. */
+  assist?: Omit<AssistOptions, 'path'>;
+  /** Changes when the project index is rebuilt, so warnings are checked again. */
+  indexVersion?: number;
 }
 
 function language(path: string): Extension {
@@ -32,25 +52,50 @@ function language(path: string): Extension {
 // Colours are the app's CSS custom properties, which inherit into the shadow
 // root, so the editor follows the light and dark themes.
 const theme = EditorView.theme({
-  '&': { flex: '1 1 auto', minWidth: '0', height: '100%', fontSize: '0.9375rem', color: 'var(--fg)', backgroundColor: 'var(--surface)' },
+  '&': { flex: '1 1 auto', minWidth: '0', height: '100%', color: 'var(--fg)', backgroundColor: 'var(--surface)' },
   '&.cm-focused': { outline: 'none' },
-  '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.6', overflow: 'auto' },
-  '.cm-content': { padding: '0.75rem 0', caretColor: 'var(--fg)' },
+  '.cm-scroller': { overflow: 'auto' },
+  '.cm-content': { caretColor: 'var(--fg)' },
   '.cm-cursor': { borderLeftColor: 'var(--fg)' },
   '.cm-gutters': { backgroundColor: 'var(--surface)', color: 'var(--fg-muted)', borderRight: '1px solid var(--border)' },
   '.cm-activeLine': { backgroundColor: 'var(--active-line)' },
   '.cm-activeLineGutter': { backgroundColor: 'var(--active-line)' },
   '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': { backgroundColor: 'var(--selection)' },
+  // Autocomplete and lint tooltips, in the theme's colours.
+  '.cm-tooltip': {
+    backgroundColor: 'var(--surface)',
+    color: 'var(--fg)',
+    border: '1px solid var(--border)',
+    borderRadius: '6px',
+    fontFamily: 'var(--font-sans)',
+    fontSize: '0.875rem',
+  },
+  '.cm-tooltip.cm-tooltip-autocomplete > ul': { fontFamily: 'var(--font-sans)', maxHeight: '16rem' },
+  '.cm-tooltip-autocomplete > ul > li': { padding: '0.2rem 0.6rem' },
+  '.cm-tooltip-autocomplete > ul > li[aria-selected]': { backgroundColor: 'var(--accent)', color: 'var(--accent-fg)' },
+  '.cm-completionDetail': { marginLeft: '0.75em', fontStyle: 'normal', opacity: '0.75' },
+  '.cm-completionInfo': { padding: '0.4rem 0.6rem', maxWidth: '22rem' },
+  '.cm-lintRange-warning': { backgroundImage: 'none', textDecoration: 'underline wavy var(--warn-fg)', textUnderlineOffset: '3px' },
+  '.cm-diagnostic-warning': { borderLeft: '4px solid var(--warn-fg)' },
+  '.cm-diagnostic': { padding: '0.3rem 0.6rem' },
 });
 
 /** CodeMirror 6 editor. Owns the EditorView for its lifetime. */
-export function Editor({ path, label, doc, onChange, jumpTo }: EditorProps) {
+export function Editor({ path, label, doc, onChange, jumpTo, mode = 'code', vim = false, onVimFailed, assist, indexVersion }: EditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView>(undefined);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
-  // The accessible name follows a language switch without recreating the view.
+  const assistRef = useRef(assist);
+  assistRef.current = assist;
+  const onVimFailedRef = useRef(onVimFailed);
+  onVimFailedRef.current = onVimFailed;
+  // The accessible name, the mode and Vim change without recreating the view.
   const labelling = useRef(new Compartment());
+  const looks = useRef(new Compartment());
+  const keys = useRef(new Compartment());
+  const helpers = useRef(new Compartment());
+  const assistModule = useRef<AssistModule>(undefined);
   const named = (name: string) => EditorView.contentAttributes.of({ 'aria-label': name });
 
   useEffect(() => {
@@ -62,13 +107,14 @@ export function Editor({ path, label, doc, onChange, jumpTo }: EditorProps) {
       state: EditorState.create({
         doc,
         extensions: [
+          // Vim first, so its keys win over the default keymap.
+          keys.current.of([]),
           theme,
-          lineNumbers(),
+          looks.current.of(modeExtension(mode)),
           history(),
           drawSelection(),
-          highlightActiveLine(),
           EditorView.lineWrapping,
-          syntaxHighlighting(highlightStyle, { fallback: true }),
+          helpers.current.of([]),
           keymap.of([...defaultKeymap, ...historyKeymap]),
           language(path),
           labelling.current.of(named(label)),
@@ -79,7 +125,27 @@ export function Editor({ path, label, doc, onChange, jumpTo }: EditorProps) {
       }),
     });
     viewRef.current = view;
+    // Autocomplete, warnings and go to definition load after the first paint,
+    // in their own chunk, and only for Markdown files.
+    let alive = true;
+    if (isProse(path)) {
+      void loadAssist().then((m) => {
+        if (!alive) return;
+        assistModule.current = m;
+        view.dispatch({
+          effects: helpers.current.reconfigure(
+            m.assistExtension({
+              path,
+              index: () => assistRef.current?.index(),
+              t: () => assistRef.current?.t() ?? en,
+              onDefinition: (target) => assistRef.current?.onDefinition(target),
+            }),
+          ),
+        });
+      }, () => undefined);
+    }
     return () => {
+      alive = false;
       viewRef.current = undefined;
       view.destroy();
     };
@@ -91,6 +157,31 @@ export function Editor({ path, label, doc, onChange, jumpTo }: EditorProps) {
   }, [label]);
 
   useEffect(() => {
+    viewRef.current?.dispatch({ effects: looks.current.reconfigure(modeExtension(mode)) });
+  }, [mode]);
+
+  useEffect(() => {
+    if (!vim) {
+      viewRef.current?.dispatch({ effects: keys.current.reconfigure([]) });
+      return;
+    }
+    let current = true;
+    loadVim().then(
+      (extension) => {
+        if (current) viewRef.current?.dispatch({ effects: keys.current.reconfigure(extension) });
+      },
+      () => onVimFailedRef.current?.(),
+    );
+    return () => {
+      current = false;
+    };
+  }, [vim]);
+
+  useEffect(() => {
+    if (viewRef.current && indexVersion !== undefined) assistModule.current?.refreshWarnings(viewRef.current);
+  }, [indexVersion]);
+
+  useEffect(() => {
     const view = viewRef.current;
     if (!view || !jumpTo) return;
     const line = view.state.doc.line(Math.min(Math.max(1, jumpTo.line), view.state.doc.lines));
@@ -98,5 +189,5 @@ export function Editor({ path, label, doc, onChange, jumpTo }: EditorProps) {
     view.focus();
   }, [jumpTo?.seq]);
 
-  return <div class="editor" ref={host} />;
+  return <div class="editor" ref={host} data-mode={mode} />;
 }

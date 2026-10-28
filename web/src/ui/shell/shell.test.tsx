@@ -27,7 +27,7 @@ describe('Credit', () => {
   it('links to the author and the source with safe rel values', () => {
     const html = render(<Credit />);
     expect(html).toContain('Built by');
-    expect(html).toContain('Francisco Olmedo');
+    expect(html).toContain('FullFran');
     expect(html).toContain('href="https://www.fullfran.com"');
     expect(html).toContain('href="https://github.com/FullFran/galley"');
     expect(html.match(/rel="noopener noreferrer"/g)?.length).toBe(html.match(/<a /g)?.length);
@@ -188,7 +188,7 @@ describe('AppShell', () => {
 
   it('offers a More menu with Keyboard shortcuts, and a muted credit line', () => {
     expect(menu(html, 'more-menu')).toContain('Keyboard shortcuts');
-    expect(html).toContain('galley · by F. Olmedo');
+    expect(html).toContain('galley · by FullFran');
   });
 
   it('has no inline style attributes', () => {

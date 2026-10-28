@@ -10,11 +10,19 @@ import {
   type Repository,
 } from '../domain';
 import { en, type Messages } from '../i18n/en';
+import type { MergeRegion } from './merge3';
 
 /** An opened file: `base` is the text at the last loaded or saved head, `text` the user's buffer. */
 export interface Buffer {
   base: string;
   text: string;
+  /**
+   * Set while the default branch and the user changed the same lines: `text`
+   * is still the user's, `base` the default branch's, and the file cannot be
+   * saved until every region has a choice. `merge.base` is what the user
+   * started from.
+   */
+  merge?: { base: string; regions: MergeRegion[] };
 }
 
 /** Buffers are kept in memory only, keyed by path. */

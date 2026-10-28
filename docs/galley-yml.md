@@ -32,6 +32,8 @@ labels:
   sections/01-introduction.qmd: Introduction
 preview:
   auto_compile: false
+editor:
+  default_mode: writing
 ```
 
 ## Fields
@@ -48,6 +50,7 @@ preview:
 | `uploads[].max_size_mb` | no | number, above 0 and at most 25 | `10` | Largest accepted file. |
 | `labels` | no | map of path to text, at most 500 | none | Friendly names shown for files. |
 | `preview.auto_compile` | no | `true` or `false` | `false` | Default for people who have not chosen; each person can toggle it. |
+| `editor.default_mode` | no | `writing` or `code` | Writing for co-authors, Code for admins | Editor mode for people who have not chosen one. |
 
 `uploads` and `labels` are read and validated now; figure upload and friendly
 names in the file list arrive with the writing-feel work (CX2).
@@ -115,6 +118,20 @@ and an **Auto-compile** toggle. With auto-compile off, edits are not rendered
 until you recompile; with it on, edits render after a short pause. The default
 comes from `preview.auto_compile`; your own choice is remembered per
 repository in this browser.
+
+## Editor mode
+
+The editor has two modes, switched with **Writing | Code** in the header (in
+the ⋯ menu on phones) or in Preferences → Editor:
+
+- **Writing**: soft wrap, a comfortable paper font, lines of about 72
+  characters, no line numbers and only quiet hints for headings, math and
+  citations.
+- **Code**: monospace, line numbers and full syntax colours.
+
+Each person's choice is remembered in this browser. Until someone chooses,
+`editor.default_mode` decides; without it co-authors get Writing and admins
+get Code. The settings screen has the same choice under "Editor".
 
 ## Safety
 

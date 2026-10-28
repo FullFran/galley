@@ -1,11 +1,38 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { AuthRequiredError, type FileChange, type RepoAccess, type RepoGateway, type Repository, type WorkingState } from '../domain';
+import {
+  AuthRequiredError,
+  type FileChange,
+  type RepoAccess,
+  type RepoGateway,
+  type Repository,
+  type UpstreamStatus,
+  type WorkingState,
+} from '../domain';
+import type { DefinitionTarget } from '../editor/definition';
+import {
+  bringIn,
+  conflictUrl,
+  createUpstreamWatcher,
+  rebase,
+  saveWithUpstream,
+  shouldOffer,
+  unresolvedPaths,
+  type Upstreamed,
+} from '../workspace/upstream';
+import { resolvedText, type MergeRegion } from '../workspace/merge3';
+import { MergeResolver } from '../ui/MergeResolver';
+import { useProjectIndex } from './useProjectIndex';
+import { EditorModeSwitch } from '../ui/EditorModeSwitch';
+import { FigureLightbox, type FigureState } from '../ui/FigureLightbox';
+import { UpstreamBanner, type UpstreamBannerState } from '../ui/UpstreamBanner';
+import { onPrefsChange, resolveEditorMode, writePrefs, type EditorMode } from '../shell/prefs';
 import { CONFIG_PATH, visibleFiles, type ProjectConfig } from '../config/project';
-import { applySaved, defaultMessage, describeError, dirtyPaths, runSave, unsavedChanges, type Buffers } from '../workspace/model';
+import { applySaved, defaultMessage, describeError, dirtyPaths, unsavedChanges, type Buffers } from '../workspace/model';
 import { useT, useTRef } from '../i18n';
 import type { AdminTabId } from '../shell/adminTabs';
 import type { NavId } from '../shell/nav';
 import { dismissSetup, isSetupDismissed, readContentsTab, readPrefs, writeContentsTab, type ContentsTab } from '../shell/prefs';
+import { MAX_FIGURE_BYTES, figureDataUrl } from '../editor/figure';
 import { repoRoute, type RepoRoute } from '../shell/route';
 import { extractOutline, type OutlineItem } from '../shell/outline';
 import { filesInView, readViewAs, writeViewAs, type ViewAs } from '../config/viewAs';
@@ -49,6 +76,7 @@ export interface WorkspaceProps {
 }
 
 type Heading = Extract<OutlineItem, { kind: 'heading' }>;
+const NO_FILES: string[] = [];
 
 export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuthRequired, onDirtyChange, onSaved }: WorkspaceProps) {
   const t = useT();
@@ -83,6 +111,21 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   buffersRef.current = buffers;
   const openPathRef = useRef(openPath);
   openPathRef.current = openPath;
+  // Editor preferences (Writing/Code, Vim) follow the Preferences dialog live.
+  const [prefs, setPrefs] = useState(readPrefs);
+  useEffect(() => onPrefsChange(setPrefs), []);
+  // The default branch: new changes are offered, never merged while editing.
+  const [upstream, setUpstream] = useState<UpstreamStatus>();
+  const [dismissedHead, setDismissedHead] = useState<string>();
+  const [bringing, setBringing] = useState(false);
+  const [upstreamNote, setUpstreamNote] = useState<{ kind: 'conflict' }>();
+  // A short message for screen readers (go to definition) and a visible notice.
+  const [announcement, setAnnouncement] = useState('');
+  const [notice, setNotice] = useState<string>();
+  const [editorJump, setEditorJump] = useState<{ line: number; seq: number }>();
+  // Bumped when the open file's text was replaced from the repository.
+  const [editorRev, setEditorRev] = useState(0);
+  const [figure, setFigure] = useState<{ path: string; state: FigureState }>();
 
   const fail = useCallback(
     (err: unknown, show: (message: string) => void) => {
@@ -178,7 +221,10 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   const openFile = async (path: string, follow = true) => {
     setFileError(undefined);
     shell.sidebar.dispatch({ type: 'navigate' });
-    if (path !== openPath) setJump(undefined);
+    if (path !== openPath) {
+      setJump(undefined);
+      setEditorJump(undefined);
+    }
     if (!visible.includes(path)) return;
     if (buffers[path] || !working) {
       showFile(path, follow);
@@ -209,20 +255,176 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
     shell.sidebar.dispatch({ type: 'navigate' });
     if (adminTab) onRoute({ name: 'workspace', ...base, path: openPath });
     setJump((j) => ({ line: item.line, id: item.id, text: item.title, seq: (j?.seq ?? 0) + 1 }));
+    setEditorJump((j) => ({ line: item.line, seq: (j?.seq ?? 0) + 1 }));
   };
+
+  // Writing | Code: the person's choice, else the paper's default.
+  const configuredMode = project.kind === 'valid' ? project.config.editor?.defaultMode : undefined;
+  const mode = resolveEditorMode(prefs.editorMode, configuredMode, admin);
+  const changeMode = (next: EditorMode) => writePrefs({ ...readPrefs(), editorMode: next });
+
+  // Watch the default branch while the workspace is open.
+  const watcher = useRef<ReturnType<typeof createUpstreamWatcher>>(undefined);
+  const headSha = working?.headSha;
+  useEffect(() => {
+    if (!loaded) return;
+    const w = createUpstreamWatcher({
+      defaultHead: () => gateway.defaultHead(repo),
+      upstream: (head) => gateway.upstream(repo, head),
+      onStatus: setUpstream,
+    });
+    watcher.current = w;
+    if (headSha) w.start(headSha);
+    return () => {
+      w.dispose();
+      watcher.current = undefined;
+    };
+    // One watcher per repository; head changes go through setHead below.
+  }, [gateway, repo, loaded]);
+  useEffect(() => {
+    if (headSha) watcher.current?.setHead(headSha);
+  }, [headSha]);
+
+  /** Moves the workspace onto a new head that has the default branch in it; edits are kept. */
+  const moveToUpstream = (up: Upstreamed) => {
+    const open = openPathRef.current;
+    // Computed once here for the messages; the state update repeats it on the latest buffers.
+    const outcome = rebase(buffersRef.current, up.bases, up.before);
+    setWorking((w) => w && { ...w, headSha: up.headSha, files: up.files, truncated: up.truncated, blobs: up.blobs ?? {} });
+    setBuffers((b) => rebase(b, up.bases, up.before).buffers);
+    if (open && open in up.bases) {
+      if (!outcome.buffers[open]) setOpenPath(undefined);
+      // The editor shows its initial text only; remount it with the new one.
+      else setEditorRev((n) => n + 1);
+    }
+    setUpstream(undefined);
+    if (upstreamNote?.kind === 'conflict') setUpstreamNote(undefined);
+    if (outcome.merged.length) setNotice(t.upstream.merged(repo.defaultBranch, outcome.merged.join(', ')));
+    return outcome;
+  };
+
+  const bringInNow = async () => {
+    if (!working || bringing) return;
+    setBringing(true);
+    try {
+      // The snapshot is taken before any await (see `rebase`).
+      const result = await bringIn(gateway, repo, working.headSha, buffersRef.current);
+      if (result.kind === 'conflict') setUpstreamNote({ kind: 'conflict' });
+      else if (result.kind === 'current') setUpstream(undefined);
+      else {
+        const outcome = moveToUpstream(result.upstream);
+        if (!outcome.merged.length && !outcome.conflicted.length) setNotice(t.upstream.broughtIn);
+      }
+    } catch (err) {
+      fail(err, setFileError);
+    } finally {
+      setBringing(false);
+    }
+  };
+
+  // Go to definition: a file, a place in a file, or a figure.
+  const indexState = useProjectIndex(
+    gateway,
+    repo,
+    working?.headSha,
+    working?.files ?? NO_FILES,
+    working?.blobs,
+    buffers,
+    project.kind === 'valid' ? project.config.entry : undefined,
+  );
+  const indexRef = useRef(indexState.index);
+  indexRef.current = indexState.index;
+  const announce = (text: string) => setAnnouncement(text);
+
+  const openAt = async (path: string, line?: number) => {
+    if (!visible.includes(path)) {
+      setNotice(t.editor.notInList(path));
+      announce(t.editor.notInList(path));
+      return;
+    }
+    await openFile(path);
+    if (line !== undefined) setEditorJump((j) => ({ line, seq: (j?.seq ?? 0) + 1 }));
+    announce(line === undefined ? t.editor.opened(path) : t.editor.openedAt(path, line));
+  };
+
+  const showFigure = async (path: string) => {
+    if (!working) return;
+    const pdf = /\.pdf$/i.test(path);
+    setFigure({ path, state: pdf ? { kind: 'pdf' } : { kind: 'loading' } });
+    announce(t.editor.opened(path));
+    if (pdf) return;
+    // The tree gives the size, so a huge file is never downloaded.
+    const size = working.blobs[path]?.size;
+    if (size !== undefined && size > MAX_FIGURE_BYTES) {
+      setFigure({ path, state: { kind: 'too-large' } });
+      return;
+    }
+    try {
+      const bytes = await gateway.readBytes(repo, path, working.headSha);
+      const url = bytes.length <= MAX_FIGURE_BYTES ? figureDataUrl(bytes, path) : undefined;
+      setFigure((f) => (f?.path === path ? { path, state: url ? { kind: 'ready', url } : { kind: 'failed' } } : f));
+    } catch {
+      setFigure((f) => (f?.path === path ? { path, state: { kind: 'failed' } } : f));
+    }
+  };
+
+  const goToDefinition = (target: DefinitionTarget) => {
+    switch (target.kind) {
+      case 'file':
+        return void openAt(target.path);
+      case 'label':
+      case 'citation':
+        return void openAt(target.path, target.line);
+      case 'image':
+        return void showFigure(target.path);
+      case 'missing':
+        setNotice(t.editor.notFound(target.name));
+        announce(t.editor.notFound(target.name));
+    }
+  };
+  const goToDefinitionRef = useRef(goToDefinition);
+  goToDefinitionRef.current = goToDefinition;
+  const assist = useMemo(
+    () => ({ index: () => indexRef.current, t: () => tRef.current, onDefinition: (target: DefinitionTarget) => goToDefinitionRef.current(target) }),
+    [tRef],
+  );
 
   const save = async () => {
     if (!working || !hasDirty || status.kind === 'saving') return;
     setStatus({ kind: 'saving' });
-    const outcome = await runSave(gateway, repo, buffers, message.trim() || defaultMessage(dirty, t), working.headSha, t);
+    // The default branch comes in first; the save lands on top of it.
+    const outcome = await saveWithUpstream(gateway, repo, buffers, message.trim() || defaultMessage(dirty, t), working.headSha, t);
+    // Whatever happened to the commit, a merge that landed is the new head.
+    if ('upstream' in outcome && outcome.upstream) moveToUpstream(outcome.upstream);
     switch (outcome.kind) {
-      case 'saved':
-        setWorking((w) => w && { ...w, headSha: outcome.headSha, branchExists: true });
+      case 'unresolved':
+        setStatus({ kind: 'error', message: t.upstream.saveUnresolved(outcome.paths.join(', ')) });
+        break;
+      case 'upstream-conflict':
+        setUpstreamNote({ kind: 'conflict' });
+        setStatus({ kind: 'error', message: t.upstream.saveConflict });
+        break;
+      case 'upstream-conflicted':
+        setStatus({ kind: 'error', message: t.upstream.saveUnresolved(outcome.paths.join(', ')) });
+        break;
+      case 'saved': {
+        const savedPaths = new Set(outcome.saved.map((c) => c.path));
+        // Saved files have new blobs; the index reads them by commit until the next tree listing.
+        setWorking(
+          (w) =>
+            w && {
+              ...w,
+              headSha: outcome.headSha,
+              branchExists: true,
+              blobs: Object.fromEntries(Object.entries(w.blobs).filter(([p]) => !savedPaths.has(p))),
+            },
+        );
         setBuffers((b) => applySaved(b, outcome.saved));
         setMessage('');
         setStatus({ kind: 'saved', pullRequestUrl: outcome.pullRequestUrl });
         onSaved?.();
         break;
+      }
       case 'conflict':
         setStatus({ kind: 'conflict', copies: outcome.copies, reloaded: false });
         break;
@@ -329,9 +531,46 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   const open = openPath ? buffers[openPath] : undefined;
   const dismiss = () => setStatus({ kind: 'idle' });
   const coauthorView = admin && viewAs === 'coauthor';
+  const unresolved = unresolvedPaths(buffers);
+  const upstreamState: UpstreamBannerState | undefined =
+    upstreamNote?.kind === 'conflict'
+      ? { kind: 'conflict', url: conflictUrl(repo, working.branch) }
+      : unresolved.length > 0
+        ? { kind: 'choose', files: unresolved }
+        : upstream && shouldOffer(upstream, dismissedHead)
+          ? { kind: 'behind', behind: upstream.behind, branch: repo.defaultBranch, busy: bringing }
+          : undefined;
+  const upstreamBanner = upstreamState && (
+    <UpstreamBanner
+      state={upstreamState}
+      onBringIn={() => void bringInNow()}
+      onReview={() => unresolved[0] && void openFile(unresolved[0])}
+      onDismiss={() => {
+        if (upstreamNote) setUpstreamNote(undefined);
+        else setDismissedHead(upstream?.defaultHead);
+      }}
+    />
+  );
+  const resolveRegions = (path: string, regions: MergeRegion[]) =>
+    setBuffers((b) => {
+      const buffer = b[path];
+      return buffer?.merge ? { ...b, [path]: { ...buffer, merge: { ...buffer.merge, regions } } } : b;
+    });
+  const applyResolution = (path: string) => {
+    const regions = buffersRef.current[path]?.merge?.regions;
+    const text = regions && resolvedText(regions);
+    if (text === undefined) return;
+    setBuffers((b) => {
+      const buffer = b[path];
+      return buffer ? { ...b, [path]: { base: buffer.base, text } } : b;
+    });
+    setEditorRev((n) => n + 1);
+    announce(t.resolve.applied(path));
+  };
   const banner =
-    coauthorView || (project.kind !== 'valid' && !setupDismissed && adminTab !== 'settings') ? (
+    upstreamBanner || coauthorView || (project.kind !== 'valid' && !setupDismissed && adminTab !== 'settings') ? (
       <>
+        {upstreamBanner}
         {coauthorView && (
           <div class="line-banner line-banner-info" role="status">
             <Icon name="eye" class="line-banner-icon" />
@@ -367,6 +606,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
       banner={banner}
       actions={
         <>
+          {!adminTab && <EditorModeSwitch mode={mode} onMode={changeMode} />}
           {!adminTab && <ViewSwitch view={view} onView={setView} />}
           <SaveControl
             dirtyCount={dirty.length}
@@ -379,7 +619,16 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
             more={
               <MoreMenu
                 items={[
-                  ...(adminTab ? [] : [{ label: t.shell.recompile, kbd: 'Ctrl+Enter', onSelect: () => setRecompileSeq((n) => n + 1) }]),
+                  ...(adminTab
+                    ? []
+                    : [
+                        { label: t.shell.recompile, kbd: 'Ctrl+Enter', onSelect: () => setRecompileSeq((n) => n + 1) },
+                        {
+                          label: mode === 'writing' ? t.editor.switchToCode : t.editor.switchToWriting,
+                          narrowOnly: true,
+                          onSelect: () => changeMode(mode === 'writing' ? 'code' : 'writing'),
+                        },
+                      ]),
                   { label: t.save.addNoteMenu, narrowOnly: true, onSelect: () => setNoteRequest((n) => n + 1) },
                 ]}
               />
@@ -425,6 +674,11 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
               <p role="alert">{fileError}</p>
             </Toast>
           )}
+          {notice && (
+            <Toast onDismiss={() => setNotice(undefined)}>
+              <p>{notice}</p>
+            </Toast>
+          )}
         </>
       }
     >
@@ -455,18 +709,34 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
       ) : (
         <div class="workspace" data-view={view}>
           <section class="editor-pane" aria-label={t.workspace.editorRegion} data-tour="editor">
-            {openPath && open ? (
+            {openPath && open?.merge ? (
+              <MergeResolver
+                path={openPath}
+                branch={repo.defaultBranch}
+                regions={open.merge.regions}
+                onChange={(regions) => resolveRegions(openPath, regions)}
+                onApply={() => applyResolution(openPath)}
+              />
+            ) : openPath && open ? (
               <Editor
-                key={openPath}
+                key={`${openPath}#${editorRev}`}
                 path={openPath}
                 label={t.workspace.editorContents(openPath)}
                 doc={open.text}
-                jumpTo={jump}
+                jumpTo={editorJump}
+                mode={mode}
+                vim={prefs.vim === true}
+                onVimFailed={() => setNotice(t.editor.vimFailed)}
+                assist={assist}
+                indexVersion={indexState.version}
                 onChange={(text) => setBuffers((b) => ({ ...b, [openPath]: { base: b[openPath]?.base ?? '', text } }))}
               />
             ) : (
               <p class="muted pane-empty">{t.workspace.chooseFile}</p>
             )}
+            <p class="visually-hidden" aria-live="polite">
+              {announcement}
+            </p>
           </section>
           <section class="preview-pane" aria-label={t.workspace.previewRegion} data-tour="preview">
             <Preview
@@ -483,6 +753,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
           </section>
         </div>
       )}
+      <FigureLightbox path={figure?.path} state={figure?.state ?? { kind: 'loading' }} onClose={() => setFigure(undefined)} />
     </AppShell>
   );
 }
