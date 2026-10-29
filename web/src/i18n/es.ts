@@ -59,6 +59,7 @@ export const es: Messages = {
     groupAdmin: 'Administración',
     help: 'Ayuda',
     tour: 'Hacer el recorrido',
+    demo: 'Probar la demo',
     about: 'Acerca de galley',
     proposalsCount: (n: number) => `Propuestas, ${n} ${p(n, 'abierta', 'abiertas')}`,
     comments: 'Comentarios',
@@ -68,6 +69,10 @@ export const es: Messages = {
     mine: (n: number) => `${n} ${p(n, 'tuya', 'tuyas')}`,
     screenGuide: 'Guía de esta pantalla',
     asks: 'Mis peticiones',
+  },
+  demo: {
+    banner: 'Demo: un paper inventado. Nada sale de tu navegador y al recargar empieza de cero.',
+    exit: 'Salir de la demo',
   },
   tour: {
     next: 'Siguiente', back: 'Atrás', done: 'Terminar', skip: 'Saltar recorrido',
@@ -190,6 +195,7 @@ export const es: Messages = {
     title: 'Escribe tu artículo en el navegador.',
     lead: 'galley convierte cada guardado en una propuesta que tu equipo puede revisar en GitHub.',
     signIn: 'Entrar con GitHub',
+    tryDemo: 'Probar la demo',
     access:
       'Entras con tu cuenta de GitHub. galley solo ve los artículos donde está instalada su GitHub App, y solo cambia archivos cuando eliges Guardar para revisión.',
     loginFailed: 'No se pudo completar la entrada. Inténtalo de nuevo.',

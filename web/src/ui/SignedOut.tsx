@@ -3,6 +3,7 @@ import type { FileChange } from '../domain';
 import { useT, type Messages } from '../i18n';
 import { Credit } from './shell/Credit';
 import { UnsavedCopies } from './StatusBanner';
+import { DEMO_HREF } from '../demo/mode';
 
 export interface SignedOutProps {
   loginFailed: boolean;
@@ -52,6 +53,9 @@ export function SignedOut({ loginFailed, notice, httpsUrl, unsaved = [], onSignI
               {m.signIn}
             </button>
           )}
+          <a class="button large" href={DEMO_HREF}>
+            {m.tryDemo}
+          </a>
           <p class="muted access-note">{m.access}</p>
         </section>
         <LandingMock m={m} />

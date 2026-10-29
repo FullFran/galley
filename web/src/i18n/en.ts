@@ -54,6 +54,7 @@ export const en = {
     groupAdmin: 'Admin',
     help: 'Help',
     tour: 'Take the tour',
+    demo: 'Try the demo',
     about: 'About galley',
     proposalsCount: (n: number) => `Proposals, ${n} open`,
     comments: 'Comments',
@@ -63,6 +64,10 @@ export const en = {
     mine: (n: number) => `${n} yours`,
     screenGuide: 'Guide for this screen',
     asks: 'My asks',
+  },
+  demo: {
+    banner: 'Demo: a made-up paper. Nothing leaves your browser, and reloading starts over.',
+    exit: 'Leave the demo',
   },
   tour: {
     next: 'Next', back: 'Back', done: 'Done', skip: 'Skip tour',
@@ -185,6 +190,7 @@ export const en = {
     title: 'Write your paper in the browser.',
     lead: 'galley turns every save into a reviewable proposal on GitHub.',
     signIn: 'Sign in with GitHub',
+    tryDemo: 'Try the demo',
     access:
       'You sign in with your GitHub account. galley only sees the papers where its GitHub App is installed, and it changes files only when you choose Save for review.',
     loginFailed: 'Sign in did not complete. Please try again.',

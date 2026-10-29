@@ -354,7 +354,8 @@ button.primary:disabled {
   color: var(--fg-muted);
 }
 
-button.large {
+button.large,
+a.button.large {
   min-height: var(--target);
   padding: var(--space-2) var(--space-5);
   font-size: var(--text-md);
@@ -3584,4 +3585,39 @@ button.refs-danger:hover:not(:disabled) {
     grid-column: 1 / -1;
     grid-row: 2;
   }
+}
+
+/* Demo mode: a slim banner above the app, which gives up its height. */
+.demo-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  height: var(--demo-banner-h);
+  padding: 0 var(--space-3);
+  background: var(--accent);
+  color: var(--accent-fg);
+  font-size: var(--text-sm);
+}
+
+.demo-banner button {
+  min-height: 0;
+  padding: 0 var(--space-2);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: inherit;
+  font-size: var(--text-sm);
+}
+
+:root.demo-mode {
+  --demo-banner-h: 2rem;
+}
+
+.demo-mode .shell {
+  height: calc(100dvh - var(--demo-banner-h));
+}
+
+.demo-mode .landing {
+  min-height: calc(100dvh - var(--demo-banner-h));
 }
