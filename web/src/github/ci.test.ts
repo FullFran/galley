@@ -36,7 +36,7 @@ describe('GitHub CI gateway', () => {
       ),
     ]);
     expect(await gw.status(repo, 'h1')).toEqual({ state: 'running', url: 'https://github.com/octo/paper/runs/5' });
-    expect(tokens.getAccessToken).toHaveBeenCalledWith(7);
+    expect(tokens.getAccessToken).toHaveBeenCalledWith();
   });
 
   it('finds the artifact of the latest successful run of a commit', async () => {

@@ -12,14 +12,15 @@ export const GITHUB_GRAPHQL = `${GITHUB_API}/graphql`;
 
 /** Supplies GitHub user access tokens; implemented by the auth session client. */
 export interface TokenSource {
-  getAccessToken(repositoryId?: number): Promise<string>;
-  invalidate(): void;
+  getAccessToken(): Promise<string>;
+  /** GitHub rejected `token`; the next call should bring a new one. */
+  invalidate(token: string): void;
 }
 
 export interface RequestOptions {
   method?: string;
   body?: unknown;
-  /** Scopes the token to this repository. */
+  /** No longer used: tokens are one per user, not scoped to a repository. */
   repositoryId?: number;
   /** Statuses returned to the caller instead of being mapped to errors. */
   allow?: number[];
@@ -43,11 +44,13 @@ export class GitHubClient {
 
   async request<T>(pathOrUrl: string, options: RequestOptions = {}): Promise<GitHubResponse<T>> {
     const url = toGitHubUrl(pathOrUrl);
-    let res = await this.send(url, options);
+    const first = await this.send(url, options);
+    let res = first.res;
     if (res.status === 401) {
-      // The cached token may have been revoked or rotated: retry once with a new one.
-      this.tokens.invalidate();
-      res = await this.send(url, options);
+      // The token may have been revoked or rotated: report it and retry once
+      // with the new one (parallel calls share that one refresh).
+      this.tokens.invalidate(first.token);
+      res = (await this.send(url, options)).res;
       if (res.status === 401) throw new AuthRequiredError('GitHub rejected the access token');
     }
     // fetch follows redirects (renamed repositories answer 301); the answer must still come from GitHub's API.
@@ -107,11 +110,12 @@ export class GitHubClient {
    * redirect anywhere but blob storage is refused before reading. 410 means
    * the artifact expired.
    */
-  async downloadArtifact(path: string, repositoryId?: number): Promise<{ kind: 'ok'; bytes: Uint8Array } | { kind: 'expired' }> {
+  async downloadArtifact(path: string): Promise<{ kind: 'ok'; bytes: Uint8Array } | { kind: 'expired' }> {
     const url = new URL(toGitHubUrl(path));
     if (!isArtifactZipPath(url)) throw new GatewayError(`not an artifact download: ${url.pathname}`);
+    let token = '';
     const get = async () => {
-      const token = await this.tokens.getAccessToken(repositoryId);
+      token = await this.tokens.getAccessToken();
       try {
         // Only CORS-safelisted headers besides Authorization, so the redirected
         // request (without Authorization) needs no preflight at the blob host.
@@ -122,7 +126,7 @@ export class GitHubClient {
     };
     let res = await get();
     if (res.status === 401) {
-      this.tokens.invalidate();
+      this.tokens.invalidate(token);
       res = await get();
       if (res.status === 401) throw new AuthRequiredError('GitHub rejected the access token');
     }
@@ -139,8 +143,8 @@ export class GitHubClient {
     }
   }
 
-  private async send(url: string, options: RequestOptions): Promise<Response> {
-    const token = await this.tokens.getAccessToken(options.repositoryId);
+  private async send(url: string, options: RequestOptions): Promise<{ res: Response; token: string }> {
+    const token = await this.tokens.getAccessToken();
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github+json',
@@ -148,11 +152,12 @@ export class GitHubClient {
     };
     if (options.body !== undefined) headers['Content-Type'] = 'application/json';
     try {
-      return await this.fetch(url, {
+      const res = await this.fetch(url, {
         method: options.method ?? 'GET',
         headers,
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
       });
+      return { res, token };
     } catch {
       throw new TransientError('GitHub unreachable');
     }

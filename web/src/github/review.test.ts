@@ -63,7 +63,7 @@ describe('GitHub review gateway', () => {
       },
       { number: 5, title: 'Rewrite <b>intro</b>', author: undefined, updatedAt: '2026-10-28T10:00:00Z', draft: false, htmlUrl: undefined },
     ]);
-    expect(source.getAccessToken).toHaveBeenCalledWith(7);
+    expect(source.getAccessToken).toHaveBeenCalledWith();
   });
 
   it('reads a proposal with its head, mergeability and people', async () => {

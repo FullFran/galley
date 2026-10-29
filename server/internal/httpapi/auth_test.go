@@ -38,7 +38,7 @@ type fakeAuth struct {
 	gotCookie   string
 	gotState    string
 	gotSession  string
-	gotRepoID   int64
+	gotRejected string
 	loggedOut   []string
 	revoked     []int64
 	issueCalls  int
@@ -69,11 +69,11 @@ func (f *fakeAuth) Callback(_ context.Context, cookie, state, _ string) (auth.Ne
 	return auth.NewSession{Token: "session-token", ExpiresAt: expiry}, nil
 }
 
-func (f *fakeAuth) IssueToken(_ context.Context, sessionToken string, repoID int64) (auth.AccessToken, error) {
+func (f *fakeAuth) IssueToken(_ context.Context, sessionToken, rejected string) (auth.AccessToken, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.issueCalls++
-	f.gotSession, f.gotRepoID = sessionToken, repoID
+	f.gotSession, f.gotRejected = sessionToken, rejected
 	if f.issueErr != nil {
 		return auth.AccessToken{}, f.issueErr
 	}
@@ -224,19 +224,27 @@ func TestToken(t *testing.T) {
 		if body["access_token"] != "ghu_x" || body["expires_at"] != "2026-11-27T12:00:00Z" {
 			t.Errorf("body = %v", body)
 		}
-		if f.gotSession != "session-token" || f.gotRepoID != 99 {
-			t.Errorf("service got session %q repo %d", f.gotSession, f.gotRepoID)
+		// Older clients still send a repository id; tokens are no longer scoped.
+		if f.gotSession != "session-token" || f.gotRejected != "" {
+			t.Errorf("service got session %q rejected %q", f.gotSession, f.gotRejected)
 		}
 	})
-	t.Run("empty body means no repository", func(t *testing.T) {
+	t.Run("empty body reports no rejected token", func(t *testing.T) {
 		f := &fakeAuth{}
 		resp := do(t, newTestHandler(t, testDeps(f)), browserPost("/api/galley/auth/token", ""))
-		if resp.StatusCode != http.StatusOK || f.gotRepoID != 0 {
-			t.Fatalf("status %d repo %d", resp.StatusCode, f.gotRepoID)
+		if resp.StatusCode != http.StatusOK || f.gotRejected != "" {
+			t.Fatalf("status %d rejected %q", resp.StatusCode, f.gotRejected)
+		}
+	})
+	t.Run("passes the token GitHub rejected", func(t *testing.T) {
+		f := &fakeAuth{}
+		resp := do(t, newTestHandler(t, testDeps(f)), browserPost("/api/galley/auth/token", `{"rejected":"ghu_old"}`))
+		if resp.StatusCode != http.StatusOK || f.gotRejected != "ghu_old" {
+			t.Fatalf("status %d rejected %q", resp.StatusCode, f.gotRejected)
 		}
 	})
 	t.Run("malformed body is rejected", func(t *testing.T) {
-		for _, body := range []string{`{"repository_id":"x"}`, `{"repository_id":-1}`, `[`} {
+		for _, body := range []string{`{"repository_id":"x"}`, `{"repository_id":-1}`, `{"rejected":5}`, `[`} {
 			resp := do(t, newTestHandler(t, testDeps(&fakeAuth{})), browserPost("/api/galley/auth/token", body))
 			if resp.StatusCode != http.StatusBadRequest {
 				t.Errorf("%s: status = %d, want 400", body, resp.StatusCode)

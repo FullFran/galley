@@ -45,7 +45,7 @@ const (
 type AuthService interface {
 	StartLogin() (auth.Login, error)
 	Callback(ctx context.Context, cookie, state, code string) (auth.NewSession, error)
-	IssueToken(ctx context.Context, sessionToken string, repositoryID int64) (auth.AccessToken, error)
+	IssueToken(ctx context.Context, sessionToken, rejected string) (auth.AccessToken, error)
 	Logout(ctx context.Context, sessionToken string) error
 	Revoke(ctx context.Context, githubID int64) error
 	Authenticate(ctx context.Context, sessionToken string) (auth.User, error)
@@ -143,12 +143,12 @@ func (h authHandlers) token(e *core.RequestEvent) error {
 	if sessionToken == "" {
 		return errorJSON(e, http.StatusUnauthorized)
 	}
-	repoID, ok := readRepositoryID(e.Request)
+	rejected, ok := readTokenRequest(e.Request)
 	if !ok {
 		return errorJSON(e, http.StatusBadRequest)
 	}
 
-	tok, err := h.Auth.IssueToken(e.Request.Context(), sessionToken, repoID)
+	tok, err := h.Auth.IssueToken(e.Request.Context(), sessionToken, rejected)
 	if errors.Is(err, auth.ErrUnauthenticated) {
 		return errorJSON(e, http.StatusUnauthorized)
 	}
@@ -241,22 +241,25 @@ func sessionFrom(r *http.Request) string {
 	return c.Value
 }
 
-// readRepositoryID parses the optional {"repository_id": <int>} body.
-func readRepositoryID(r *http.Request) (int64, bool) {
+// readTokenRequest parses the optional {"rejected": "<token>"} body: the
+// access token the browser saw GitHub refuse. "repository_id", sent by older
+// clients, is still validated but ignored: tokens are no longer scoped.
+func readTokenRequest(r *http.Request) (string, bool) {
 	raw, err := io.ReadAll(io.LimitReader(r.Body, maxTokenBody+1))
 	if err != nil || len(raw) > maxTokenBody {
-		return 0, false
+		return "", false
 	}
 	if len(bytes.TrimSpace(raw)) == 0 {
-		return 0, true
+		return "", true
 	}
 	var body struct {
-		RepositoryID int64 `json:"repository_id"`
+		RepositoryID int64  `json:"repository_id"`
+		Rejected     string `json:"rejected"`
 	}
 	if err := json.Unmarshal(raw, &body); err != nil || body.RepositoryID < 0 {
-		return 0, false
+		return "", false
 	}
-	return body.RepositoryID, true
+	return body.Rejected, true
 }
 
 func validSignature(secret, body []byte, header string) bool {

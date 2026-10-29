@@ -14,10 +14,11 @@ type UserToken struct {
 	ExpiresAt time.Time
 }
 
-// TokenMinter returns a fresh GitHub user access token for a galley user,
-// minted server-side from the stored refresh token (which rotates it). It
-// returns ErrUnauthenticated when the user must sign in again.
-type TokenMinter func(ctx context.Context, userID string) (UserToken, error)
+// TokenMinter returns the galley user's current GitHub access token, minting
+// a new one server-side only when needed or when rejected (a token GitHub
+// just refused) is the current one. It returns ErrUnauthenticated when the
+// user must sign in again.
+type TokenMinter func(ctx context.Context, userID, rejected string) (UserToken, error)
 
 // RepoLister lists the repositories, with the user's permission on each, in
 // the galley app installations the token's user can access. Only those
@@ -136,14 +137,14 @@ func (a *CachedAccess) fetchLocked(ctx context.Context, u *userAccess, userID st
 	cached := tok.Token != "" && a.cfg.Clock.Now().Before(tok.ExpiresAt.Add(-a.cfg.TokenMargin))
 	if !cached {
 		var err error
-		if tok, err = a.mint(ctx, u, userID); err != nil {
+		if tok, err = a.mint(ctx, u, userID, ""); err != nil {
 			return RepoPermission{}, err
 		}
 	}
 	repos, err := a.cfg.Repos.InstalledRepos(ctx, tok.Token)
 	if errors.Is(err, ErrUnauthenticated) && cached {
 		// The cached token was revoked or replaced: mint once more.
-		if tok, err = a.mint(ctx, u, userID); err != nil {
+		if tok, err = a.mint(ctx, u, userID, tok.Token); err != nil {
 			return RepoPermission{}, err
 		}
 		repos, err = a.cfg.Repos.InstalledRepos(ctx, tok.Token)
@@ -166,8 +167,8 @@ func (a *CachedAccess) fetchLocked(ctx context.Context, u *userAccess, userID st
 	return RepoPermission{}, ErrNotFound
 }
 
-func (a *CachedAccess) mint(ctx context.Context, u *userAccess, userID string) (UserToken, error) {
-	tok, err := a.cfg.Mint(ctx, userID)
+func (a *CachedAccess) mint(ctx context.Context, u *userAccess, userID, rejected string) (UserToken, error) {
+	tok, err := a.cfg.Mint(ctx, userID, rejected)
 	if errors.Is(err, ErrUnauthenticated) {
 		return UserToken{}, ErrUnauthenticated
 	}
@@ -200,7 +201,7 @@ func (a *CachedAccess) Token(ctx context.Context, userID string) (UserToken, err
 	if tok.Token != "" && a.cfg.Clock.Now().Before(tok.ExpiresAt.Add(-a.cfg.TokenMargin)) {
 		return tok, nil
 	}
-	return a.mint(ctx, u, userID)
+	return a.mint(ctx, u, userID, "")
 }
 
 // TokenIssued records a token issued for the user elsewhere (the browser's

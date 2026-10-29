@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"net/url"
-	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -60,7 +59,7 @@ func TestUserAccessToken(t *testing.T) {
 	h := newHarness(t)
 	h.login(t)
 	user := h.store.users[42]
-	got, err := h.svc.UserAccessToken(context.Background(), user.ID, 0)
+	got, err := h.svc.UserAccessToken(context.Background(), user.ID, "")
 	if err != nil || got.Token != "ghu_2" {
 		t.Fatalf("token = %+v, %v", got, err)
 	}
@@ -70,13 +69,16 @@ func TestUserAccessToken(t *testing.T) {
 	}
 
 	h.provider.validRefresh = "revoked-elsewhere"
-	if _, err := h.svc.UserAccessToken(context.Background(), user.ID, 0); !errors.Is(err, auth.ErrUnauthenticated) {
+	if again, err := h.svc.UserAccessToken(context.Background(), user.ID, ""); err != nil || again.Token != "ghu_2" {
+		t.Fatalf("current token not reused: %+v, %v", again, err)
+	}
+	if _, err := h.svc.UserAccessToken(context.Background(), user.ID, "ghu_2"); !errors.Is(err, auth.ErrUnauthenticated) {
 		t.Fatalf("rejected refresh err = %v", err)
 	}
 	if got := h.revocations(); len(got) != 1 || got[0] != user.ID {
 		t.Errorf("OnRevoke calls = %v, want [%s]", got, user.ID)
 	}
-	if _, err := h.svc.UserAccessToken(context.Background(), "unknown", 0); !errors.Is(err, auth.ErrUnauthenticated) {
+	if _, err := h.svc.UserAccessToken(context.Background(), "unknown", ""); !errors.Is(err, auth.ErrUnauthenticated) {
 		t.Errorf("unknown user err = %v", err)
 	}
 }
@@ -87,19 +89,22 @@ func TestTokenIssuedIsReported(t *testing.T) {
 	h.svc, _ = auth.NewService(auth.Config{
 		Provider: h.provider, Users: h.store, Sessions: h.store, Sealer: h.sealer,
 		SessionTTL: time.Hour, LoginTTL: time.Minute, Now: func() time.Time { return h.now },
-		OnTokenIssued: func(userID string, tok auth.AccessToken, repoID int64) {
-			got = append(got, userID+"|"+tok.Token+"|"+strconv.FormatInt(repoID, 10))
+		OnTokenIssued: func(userID string, tok auth.AccessToken) {
+			got = append(got, userID+"|"+tok.Token)
 		},
 	})
 	token := h.login(t)
 	uid := h.store.users[42].ID
-	if _, err := h.svc.IssueToken(context.Background(), token, 7); err != nil {
+	if _, err := h.svc.IssueToken(context.Background(), token, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.svc.UserAccessToken(context.Background(), uid, 0); err != nil {
+	if _, err := h.svc.UserAccessToken(context.Background(), uid, ""); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{uid + "|ghu_2|7", uid + "|ghu_3|0"}
+	if _, err := h.svc.UserAccessToken(context.Background(), uid, "ghu_2"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{uid + "|ghu_2", uid + "|ghu_3"}
 	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
 		t.Errorf("OnTokenIssued calls = %v, want %v", got, want)
 	}
@@ -278,19 +283,19 @@ func TestCallbackRejectsBadLogin(t *testing.T) {
 	}
 }
 
-func TestIssueTokenRotatesAndPersists(t *testing.T) {
+func TestIssueTokenReusesCurrentTokenUntilNearExpiry(t *testing.T) {
 	h := newHarness(t)
 	token := h.login(t)
 
-	got, err := h.svc.IssueToken(context.Background(), token, 7)
+	got, err := h.svc.IssueToken(context.Background(), token, "")
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
 	if got.Token != "ghu_2" || !got.ExpiresAt.Equal(h.now.Add(8*time.Hour)) {
 		t.Errorf("issued %+v", got)
 	}
-	if h.provider.lastRepoID != 7 {
-		t.Errorf("repository id = %d, want 7", h.provider.lastRepoID)
+	if h.provider.lastRepoID != 0 {
+		t.Errorf("repository id = %d, want 0 (tokens are not scoped)", h.provider.lastRepoID)
 	}
 	user := h.store.users[42]
 	plain, _ := h.sealer.Open(h.store.tokens[user.ID].Ciphertext, []byte(user.ID))
@@ -298,10 +303,86 @@ func TestIssueTokenRotatesAndPersists(t *testing.T) {
 		t.Errorf("persisted refresh token = %q, want rotated ghr_2", plain)
 	}
 
-	again, err := h.svc.IssueToken(context.Background(), token, 0)
-	if err != nil || again.Token != "ghu_3" {
-		t.Fatalf("second issue = %+v, %v", again, err)
+	// Another tab, device or server-side call gets the same token: no rotation.
+	rotations := h.provider.rotations
+	again, err := h.svc.IssueToken(context.Background(), token, "")
+	if err != nil || again.Token != "ghu_2" || h.provider.rotations != rotations {
+		t.Fatalf("second issue = %+v, %v (rotations %d, want %d)", again, err, h.provider.rotations, rotations)
 	}
+	// Close to expiry the pair is refreshed once.
+	h.now = got.ExpiresAt.Add(-4 * time.Minute)
+	late, err := h.svc.IssueToken(context.Background(), token, "")
+	if err != nil || late.Token != "ghu_3" {
+		t.Fatalf("issue near expiry = %+v, %v", late, err)
+	}
+}
+
+func TestIssueTokenRefreshesOnlyTheRejectedToken(t *testing.T) {
+	h := newHarness(t)
+	token := h.login(t)
+	if got, _ := h.svc.IssueToken(context.Background(), token, ""); got.Token != "ghu_2" {
+		t.Fatalf("first token = %q", got.Token)
+	}
+	steps := []struct{ rejected, want string }{
+		{"ghu_old", "ghu_2"}, // a token that is no longer current changes nothing
+		{"ghu_2", "ghu_3"},   // GitHub rejected the current token: refresh once
+		{"ghu_2", "ghu_3"},   // a late report about the same token does not rotate again
+	}
+	for _, step := range steps {
+		got, err := h.svc.IssueToken(context.Background(), token, step.rejected)
+		if err != nil || got.Token != step.want {
+			t.Fatalf("rejected %q: got %+v, %v; want %s", step.rejected, got, err, step.want)
+		}
+	}
+	if h.provider.rotations != 3 {
+		t.Errorf("rotations = %d, want 3 (login, first issue, one rejection)", h.provider.rotations)
+	}
+}
+
+func TestSignInStartsFromTheNewAuthorization(t *testing.T) {
+	h := newHarness(t)
+	token := h.login(t)
+	if got, _ := h.svc.IssueToken(context.Background(), token, ""); got.Token != "ghu_2" {
+		t.Fatalf("first token = %q", got.Token)
+	}
+	// Signing in again (the way out after any auth trouble) must not keep
+	// serving the previous authorization's token.
+	again := h.login(t)
+	got, err := h.svc.IssueToken(context.Background(), again, "")
+	if err != nil || got.Token == "ghu_2" {
+		t.Fatalf("token after a new sign-in = %+v, %v; want a fresh one", got, err)
+	}
+}
+
+func TestRevocationDropsCurrentToken(t *testing.T) {
+	t.Run("webhook", func(t *testing.T) {
+		h := newHarness(t)
+		h.login(t)
+		uid := h.store.users[42].ID
+		if _, err := h.svc.UserAccessToken(context.Background(), uid, ""); err != nil {
+			t.Fatal(err)
+		}
+		if err := h.svc.Revoke(context.Background(), 42); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := h.svc.UserAccessToken(context.Background(), uid, ""); !errors.Is(err, auth.ErrUnauthenticated) {
+			t.Fatalf("token after revoke: %v", err)
+		}
+	})
+	t.Run("GitHub rejects the refresh token", func(t *testing.T) {
+		h := newHarness(t)
+		token := h.login(t)
+		if _, err := h.svc.IssueToken(context.Background(), token, ""); err != nil {
+			t.Fatal(err)
+		}
+		h.provider.validRefresh = "revoked-elsewhere"
+		if _, err := h.svc.IssueToken(context.Background(), token, "ghu_2"); !errors.Is(err, auth.ErrUnauthenticated) {
+			t.Fatalf("rejected refresh err = %v", err)
+		}
+		if _, err := h.svc.IssueToken(context.Background(), token, ""); !errors.Is(err, auth.ErrUnauthenticated) {
+			t.Fatalf("stale token served after rejection: %v", err)
+		}
+	})
 }
 
 func TestIssueTokenSerializesConcurrentRequests(t *testing.T) {
@@ -316,7 +397,7 @@ func TestIssueTokenSerializesConcurrentRequests(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, err := h.svc.IssueToken(context.Background(), token, 0)
+			_, err := h.svc.IssueToken(context.Background(), token, "")
 			errs <- err
 		}()
 	}
@@ -327,15 +408,15 @@ func TestIssueTokenSerializesConcurrentRequests(t *testing.T) {
 			t.Fatalf("concurrent issue failed: %v", err)
 		}
 	}
-	if h.provider.rotations != n+1 {
-		t.Errorf("rotations = %d, want %d", h.provider.rotations, n+1)
+	if h.provider.rotations != 2 {
+		t.Errorf("rotations = %d, want 2 (login and one shared refresh)", h.provider.rotations)
 	}
 }
 
 func TestIssueTokenRejected(t *testing.T) {
 	t.Run("unknown session", func(t *testing.T) {
 		h := newHarness(t)
-		if _, err := h.svc.IssueToken(context.Background(), "nope", 0); !errors.Is(err, auth.ErrUnauthenticated) {
+		if _, err := h.svc.IssueToken(context.Background(), "nope", ""); !errors.Is(err, auth.ErrUnauthenticated) {
 			t.Fatalf("err = %v", err)
 		}
 	})
@@ -343,7 +424,7 @@ func TestIssueTokenRejected(t *testing.T) {
 		h := newHarness(t)
 		token := h.login(t)
 		h.now = h.now.Add(31 * 24 * time.Hour)
-		if _, err := h.svc.IssueToken(context.Background(), token, 0); !errors.Is(err, auth.ErrUnauthenticated) {
+		if _, err := h.svc.IssueToken(context.Background(), token, ""); !errors.Is(err, auth.ErrUnauthenticated) {
 			t.Fatalf("err = %v", err)
 		}
 		if len(h.store.sessions) != 0 {
@@ -354,7 +435,7 @@ func TestIssueTokenRejected(t *testing.T) {
 		h := newHarness(t)
 		token := h.login(t)
 		h.provider.validRefresh = "revoked-elsewhere"
-		if _, err := h.svc.IssueToken(context.Background(), token, 0); !errors.Is(err, auth.ErrUnauthenticated) {
+		if _, err := h.svc.IssueToken(context.Background(), token, ""); !errors.Is(err, auth.ErrUnauthenticated) {
 			t.Fatalf("err = %v", err)
 		}
 		if len(h.store.tokens) != 0 {
@@ -368,7 +449,7 @@ func TestIssueTokenRejected(t *testing.T) {
 		tok := h.store.tokens[user.ID]
 		tok.ExpiresAt = h.now.Add(-time.Second)
 		h.store.tokens[user.ID] = tok
-		if _, err := h.svc.IssueToken(context.Background(), token, 0); !errors.Is(err, auth.ErrUnauthenticated) {
+		if _, err := h.svc.IssueToken(context.Background(), token, ""); !errors.Is(err, auth.ErrUnauthenticated) {
 			t.Fatalf("err = %v", err)
 		}
 		if h.provider.rotations != 1 {
@@ -391,21 +472,21 @@ func TestRevokeReasons(t *testing.T) {
 		}, auth.RevokeWebhook, true},
 		{"GitHub rejects the refresh token", func(t *testing.T, h *harness, session string) {
 			h.provider.validRefresh = "revoked-elsewhere"
-			_, _ = h.svc.IssueToken(context.Background(), session, 0)
-		}, auth.RevokeRejected, true},
+			_, _ = h.svc.IssueToken(context.Background(), session, "")
+		}, auth.RevokeRejected, false},
 		{"expired refresh token", func(t *testing.T, h *harness, session string) {
 			uid := h.store.users[42].ID
 			tok := h.store.tokens[uid]
 			tok.ExpiresAt = h.now.Add(-time.Second)
 			h.store.tokens[uid] = tok
-			_, _ = h.svc.IssueToken(context.Background(), session, 0)
+			_, _ = h.svc.IssueToken(context.Background(), session, "")
 		}, auth.RevokeExpired, false},
 		{"unreadable refresh token (key change)", func(t *testing.T, h *harness, session string) {
 			uid := h.store.users[42].ID
 			tok := h.store.tokens[uid]
 			tok.Ciphertext = "garbage"
 			h.store.tokens[uid] = tok
-			_, _ = h.svc.IssueToken(context.Background(), session, 0)
+			_, _ = h.svc.IssueToken(context.Background(), session, "")
 		}, auth.RevokeUnreadable, false},
 	}
 	for _, tt := range tests {
@@ -431,7 +512,7 @@ func TestLogoutDeletesSession(t *testing.T) {
 	if err := h.svc.Logout(context.Background(), token); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.svc.IssueToken(context.Background(), token, 0); !errors.Is(err, auth.ErrUnauthenticated) {
+	if _, err := h.svc.IssueToken(context.Background(), token, ""); !errors.Is(err, auth.ErrUnauthenticated) {
 		t.Fatalf("token issued after logout: %v", err)
 	}
 }
@@ -446,7 +527,7 @@ func TestRevokeDeletesEverything(t *testing.T) {
 	if len(h.store.sessions) != 0 || len(h.store.tokens) != 0 {
 		t.Errorf("after revoke: %d sessions, %d tokens", len(h.store.sessions), len(h.store.tokens))
 	}
-	if _, err := h.svc.IssueToken(context.Background(), first, 0); !errors.Is(err, auth.ErrUnauthenticated) {
+	if _, err := h.svc.IssueToken(context.Background(), first, ""); !errors.Is(err, auth.ErrUnauthenticated) {
 		t.Fatalf("err = %v", err)
 	}
 	if err := h.svc.Revoke(context.Background(), 999); err != nil {
@@ -462,7 +543,7 @@ func TestIssueTokenKeepsRotationWhenRequestIsCancelled(t *testing.T) {
 	// The browser aborts the request after GitHub rotated the pair.
 	h.provider.afterRotate = func(context.Context) { cancel() }
 
-	_, _ = h.svc.IssueToken(ctx, token, 0)
+	_, _ = h.svc.IssueToken(ctx, token, "")
 
 	user := h.store.users[42]
 	plain, err := h.sealer.Open(h.store.tokens[user.ID].Ciphertext, []byte(user.ID))
@@ -470,7 +551,7 @@ func TestIssueTokenKeepsRotationWhenRequestIsCancelled(t *testing.T) {
 		t.Fatalf("persisted refresh token = %q (err %v), want rotated ghr_2", plain, err)
 	}
 	h.provider.afterRotate = nil
-	if _, err := h.svc.IssueToken(context.Background(), token, 0); err != nil {
+	if _, err := h.svc.IssueToken(context.Background(), token, ""); err != nil {
 		t.Fatalf("next issue after cancelled request: %v", err)
 	}
 }
@@ -479,7 +560,7 @@ func TestIssueTokenRetriesSaveOnce(t *testing.T) {
 	h := newHarness(t)
 	token := h.login(t)
 	h.store.failSaves = 1
-	if _, err := h.svc.IssueToken(context.Background(), token, 0); err != nil {
+	if _, err := h.svc.IssueToken(context.Background(), token, ""); err != nil {
 		t.Fatalf("issue with one failed save: %v", err)
 	}
 	user := h.store.users[42]
@@ -493,7 +574,7 @@ func TestIssueTokenTransientErrorsAreNotUnauthenticated(t *testing.T) {
 	h := newHarness(t)
 	token := h.login(t)
 	h.store.failSaves = 2
-	_, err := h.svc.IssueToken(context.Background(), token, 0)
+	_, err := h.svc.IssueToken(context.Background(), token, "")
 	if err == nil || errors.Is(err, auth.ErrUnauthenticated) {
 		t.Fatalf("err = %v, want a transient (non-unauthenticated) error", err)
 	}

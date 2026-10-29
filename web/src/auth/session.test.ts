@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AuthRequiredError, TransientError } from '../domain';
 import { fakeFetch, json, on, type RecordedRequest } from '../test/fakeFetch';
+import { GitHubClient } from '../github/client';
 import { createSession } from './session';
 
 const API = 'https://api.example.test';
@@ -15,19 +16,19 @@ describe('session client', () => {
     vi.unstubAllGlobals();
   });
 
-  it('requests a token with credentials, the CSRF header and the repository id', async () => {
+  it('requests a token with credentials and the CSRF header', async () => {
     const { fetch, requests } = fakeFetch([
       on('POST', TOKEN_URL, () => tokenResponse('t1', '2030-01-01T00:00:00Z')),
     ]);
     const session = createSession({ apiBase: API, fetch, now: () => 0 });
 
-    await expect(session.getAccessToken(42)).resolves.toBe('t1');
+    await expect(session.getAccessToken()).resolves.toBe('t1');
 
     const req = requests[0] as RecordedRequest;
     expect(req.credentials).toBe('include');
     expect(req.headers.get('X-Galley-CSRF')).toBe('1');
     expect(req.headers.get('Content-Type')).toBe('application/json');
-    expect(req.body).toEqual({ repository_id: 42 });
+    expect(req.body).toBeUndefined();
   });
 
   it('caches the token until shortly before it expires', async () => {
@@ -47,17 +48,38 @@ describe('session client', () => {
     expect(requests[0]?.body).toBeUndefined();
   });
 
-  it('does not reuse a token issued for another repository', async () => {
+  it('refreshes a rejected token once and reports which token GitHub refused', async () => {
     let n = 0;
     const { fetch, requests } = fakeFetch([
       on('POST', TOKEN_URL, () => tokenResponse(`t${++n}`, '2030-01-01T00:00:00Z')),
     ]);
     const session = createSession({ apiBase: API, fetch, now: () => 0 });
 
-    await session.getAccessToken(1);
-    await session.getAccessToken(2);
-    await session.getAccessToken(2);
-    expect(requests.map((r) => r.body)).toEqual([{ repository_id: 1 }, { repository_id: 2 }]);
+    expect(await session.getAccessToken()).toBe('t1');
+    session.invalidate('t1');
+    session.invalidate('t1');
+    expect(await Promise.all([session.getAccessToken(), session.getAccessToken()])).toEqual(['t2', 't2']);
+    // A late report about the old token must not discard the new one.
+    session.invalidate('t1');
+    expect(await session.getAccessToken()).toBe('t2');
+    expect(requests.map((r) => r.body)).toEqual([undefined, { rejected: 't1' }]);
+  });
+
+  it('lets parallel GitHub calls that hit 401 share one refresh', async () => {
+    let n = 0;
+    const { fetch, requests } = fakeFetch([
+      on('POST', TOKEN_URL, () => tokenResponse(`t${++n}`, '2030-01-01T00:00:00Z')),
+      (req) => (req.url.startsWith('https://api.github.com/')
+        ? req.headers.get('Authorization') === 'Bearer t1' ? json({ message: 'Bad credentials' }, 401) : json({ ok: true })
+        : undefined),
+    ]);
+    const session = createSession({ apiBase: API, fetch, now: () => 0 });
+    const gh = new GitHubClient(session, fetch);
+
+    const results = await Promise.all([1, 2, 3, 4, 5].map((i) => gh.request(`/repos/o/p/contents/f${i}`)));
+    expect(results.every((r) => r.status === 200)).toBe(true);
+    const tokenCalls = requests.filter((r) => r.url === TOKEN_URL);
+    expect(tokenCalls.map((r) => r.body)).toEqual([undefined, { rejected: 't1' }]);
   });
 
   it('de-duplicates concurrent calls into one request', async () => {

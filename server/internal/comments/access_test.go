@@ -24,15 +24,19 @@ type fakeGitHub struct {
 	repos    map[int64]comments.RepoPermission // installed repositories
 	revoked  map[string]bool                   // tokens GitHub now rejects
 	gotToken string
+	rejected []string // rejected tokens passed to mint
 }
 
 func newGitHub(clock *fakeClock) *fakeGitHub {
 	return &fakeGitHub{clock: clock, lifetime: 8 * time.Hour, repos: map[int64]comments.RepoPermission{}, revoked: map[string]bool{}}
 }
 
-func (g *fakeGitHub) mint(_ context.Context, userID string) (comments.UserToken, error) {
+func (g *fakeGitHub) mint(_ context.Context, userID, rejected string) (comments.UserToken, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if rejected != "" {
+		g.rejected = append(g.rejected, rejected)
+	}
 	if g.mintErr != nil {
 		return comments.UserToken{}, g.mintErr
 	}
@@ -161,7 +165,8 @@ func TestCachedAccessSharesBrowserTokens(t *testing.T) {
 	// A cached token GitHub rejects is replaced once, not reported as a
 	// sign-out.
 	gh.mu.Lock()
-	gh.revoked[gh.gotToken] = true
+	bad := gh.gotToken
+	gh.revoked[bad] = true
 	gh.mu.Unlock()
 	a.InvalidateAll()
 	if _, err := a.Permission(ctx, "u1", 7); err != nil {
@@ -169,6 +174,10 @@ func TestCachedAccessSharesBrowserTokens(t *testing.T) {
 	}
 	if m, _ := gh.counts(); m != 2 {
 		t.Errorf("mints = %d, want 2", m)
+	}
+	// The minter reuses the current token unless told GitHub rejected it.
+	if len(gh.rejected) != 1 || gh.rejected[0] != bad {
+		t.Errorf("rejected tokens passed to mint = %v, want [%s]", gh.rejected, bad)
 	}
 }
 

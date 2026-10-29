@@ -39,7 +39,7 @@ describe('GitHub history gateway', () => {
     ]);
     const second = await gw.versions(repo, 2);
     expect(second.more).toBe(false);
-    expect(tokens.getAccessToken).toHaveBeenCalledWith(7);
+    expect(tokens.getAccessToken).toHaveBeenCalledWith();
   });
 
   it('lists labels (tags) with the commit each points at', async () => {
