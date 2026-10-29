@@ -41,6 +41,12 @@ describe('visibleFiles', () => {
     ]);
   });
 
+  it('shows co-authors the files already in an upload folder, of the accepted types', () => {
+    const uploads = valid('version: 1\neditable:\n  - index.qmd\nuploads:\n  - folder: figures/\n    accept: [png, pdf]\n');
+    const files = [...FILES, 'figures/fig2.pdf', 'figures/notes.txt', 'figures/raw/fig3.png'];
+    expect(visibleFiles(files, uploads, false)).toEqual(['index.qmd', 'figures/fig1.png', 'figures/fig2.pdf', 'figures/raw/fig3.png']);
+  });
+
   it('never shows .galley.yml to co-authors, even when listed', () => {
     const listed = valid('version: 1\neditable:\n  - .galley.yml\n  - "**"\n');
     const shown = visibleFiles(FILES, listed, false);
