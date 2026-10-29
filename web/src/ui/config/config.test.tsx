@@ -107,7 +107,7 @@ describe('ConfigForm', () => {
     expect(html).toContain('(included by sections/*.qmd)');
     expect(html).toContain('STATE.md');
     expect(html).not.toContain('run.py');
-    expect(html).toContain('Co-authors will see 3 files');
+    expect(html).toContain('Co-authors will see 4 files'); // 3 editable + figures/x.png in the upload folder
     expect(html).toContain('galley/ada');
     expect(html).toContain('not a GitHub permission');
   });
