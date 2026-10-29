@@ -13,8 +13,15 @@ import { GitHubClient, type TokenSource } from './client';
 /** Which build: the head commit of a proposal, or the latest good build of a branch. */
 export type BuildTarget = { sha: string } | { branch: string };
 
+/** Which build the documents come from: its commit, branch and start time (ISO). */
+export interface BuildInfo {
+  sha: string;
+  branch: string;
+  createdAt: string;
+}
+
 export type DocumentsResult =
-  | { kind: 'ready'; docs: Documents; runUrl?: string }
+  | { kind: 'ready'; docs: Documents; runUrl?: string; build?: BuildInfo }
   /** The artifact is gone (GitHub keeps them for a limited time). */
   | { kind: 'expired'; runUrl?: string }
   /** The commit is still compiling. */
@@ -112,7 +119,8 @@ export function createGitHubCiGateway(options: GitHubCiGatewayOptions): CiGatewa
         const zip = await gh.downloadArtifact(`${base(repo)}/actions/artifacts/${pick.artifact.id}/zip`);
         if (zip.kind === 'expired') return { kind: 'expired', runUrl: run.htmlUrl };
         const docs = await extractDocuments(zip.bytes);
-        return docs.pdf ? { kind: 'ready', docs, runUrl: run.htmlUrl } : { kind: 'empty', runUrl: run.htmlUrl };
+        const build = { sha: run.headSha, branch: run.headBranch, createdAt: run.createdAt };
+        return docs.pdf ? { kind: 'ready', docs, runUrl: run.htmlUrl, build } : { kind: 'empty', runUrl: run.htmlUrl };
       }
       return expired ? { kind: 'expired', runUrl: expired.htmlUrl } : { kind: 'none', runUrl: ranked[0]?.htmlUrl };
     },

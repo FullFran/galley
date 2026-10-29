@@ -26,10 +26,11 @@ export type EditorMode = 'writing' | 'code';
 
 /**
  * Workspace layouts, in the order the View menu and Preferences list them.
- * 'both' is editor and preview side by side while both fit. A new layout
- * (for example the compiled PDF) is one more entry here.
+ * 'both' is editor and preview side by side while both fit. 'pdf' is the same
+ * with the default branch's compiled PDF (from CI) in place of the live
+ * preview. A new layout is one more entry here.
  */
-export const LAYOUTS = ['both', 'editor', 'preview'] as const;
+export const LAYOUTS = ['both', 'editor', 'preview', 'pdf'] as const;
 export type Layout = (typeof LAYOUTS)[number];
 
 const isLayout = (value: unknown): value is Layout => (LAYOUTS as readonly unknown[]).includes(value);

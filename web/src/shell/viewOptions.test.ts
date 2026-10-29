@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { readPrefs, writePrefs } from './prefs';
-import { chooseFromSwitch, escapeExitsFocus, layoutOf, overlayOpen, shownPanes, switchPressed, togglePane } from './viewOptions';
+import { LAYOUTS, chooseFromSwitch, escapeExitsFocus, layoutOf, overlayOpen, showsPdf, shownPanes, switchPressed, togglePane } from './viewOptions';
 
 const memory = () => {
   const data = new Map<string, string>();
@@ -35,6 +35,60 @@ describe('view preferences', () => {
     const store = memory();
     writePrefs({ autoCompile: true, editorMode: 'writing', layout: 'editor', focus: true }, store);
     expect(readPrefs(store)).toEqual({ autoCompile: true, editorMode: 'writing', layout: 'editor', focus: true });
+  });
+});
+
+describe('the PDF layout', () => {
+  it('is stored and read back like the other layouts, after them in the list', () => {
+    const store = memory();
+    writePrefs({ layout: 'pdf' }, store);
+    expect(readPrefs(store)).toEqual({ layout: 'pdf' });
+    expect(layoutOf(readPrefs(store))).toBe('pdf');
+    expect(LAYOUTS).toEqual(['both', 'editor', 'preview', 'pdf']);
+  });
+
+  it('keeps the existing layouts and still drops unknown values', () => {
+    const store = memory();
+    for (const layout of ['both', 'editor', 'preview'] as const) {
+      writePrefs({ layout }, store);
+      expect(layoutOf(readPrefs(store))).toBe(layout);
+    }
+    store.setItem('galley:prefs', '{"layout":"PDF"}');
+    expect(readPrefs(store)).toEqual({});
+  });
+
+  it('shows editor and PDF side by side while both fit, else the pane chosen with Edit | PDF', () => {
+    expect(shownPanes('pdf', true, 'edit')).toBe('both');
+    expect(shownPanes('pdf', false, 'edit')).toBe('edit');
+    expect(shownPanes('pdf', false, 'preview')).toBe('preview');
+    expect(switchPressed('pdf', true, 'edit')).toBeUndefined();
+    expect(switchPressed('pdf', false, 'preview')).toBe('preview');
+  });
+
+  it('the toggle and Edit | PDF flip between editor only and PDF only at any width, keeping the PDF layout', () => {
+    for (const fits of [true, false]) {
+      expect(chooseFromSwitch('pdf', fits, 'preview')).toEqual({ view: 'preview', single: true });
+      expect(chooseFromSwitch('pdf', fits, 'edit')).toEqual({ view: 'edit', single: true });
+      expect(togglePane('pdf', fits, 'preview', true)).toEqual({ view: 'edit', single: true });
+      expect(togglePane('pdf', fits, 'edit', true)).toEqual({ view: 'preview', single: true });
+    }
+    // From side by side the toggle shows the PDF only.
+    expect(togglePane('pdf', true, 'edit')).toEqual({ view: 'preview', single: true });
+  });
+
+  it('shows one pane once a half was chosen, and both again when the layout is chosen anew', () => {
+    expect(shownPanes('pdf', true, 'preview', true)).toBe('preview');
+    expect(switchPressed('pdf', true, 'preview', true)).toBe('preview');
+    expect(shownPanes('pdf', true, 'edit', true)).toBe('edit');
+    expect(shownPanes('pdf', true, 'edit', false)).toBe('both');
+    // The single-pane choice does not change the other layouts.
+    expect(shownPanes('both', true, 'edit', true)).toBe('both');
+    expect(togglePane('both', true, 'edit', true)).toEqual({ layout: 'preview' });
+  });
+
+  it('names which pane shows the PDF', () => {
+    expect(showsPdf('pdf')).toBe(true);
+    for (const layout of ['both', 'editor', 'preview'] as const) expect(showsPdf(layout)).toBe(false);
   });
 });
 

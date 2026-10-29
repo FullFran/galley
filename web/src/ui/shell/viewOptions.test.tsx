@@ -31,6 +31,17 @@ describe('View menu', () => {
     expect(html).toContain('Focus mode');
   });
 
+  it('lists the compiled PDF as a fourth layout, in English and Spanish', () => {
+    const html = render(<ViewMenu layout="pdf" focus={false} onLayout={noop} onFocus={noop} onToggle={noop} />);
+    expect(html).toMatch(/aria-checked="true"[^>]*>Editor \+ compiled PDF/);
+    const es_ = render(
+      <I18n.Provider value={es}>
+        <ViewMenu layout="pdf" focus={false} onLayout={noop} onFocus={noop} onToggle={noop} />
+      </I18n.Provider>,
+    );
+    expect(es_).toContain('Editor y PDF compilado');
+  });
+
   it('offers to exit focus mode while it is on, in Spanish too', () => {
     const html = render(
       <I18n.Provider value={es}>
@@ -47,6 +58,10 @@ describe('Edit | Preview', () => {
   it('presses the pane shown, and neither while both show', () => {
     expect(render(<ViewSwitch view="preview" onView={noop} />)).toMatch(/aria-pressed="true"[^>]*>Preview/);
     expect(render(<ViewSwitch view={undefined} onView={noop} />)).not.toContain('aria-pressed="true"');
+  });
+
+  it('names the second half PDF while the PDF layout is chosen', () => {
+    expect(render(<ViewSwitch view="preview" pdf onView={noop} />)).toMatch(/aria-pressed="true"[^>]*>PDF</);
   });
 });
 
