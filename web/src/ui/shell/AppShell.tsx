@@ -12,7 +12,7 @@ import { AboutDialog } from './AboutDialog';
 import { AccountMenu } from './AccountMenu';
 import { Icon } from './icons';
 import type { TeamGateway } from '../../github/team';
-import { Menu, MenuItem } from './Menu';
+import { Menu, MenuItem, type HeaderFold } from './Menu';
 import { PreferencesDialog } from './PreferencesDialog';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { useTheme } from './ThemeSwitch';
@@ -55,6 +55,8 @@ export interface MoreItem {
   kbd?: string;
   /** Phones only: things that leave the narrow header (the save note). */
   narrowOnly?: boolean;
+  /** Stands in for a header control that folds away on narrow widths (see HeaderFold). */
+  fold?: HeaderFold;
   onSelect: () => void;
 }
 
@@ -91,7 +93,7 @@ export function MoreMenu({ items = [] }: { items?: MoreItem[] }) {
   return (
     <Menu id="more-menu" label={t.shell.more} buttonClass="icon-button more-button" tooltip={t.shell.more} buttonContent={<Icon name="dots" />}>
       {items.map((item) => (
-        <MenuItem key={item.label} onSelect={item.onSelect} kbd={item.kbd} narrowOnly={item.narrowOnly}>
+        <MenuItem key={item.label} onSelect={item.onSelect} kbd={item.kbd} narrowOnly={item.narrowOnly} fold={item.fold}>
           {item.label}
         </MenuItem>
       ))}

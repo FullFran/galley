@@ -137,7 +137,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   const [message, setMessage] = useState('');
   const [status, setStatus] = useState<SaveStatus>({ kind: 'idle' });
   const [jump, setJump] = useState<{ line: number; id?: string; text: string; seq: number }>();
-  // Below 1024px the editor and the preview share one pane.
+  // When the main column is too narrow for both, the editor and the preview share one pane.
   const [view, setView] = useState<PaneView>('edit');
   // Admins can look at the paper as co-authors see it.
   const [viewAs, setViewAs] = useState<ViewAs>(() => readViewAs(repo.fullName));
@@ -918,9 +918,10 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
                         { label: t.shell.recompile, kbd: 'Ctrl+Enter', onSelect: () => setRecompileSeq((n) => n + 1) },
                         {
                           label: mode === 'writing' ? t.editor.switchToCode : t.editor.switchToWriting,
-                          narrowOnly: true,
+                          fold: 'medium' as const,
                           onSelect: () => changeMode(mode === 'writing' ? 'code' : 'writing'),
                         },
+                        ...(comments.enabled ? [{ label: t.comments.toggle, fold: 'small' as const, onSelect: comments.toggle }] : []),
                         ...(draftShare.item ? [draftShare.item] : []),
                         ...(symbols.menuItem ? [symbols.menuItem] : []),
                         ...(find.menuItem ? [find.menuItem] : []),

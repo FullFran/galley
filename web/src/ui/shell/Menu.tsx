@@ -102,19 +102,28 @@ export function Menu({ id, label, buttonClass, buttonContent, tooltip, up, start
   );
 }
 
+/**
+ * Header controls that fold into the ⋯ menu as the header narrows (browser
+ * zoom, small windows): 'medium' below 52rem of content width, 'small' below
+ * 46rem. A folded item is shown in the menu only at those widths.
+ */
+export type HeaderFold = 'medium' | 'small';
+
 export interface MenuItemProps {
   onSelect: () => void;
   /** Keyboard shortcut shown on the right, e.g. "Ctrl+Enter". */
   kbd?: string;
   /** Shown on phones only (moved out of the header there). */
   narrowOnly?: boolean;
+  /** Shown only once the header has folded the matching control away. */
+  fold?: HeaderFold;
   danger?: boolean;
   children: ComponentChildren;
 }
 
-export function MenuItem({ onSelect, kbd, narrowOnly, danger, children }: MenuItemProps) {
+export function MenuItem({ onSelect, kbd, narrowOnly, fold, danger, children }: MenuItemProps) {
   const close = useContext(Close);
-  const cls = ['menu-item', narrowOnly ? 'narrow-only' : '', danger ? 'menu-item-danger' : ''].filter(Boolean).join(' ');
+  const cls = ['menu-item', narrowOnly ? 'narrow-only' : '', fold ? `fold-${fold}` : '', danger ? 'menu-item-danger' : ''].filter(Boolean).join(' ');
   return (
     <button
       type="button"
