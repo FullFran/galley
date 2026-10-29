@@ -84,6 +84,12 @@ export const en = {
       proposals: ['Review together', 'Proposals collect changes for review before they are incorporated into the paper.'],
       comments: ['Discuss the paper', 'Read and reply to comments in this panel.'],
       help: ['Come back any time', 'Help offers the full tour, a guide for the current screen and keyboard shortcuts. Your account menu also offers the tour.'],
+      demoWelcome: ['Welcome to the galley demo', 'This is a made-up paper about toast, so try anything. The tour moves between screens to show you the whole flow.'],
+      repos: ['Your papers', 'Every repository you open with galley is listed here. The demo has just one.'],
+      demoSave: ['Save for review', 'Edit something, then choose Save for review: galley turns it into a commit and a proposal. Go ahead, nothing leaves your browser.'],
+      demoComments: ['Discuss the paper', 'Your co-author Ada left a question here. Reply to it, or select any text in the editor to start a new thread.'],
+      demoProposals: ['Review together', 'Proposals collect changes before they reach the paper. Open Ada\'s to read the diff and comment on it. Your own saves show up here too.'],
+      demoDone: ['That is the whole flow', 'Keep playing with the demo as long as you like. Reloading starts it over, and the banner at the top takes you back to the real galley.'],
     },
   },
   shell: {
@@ -304,6 +310,7 @@ export const en = {
   saveStatus: {
     saved: 'Saved. Changes are proposed for review.',
     viewProposal: 'View proposal on GitHub',
+    viewProposalHere: 'View the proposal',
     savedNoProposal: 'Saved; could not open the proposal, retry later.',
     conflict: 'Someone else changed the document since you opened it, so your changes were not saved.',
     conflictReloaded: 'The latest version is now loaded. Copy your text below back into the editor where needed, then save.',

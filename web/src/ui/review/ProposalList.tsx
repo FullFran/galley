@@ -51,7 +51,7 @@ export function ProposalList({ rows, onOpen, onEmptyAction, ciChip }: ProposalLi
     );
   }
   return (
-    <ul class="row-list proposal-list">
+    <ul class="row-list proposal-list" data-tour="proposal-list">
       {rows.map(({ summary, overall, merge, headSha }) => {
         const updated = summary.updatedAt ? formatUpdated(summary.updatedAt, t.meta.lang) : '';
         return (

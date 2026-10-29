@@ -63,6 +63,17 @@ describe('StatusBanner', () => {
     expect(html).toContain('Saved');
     expect(html).toContain('href="https://github.com/o/p/pull/1"');
     expect(html).toContain('View proposal on GitHub');
+    expect(html).toContain('target="_blank"');
+  });
+
+  it('opens an in-app proposal route in the same tab', () => {
+    const html = render(
+      <StatusBanner status={{ kind: 'saved', pullRequestUrl: '#/r/o/p/proposals/2' }} onReload={noop} onDismiss={noop} />,
+    );
+    expect(html).toContain('href="#/r/o/p/proposals/2"');
+    expect(html).toContain('View the proposal');
+    expect(html).not.toContain('GitHub');
+    expect(html).not.toContain('target=');
   });
 
   it('says the proposal could not be opened when the link is missing', () => {

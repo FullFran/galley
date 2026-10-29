@@ -48,7 +48,7 @@ export function RepoList({ repos, onOpen, onReload }: RepoListProps) {
           </button>
         </div>
       ) : (
-        <ul class="row-list">
+        <ul class="row-list" data-tour="repos">
           {shown.map((repo) => {
             const updated = repo.updatedAt ? formatUpdated(repo.updatedAt, t.meta.lang) : '';
             return (

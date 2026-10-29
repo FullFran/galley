@@ -17,7 +17,7 @@ const loadDriver = async () => ({ driver: (config?: Config) => {
 import { useTour } from './useTour';
 
 async function settle() { await vi.dynamicImportSettled(); }
-function setup(loading = false) {
+function setup(loading = false, demo = false, prepare?: (step: unknown) => Promise<void>) {
   harness.send.mockResolvedValue({ data: { version: 0, status: null } });
   const main = { children: [1], querySelector: () => loading ? {} : null, focus: harness.restore };
   vi.stubGlobal('document', {
@@ -29,7 +29,7 @@ function setup(loading = false) {
   vi.stubGlobal('window', { matchMedia: () => ({ matches: true }), addEventListener: vi.fn(), removeEventListener: vi.fn() });
   vi.stubGlobal('MutationObserver', class { observe() {} disconnect = harness.disconnect; });
   vi.stubGlobal('sessionStorage', undefined);
-  return useTour(1, loadDriver);
+  return useTour(1, loadDriver, demo, prepare);
 }
 afterEach(() => {
   harness.cleanups.splice(0).forEach(cleanup => cleanup());
@@ -75,5 +75,37 @@ describe('signed-in tour lifetime', () => {
     start('full'); start('screen'); await settle();
     expect(harness.drive).toHaveBeenCalledTimes(1);
     expect(harness.configs[0]?.steps?.[0]?.popover?.title).toBe(en.tour.steps.screen[0]);
+  });
+});
+
+describe('demo tour', () => {
+  const driverOf = (index: number) => ({ isLastStep: () => false, getActiveIndex: () => index, moveTo: vi.fn() }) as unknown as Driver;
+  it('walks the navigable guide without calling the galley API', async () => {
+    setup(false, true, async () => undefined); await settle();
+    expect(harness.drive).toHaveBeenCalledWith(0);
+    expect(harness.configs[0]?.steps?.[0]?.popover?.title).toBe(en.tour.steps.demoWelcome[0]);
+    harness.configs[0]?.onDestroyed?.(undefined, {}, {} as never);
+    expect(harness.send).not.toHaveBeenCalled();
+  });
+  it('resumes on the next shell when a step navigates to another screen', async () => {
+    let arrive!: () => void;
+    const prepare = vi.fn(() => new Promise<void>(r => { arrive = r; }));
+    setup(false, true, prepare); await settle();
+    const driver = driverOf(0);
+    harness.configs[0]?.onNextClick?.(undefined, {}, { driver, config: {}, state: {} });
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ anchor: 'repos' }));
+    // The route change unmounts this shell; the new one picks the tour up at step 2.
+    harness.cleanups.splice(0).forEach(cleanup => cleanup());
+    arrive();
+    useTour(1, loadDriver, true, async () => undefined); await settle();
+    expect(harness.drive).toHaveBeenLastCalledWith(1);
+    expect(driver.moveTo).not.toHaveBeenCalled();
+  });
+  it('moves in place when the step stays on the same screen', async () => {
+    setup(false, true, async () => undefined); await settle();
+    const driver = driverOf(3);
+    harness.configs[0]?.onNextClick?.(undefined, {}, { driver, config: {}, state: {} });
+    await settle(); await Promise.resolve();
+    expect(driver.moveTo).toHaveBeenCalledWith(4);
   });
 });

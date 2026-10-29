@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { en } from '../i18n/en';
 import { es } from '../i18n/es';
 import { createTourState } from './state';
-import { escapeHtml, guideSteps, tourConfig, visibleTarget } from './guide';
+import { DEMO_GUIDE, demoSteps, escapeHtml, guideSteps, prepareDemoStep, tourConfig, visibleTarget } from './guide';
 import type { Config, Driver } from 'driver.js';
 
 function memory() {
@@ -93,5 +93,64 @@ describe('plain-data guides', () => {
       expect(finish).toHaveBeenCalledTimes(2);
       expect(driver.destroy).toHaveBeenCalledTimes(3);
     }
+  });
+});
+
+describe('demo guide', () => {
+  it('covers the whole flow and resolves each target only when its step is shown', () => {
+    const anchors = DEMO_GUIDE.map(step => 'anchor' in step ? step.anchor : undefined);
+    expect(anchors).toEqual([undefined, 'repos', 'outline', 'editor', 'preview', 'compile', 'save', 'comments-panel', 'proposal-list', 'help', undefined]);
+    for (const copy of [en.tour, es.tour]) {
+      const screen: { editor?: Element } = {};
+      const steps = demoSteps(copy, name => name === 'editor' ? screen.editor : undefined);
+      expect(steps).toHaveLength(DEMO_GUIDE.length);
+      expect(steps[0]?.element).toBeUndefined();
+      expect(steps[0]?.popover?.title).toBe(escapeHtml(copy.steps.demoWelcome[0] ?? ''));
+      const lazy = steps[3]?.element as () => Element | undefined;
+      expect(lazy()).toBeUndefined();
+      screen.editor = {} as Element;
+      expect(lazy()).toBe(screen.editor);
+    }
+  });
+  it('navigates to the step route and opens the panel that holds the target', async () => {
+    const nav = { hash: '#/' };
+    let open = false;
+    const toggle = { click: vi.fn(() => { open = true; }) } as unknown as HTMLElement;
+    const target = (name: string) => name === 'comments' ? toggle : name === 'comments-panel' && open ? ({} as Element) : undefined;
+    const step = DEMO_GUIDE[7];
+    await prepareDemoStep(step, nav, target, 0);
+    expect(nav.hash).toBe('#/r/galley-demo/toast-paper/f/index.qmd');
+    expect(toggle.click).toHaveBeenCalledOnce();
+    await prepareDemoStep(step, nav, target, 0);
+    expect(toggle.click).toHaveBeenCalledOnce();
+  });
+  it('moves through go() in both directions and ignores clicks while moving', async () => {
+    const finish = vi.fn();
+    let release!: (ok: boolean) => void;
+    const go = vi.fn(() => new Promise<boolean>(r => { release = r; }));
+    const config = tourConfig(en.tour, demoSteps(en.tour, () => undefined), true, finish, go);
+    const driver = { isLastStep: () => false, getActiveIndex: () => 2, moveTo: vi.fn(), moveNext: vi.fn(), movePrevious: vi.fn() } as unknown as Driver;
+    const opts = { driver, config, state: {} };
+    config.onNextClick?.(undefined, {}, opts);
+    config.onNextClick?.(undefined, {}, opts);
+    expect(go).toHaveBeenCalledOnce();
+    expect(go).toHaveBeenCalledWith(3);
+    release(true);
+    await Promise.resolve(); await Promise.resolve();
+    expect(driver.moveTo).toHaveBeenCalledWith(3);
+    config.onPrevClick?.(undefined, {}, opts);
+    expect(go).toHaveBeenLastCalledWith(1);
+    release(false);
+    await Promise.resolve(); await Promise.resolve();
+    expect(driver.moveTo).toHaveBeenCalledTimes(1);
+    expect(driver.moveNext).not.toHaveBeenCalled();
+    expect(finish).not.toHaveBeenCalled();
+  });
+  it('keeps the plain guide on driver.js navigation', () => {
+    const config = tourConfig(en.tour, guideSteps(en.tour, 'full', () => undefined), true, vi.fn());
+    expect(config.onPrevClick).toBeUndefined();
+    const driver = { isLastStep: () => false, moveNext: vi.fn() } as unknown as Driver;
+    config.onNextClick?.(undefined, {}, { driver, config, state: {} });
+    expect(driver.moveNext).toHaveBeenCalledOnce();
   });
 });

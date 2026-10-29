@@ -12,11 +12,14 @@ Branch: feat/demo-mode. Delivery: work-unit commits on the branch; push/PR are t
 - Out of scope (user agreed): tutorial video, deferred; could later be recorded from the demo with Playwright.
 
 ## Tasks
-- [ ] T1 (S1, S2, S3, S6) demo gateways, sample paper, entry, banner, landing link. Route: inline (no Writer trigger reason).
-- [ ] T2 (S4, S5) demo tour with navigation, new anchors, copy en/es, Help menu link. Route: inline.
-- [ ] T3 (S1-S5) README docs, browser check of the whole demo tour.
+- [x] T1 (S1, S2, S3, S6) demo gateways, sample paper, entry, banner, landing link. Route: inline (no Writer trigger reason). Commit c1aaa1d.
+- [x] T2 (S4, S5) demo tour with navigation, new anchors, copy en/es, Help menu link, in-app proposal link in the save toast. Route: inline. Commit: see log.
+- [x] T3 (S1-S5) README docs, browser check of the whole demo tour. Same commit as T2.
 
 ## Log
 - L1 (2026-10-29) user: "revisa como esta el tour interactivo y mejoralo si hace falta por ejemplo que aparezca un repositorio de prueba super tonto para enseñar todo el flujo y todas las funciones, que te parece? o hacer un video del tutorial con el repo de prueba ficticio con todas las funcionalidades que opinas? como lo haria alvaro?"
 - L2 (2026-10-29) finding: guideSteps drops steps without a visible anchor and the tour never navigates, so a new user with no file open sees only welcome, sidebar and help. Recommended an in-browser demo with fake gateways; video deferred.
 - L3 (2026-10-29) user: "montalo! hazlo asi"
+- L4 (2026-10-29) T1 evidence: demo tests RED (module missing) then GREEN; suite 1036/1036; headless browser shows outline, editor, preview (equation, table, citations) and the seeded comment.
+- L5 (2026-10-29) T2 design: every screen mounts its own AppShell, so a navigating step stores the target index in a module-level handoff and the next shell resumes there; the real-user tour keeps driver.js navigation (S5). Tests RED then GREEN.
+- L6 (2026-10-29) T2/T3 evidence (headless Chromium, dev server): all 11 demo steps highlight their anchor (repos, outline, editor, preview, compile, save, comments-panel, proposal-list, help); Back from proposals returns to the comments panel; a manual save creates proposal #2 with a diff; zero requests outside localhost. Fixed: the save toast said "View proposal on GitHub" and opened a new tab for the in-app demo route. Build: demo code in its own chunk (9.7 kB). Suite 1044/1044, tsc and eslint clean.

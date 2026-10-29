@@ -24,3 +24,11 @@ export function exitDemo(): void {
 
 /** Relative link that opens the demo on the repository list, whatever the app's path. */
 export const DEMO_HREF = '?demo#/';
+
+/** True while this tab is in the demo, without changing the flag. */
+export function inDemo(): boolean {
+  try { return storage()?.getItem(KEY) === '1'; } catch { return false; }
+}
+
+/** The fictional repository's `owner/name`; tour routes point into it. */
+export const DEMO_FULL_NAME = 'galley-demo/toast-paper';

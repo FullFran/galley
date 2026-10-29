@@ -14,14 +14,14 @@ import {
   type WorkingState,
 } from '../domain';
 import type { CommentsGateway, CommentThread, ThreadComment } from '../domain/comments';
-import { exitDemo } from './mode';
+import { DEMO_FULL_NAME, exitDemo } from './mode';
 import { BUTTER_PARAGRAPH, DEMO_FILES, INDEX_QMD } from './paper';
 
 export const DEMO_REPO: Repository = {
   id: 1,
   owner: 'galley-demo',
   name: 'toast-paper',
-  fullName: 'galley-demo/toast-paper',
+  fullName: DEMO_FULL_NAME,
   defaultBranch: 'main',
   private: true,
   updatedAt: '2026-10-28T09:00:00Z',

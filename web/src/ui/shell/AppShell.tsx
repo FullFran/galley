@@ -18,6 +18,7 @@ import { ShortcutsDialog } from './ShortcutsDialog';
 import { useTheme } from './ThemeSwitch';
 import { Toasts } from './Toasts';
 import { useTour } from '../../tour/useTour';
+import { DEMO_HREF, inDemo } from '../../demo/mode';
 
 /** What every signed-in screen shares, provided by App. */
 export interface ShellContext {
@@ -318,6 +319,7 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
               >
                 <MenuItem onSelect={() => startTour('full')}>{t.nav.tour}</MenuItem>
                 <MenuItem onSelect={() => startTour('screen')}>{t.nav.screenGuide}</MenuItem>
+                {!inDemo() && <MenuItem onSelect={() => window.open(DEMO_HREF, '_blank', 'noopener')}>{t.nav.demo}</MenuItem>}
                 <MenuItem onSelect={() => setShortcuts(true)} kbd="?">
                   {t.shell.shortcuts}
                 </MenuItem>
