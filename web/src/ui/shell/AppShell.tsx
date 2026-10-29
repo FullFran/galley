@@ -73,6 +73,8 @@ export interface AppShellProps {
   banner?: ComponentChildren;
   toasts?: ComponentChildren;
   mainClass?: string;
+  /** Focus mode: the sidebar hides and the header keeps the essentials (workspace only). */
+  focus?: boolean;
   children: ComponentChildren;
 }
 
@@ -113,7 +115,7 @@ const GROUP_LABEL = { write: 'groupWrite', review: 'groupReview', admin: 'groupA
  * region. The sidebar holds the repository switcher, task groups (Write,
  * Review, and Admin for admins), then Help, the account and the credit.
  */
-export function AppShell({ shell, active, crumbs, actions, contents, banner, toasts, mainClass, children }: AppShellProps) {
+export function AppShell({ shell, active, crumbs, actions, contents, banner, toasts, mainClass, focus, children }: AppShellProps) {
   const t = useT();
   const { state, dispatch, toggleRef, panelRef } = shell.sidebar;
   const [about, setAbout] = useState(false);
@@ -182,7 +184,12 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
 
   return (
     <UiContext.Provider value={{ openShortcuts: () => setShortcuts(true), downloadLatestPdf }}>
-      <div class="shell" data-collapsed={collapsed ? 'true' : undefined} data-drawer={state.drawerOpen ? 'open' : undefined}>
+      <div
+        class="shell"
+        data-collapsed={collapsed ? 'true' : undefined}
+        data-drawer={state.drawerOpen ? 'open' : undefined}
+        data-focus={focus ? 'true' : undefined}
+      >
         <a
           class="skip-link"
           href="#main"
@@ -199,7 +206,7 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
           class="sidebar"
           aria-label={t.shell.sidebar}
           data-tour="sidebar"
-          inert={narrow && !state.drawerOpen}
+          inert={(narrow && !state.drawerOpen) || focus === true}
         >
           <div class="sidebar-head">
             <span class="brand">{t.app.name}</span>

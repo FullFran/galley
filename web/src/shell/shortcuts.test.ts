@@ -38,8 +38,24 @@ describe('keyboard shortcuts', () => {
 
   it('lists every action once for the shortcuts dialog', () => {
     const actions = SHORTCUTS.map((s) => s.action);
-    expect(new Set(actions)).toEqual(new Set(['toggleSidebar', 'recompile', 'save', 'help', 'symbols', 'findAll']));
-    expect(actions.length).toBe(6);
+    expect(new Set(actions)).toEqual(new Set(['toggleSidebar', 'recompile', 'save', 'help', 'symbols', 'findAll', 'togglePane']));
+    expect(actions.length).toBe(7);
+  });
+
+  it('maps Ctrl/Cmd+Alt+V to the text/preview toggle, also while typing', () => {
+    expect(matchShortcut(key('v', { ctrlKey: true, altKey: true }), true)).toBe('togglePane');
+    expect(matchShortcut(key('V', { metaKey: true, altKey: true }), false)).toBe('togglePane');
+    // On a Mac, Option+V types √; the physical key still counts.
+    expect(matchShortcut({ ...key('√', { metaKey: true, altKey: true }), code: 'KeyV' }, true)).toBe('togglePane');
+    expect(SHORTCUTS.find((s) => s.action === 'togglePane')?.keys).toEqual(['Ctrl', 'Alt', 'V']);
+  });
+
+  it('leaves Ctrl+V (paste), Alt+V, Ctrl+Alt+Shift+V and the editor’s Ctrl+Alt+P alone', () => {
+    expect(matchShortcut(key('v', { ctrlKey: true }), true)).toBeUndefined();
+    expect(matchShortcut(key('v', { altKey: true }), false)).toBeUndefined();
+    expect(matchShortcut(key('v', { ctrlKey: true, altKey: true, shiftKey: true }), false)).toBeUndefined();
+    // Ctrl/Cmd+Alt+P belongs to the editor (show the selection in the preview).
+    expect(matchShortcut(key('p', { ctrlKey: true, altKey: true }), true)).toBeUndefined();
   });
 
   describe('typing detection across the editor shadow root', () => {

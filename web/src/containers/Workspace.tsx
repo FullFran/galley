@@ -55,6 +55,10 @@ import { SaveControl } from '../ui/shell/SaveControl';
 import { Skeleton } from '../ui/shell/Skeleton';
 import { Toast } from '../ui/shell/Toasts';
 import { ViewSwitch, type PaneView } from '../ui/shell/ViewSwitch';
+import { ViewMenu } from '../ui/shell/ViewMenu';
+import { escapeExitsFocus, layoutOf, overlayOpen, switchPressed, togglePane, chooseFromSwitch, type Layout, type ViewChange } from '../shell/viewOptions';
+import { useFits } from '../shell/useFits';
+import { matchShortcut, typingAt } from '../shell/shortcuts';
 import type { ConfigSaved } from './ProjectSettings';
 import type { CommentsGateway } from '../domain/comments';
 import { useComments } from './Comments';
@@ -169,6 +173,30 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   // Editor preferences (Writing/Code, Vim) follow the Preferences dialog live.
   const [prefs, setPrefs] = useState(readPrefs);
   useEffect(() => onPrefsChange(setPrefs), []);
+  // View options (the View menu, Preferences): layout, text/preview toggle, focus mode.
+  // Editor and preview fit side by side from 52rem of width (the same width as styles.css).
+  const [fits, measureRef] = useFits(52);
+  const layout = layoutOf(prefs);
+  const focus = !paneless && prefs.focus === true;
+  const setLayout = (next: Layout) => writePrefs({ ...readPrefs(), layout: next });
+  const setFocus = (on: boolean) => writePrefs({ ...readPrefs(), focus: on });
+  const applyView = (change: ViewChange) => ('layout' in change ? setLayout(change.layout) : setView(change.view));
+  const toggleView = () => applyView(togglePane(layout, fits, view));
+  const viewKeys = useRef<(e: KeyboardEvent) => void>(undefined);
+  viewKeys.current = (e) => {
+    if (escapeExitsFocus(e, focus, overlayOpen(document))) {
+      setFocus(false);
+      return;
+    }
+    if (paneless || matchShortcut(e, typingAt(e)) !== 'togglePane') return;
+    e.preventDefault();
+    toggleView();
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => viewKeys.current?.(e);
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   // The default branch: new changes are offered, never merged while editing.
   const [upstream, setUpstream] = useState<UpstreamStatus>();
   const [dismissedHead, setDismissedHead] = useState<string>();
@@ -506,7 +534,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
       return buffersRef.current[path]?.text ?? gateway.readFile(repo, path, working.headSha);
     },
     onOpenAt: (path, line) => void openAt(path, line),
-    onShowPreview: () => setView('preview'),
+    onShowPreview: () => (layout === 'editor' ? setLayout('preview') : setView('preview')),
     onNotice: setNotice,
     onAuthRequired: () => onAuthRequired(unsavedChanges(buffersRef.current)),
   });
@@ -891,13 +919,22 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
       active={active}
       crumbs={crumbs}
       mainClass={away ? undefined : 'workspace-main'}
+      focus={focus}
       banner={banner}
       actions={
         <>
           {aids.status}
           {!away && <EditorModeSwitch mode={mode} onMode={changeMode} />}
           {symbols.button}
-          {!away && <ViewSwitch view={view} onView={setView} />}
+          {!away && <ViewSwitch view={switchPressed(layout, fits, view)} onView={(v) => applyView(chooseFromSwitch(layout, fits, v))} />}
+          {!away && <ViewMenu layout={layout} focus={focus} onLayout={setLayout} onFocus={setFocus} onToggle={toggleView} />}
+          {focus && (
+            <button type="button" class="focus-exit" aria-label={t.view.exitFocusLong} title={t.view.exitFocusHint} onClick={() => setFocus(false)}>
+              <Icon name="close" />
+              <span class="focus-exit-long">{t.view.exitFocus}</span>
+              <span class="focus-exit-short">{t.view.exitFocusShort}</span>
+            </button>
+          )}
           {!away && comments.toggleButton}
           <SaveControl
             dirtyCount={dirty.length + authoring.uploads.length + restored.pending.length}
@@ -922,6 +959,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
                           onSelect: () => changeMode(mode === 'writing' ? 'code' : 'writing'),
                         },
                         ...(comments.enabled ? [{ label: t.comments.toggle, fold: 'small' as const, onSelect: comments.toggle }] : []),
+                        { label: focus ? t.view.exitFocusLong : t.view.focus, fold: 'tiny' as const, onSelect: () => setFocus(!focus) },
                         ...(draftShare.item ? [draftShare.item] : []),
                         ...(symbols.menuItem ? [symbols.menuItem] : []),
                         ...(find.menuItem ? [find.menuItem] : []),
@@ -1081,7 +1119,12 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
           <Skeleton lines={8} label={t.references.loading} />
         )
       ) : (
-        <div class="workspace" data-view={view} data-comments={comments.panel || chat.panel ? 'open' : undefined}>
+        <div
+          ref={measureRef}
+          class="workspace"
+          data-layout={layout}
+          data-view={layout === 'editor' ? 'edit' : layout === 'preview' ? 'preview' : view}
+          data-comments={comments.panel || chat.panel ? 'open' : undefined}>
           <section class="editor-pane" aria-label={t.workspace.editorRegion} data-tour="editor">
             {openPath && open?.merge ? (
               <MergeResolver

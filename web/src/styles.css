@@ -1704,8 +1704,33 @@ input.switch:checked::after {
   font-weight: 600;
 }
 
-.view-switch {
-  display: none;
+/* Edit | Preview: always in the workspace header (the text/preview toggle). */
+.view-switch button {
+  white-space: nowrap;
+}
+
+/* The header's View menu: icon and label, the label folds away at high zoom. */
+.view-button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  white-space: nowrap;
+}
+
+.popover.menu#view-menu {
+  width: min(18rem, calc(100vw - 2rem));
+}
+
+/* Focus mode: the clearly visible way back. */
+.focus-exit {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-2);
+  border-color: var(--accent);
+  color: var(--accent);
+  white-space: nowrap;
 }
 
 /* Toasts: non-modal, over the content. */
@@ -1933,10 +1958,6 @@ input.switch:checked::after {
 }
 
 @container main (width < 52rem) {
-  .view-switch {
-    display: inline-flex;
-  }
-
   .workspace,
   .workspace[data-comments='open'] {
     grid-template-columns: minmax(0, 1fr);
@@ -1952,6 +1973,46 @@ input.switch:checked::after {
   }
 }
 
+/* Editor only, Preview only: one pane at every width. */
+.workspace:not([data-layout='both']) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.workspace:not([data-layout='both']) .editor-pane {
+  border-right: none;
+}
+
+.workspace:not([data-layout='both'])[data-view='edit'] .preview-pane,
+.workspace:not([data-layout='both'])[data-view='preview'] .editor-pane {
+  display: none;
+}
+
+/*
+ * Focus mode: no sidebar, and the header keeps the file name, Edit | Preview,
+ * View, Exit focus and Save. The hidden parts stay mounted (nothing is lost).
+ */
+.shell[data-focus='true'],
+.shell[data-focus='true'][data-collapsed='true'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.shell[data-focus='true'] .sidebar,
+.shell[data-focus='true'] .scrim,
+.shell[data-focus='true'] .menu-button,
+.shell[data-focus='true'] .breadcrumb li:not(:last-child),
+.shell[data-focus='true'] .header-actions .word-count,
+.shell[data-focus='true'] .header-actions .mode-switch,
+.shell[data-focus='true'] .header-actions .symbol-button,
+.shell[data-focus='true'] .header-actions .comments-toggle,
+.shell[data-focus='true'] .header-actions .save-state,
+.shell[data-focus='true'] .header-actions .more-button {
+  display: none;
+}
+
+.shell[data-focus='true'] .breadcrumb li + li::before {
+  content: none;
+}
+
 /* Comments open below 1024px are a drawer over the panes, which stay side by side while they fit. */
 @media (max-width: 1023.98px) {
   @container main (width >= 52rem) {
@@ -1962,7 +2023,8 @@ input.switch:checked::after {
 }
 
 /*
- * The header folds as it narrows, so the save button always fits: secondary
+ * The header folds as it narrows, so the save button and View always fit
+ * (the thresholds follow the Spanish header, the longest): secondary
  * controls leave it for the ⋯ menu (their menu entries carry fold-medium or
  * fold-small), the word count stays in the Outline, and the save state stays
  * readable by screen readers.
@@ -1972,7 +2034,7 @@ input.switch:checked::after {
   display: none;
 }
 
-@container main (width < 52rem) {
+@container main (width < 70rem) {
   .header-actions .word-count,
   .header-actions .mode-switch {
     display: none;
@@ -1983,7 +2045,7 @@ input.switch:checked::after {
   }
 }
 
-@container main (width < 46rem) {
+@container main (width < 54rem) {
   .shell-header,
   .header-actions,
   .save-control {
@@ -2013,6 +2075,53 @@ input.switch:checked::after {
 
   .view-switch button {
     padding: 0 var(--space-2);
+  }
+}
+
+/*
+ * Very narrow headers. A laptop at 300% zoom (30rem): View keeps its icon and
+ * Exit focus its short label. Phones (below 26rem): View folds into ⋯ (focus
+ * mode is there; layouts are in Preferences) and Exit focus keeps its icon.
+ */
+.focus-exit-short,
+.menu-item.fold-tiny {
+  display: none;
+}
+
+@container main (width < 34rem) {
+  .focus-exit-long {
+    display: none;
+  }
+
+  .focus-exit-short {
+    display: inline;
+  }
+
+  .shell[data-focus='true'] .view-button-label {
+    display: none;
+  }
+}
+
+@container main (width < 30rem) {
+  .view-button-label {
+    display: none;
+  }
+}
+
+@container main (width < 26rem) {
+  .header-actions .view-menu,
+  .focus-exit-short {
+    display: none;
+  }
+
+  .focus-exit {
+    width: 2.25rem;
+    justify-content: center;
+    padding: 0;
+  }
+
+  .menu-item.fold-tiny {
+    display: flex;
   }
 }
 
