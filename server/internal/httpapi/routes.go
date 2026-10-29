@@ -33,6 +33,8 @@ type Deps struct {
 	Admin AdminService
 	// Notify enables the notification routes when set.
 	Notify NotifyService
+	// Tour enables authenticated per-user onboarding state when set.
+	Tour TourStore
 	// ChatHeartbeat is how often a chat stream sends a heartbeat comment and
 	// re-checks the session and repository access; defaults to
 	// DefaultChatHeartbeat.
@@ -50,6 +52,15 @@ func Register(r *router.Router[*core.RequestEvent], d Deps) {
 	}
 	r.GET(HealthPath, health)
 	registerAuth(r, d)
+	if d.Notify != nil || d.Tour != nil {
+		me := credentialedGroup(r, MePrefix, d.FrontendOrigin, credentialedMethods)
+		if d.Notify != nil {
+			registerNotifyMe(me, d)
+		}
+		if d.Tour != nil {
+			registerTour(me, d)
+		}
+	}
 	if d.Comments == nil && d.Drafts == nil && d.Chat == nil && d.Admin == nil && d.Notify == nil {
 		return
 	}

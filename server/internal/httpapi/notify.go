@@ -39,9 +39,6 @@ type notifyHandlers struct{ Deps }
 
 func registerNotify(r *router.Router[*core.RequestEvent], repos *router.RouterGroup[*core.RequestEvent], d Deps) {
 	h := notifyHandlers{d}
-	me := credentialedGroup(r, MePrefix, d.FrontendOrigin, credentialedMethods)
-	me.GET("/notifications", withActor(d, h.settings))
-	me.PUT("/notifications", withActor(d, h.update))
 	// Opened from the mail: no Origin and no session; the signed token is
 	// the authorization. GET only shows a button (mail scanners fetch
 	// links); POST verifies.
@@ -52,6 +49,12 @@ func registerNotify(r *router.Router[*core.RequestEvent], repos *router.RouterGr
 
 	repos.POST("/{repo_id}/notify/review-requested", withActor(d, h.reviewRequested))
 	repos.POST("/{repo_id}/notify/assigned", withActor(d, h.assigned))
+}
+
+func registerNotifyMe(me *router.RouterGroup[*core.RequestEvent], d Deps) {
+	h := notifyHandlers{d}
+	me.GET("/notifications", withActor(d, h.settings))
+	me.PUT("/notifications", withActor(d, h.update))
 }
 
 func withActor(d Deps, fn actorHandler) func(*core.RequestEvent) error {
