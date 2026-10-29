@@ -119,7 +119,7 @@ export class GitHubClient {
       try {
         // Only CORS-safelisted headers besides Authorization, so the redirected
         // request (without Authorization) needs no preflight at the blob host.
-        return await this.fetch(url.href, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' }, redirect: 'follow' });
+        return await this.fetch(url.href, { headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json' }, redirect: 'follow', cache: 'no-cache' });
       } catch {
         throw new TransientError('artifact download failed');
       }
@@ -152,8 +152,13 @@ export class GitHubClient {
     };
     if (options.body !== undefined) headers['Content-Type'] = 'application/json';
     try {
+      // GitHub sends Cache-Control: private, max-age=60. Served from the
+      // browser cache, a stale branch head made saves fail with a false
+      // conflict. no-cache revalidates with the ETag (an unchanged answer is
+      // a 304, which GitHub does not count against the rate limit).
       const res = await this.fetch(url, {
         method: options.method ?? 'GET',
+        cache: 'no-cache',
         headers,
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
       });

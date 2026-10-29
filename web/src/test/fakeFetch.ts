@@ -4,6 +4,7 @@ export interface RecordedRequest {
   headers: Headers;
   body: unknown;
   credentials: RequestCredentials | undefined;
+  cache: RequestCache | undefined;
 }
 
 export type Route = (req: RecordedRequest) => Response | Promise<Response> | undefined;
@@ -29,6 +30,7 @@ export function fakeFetch(routes: Route[]) {
       headers: new Headers(init.headers),
       body: raw === undefined ? undefined : (JSON.parse(raw) as unknown),
       credentials: init.credentials,
+      cache: init.cache,
     };
     requests.push(req);
     for (const route of routes) {
