@@ -26,9 +26,13 @@ export function StatusBanner({ status, onReload, onDismiss }: StatusBannerProps)
       return status.pullRequestUrl ? (
         <p class="banner banner-ok" role="status">
           {m.saved}{' '}
-          <a href={status.pullRequestUrl} target="_blank" rel="noopener noreferrer">
-            {m.viewProposal}
-          </a>
+          {status.pullRequestUrl.startsWith('#') ? (
+            <a href={status.pullRequestUrl}>{m.viewProposalHere}</a>
+          ) : (
+            <a href={status.pullRequestUrl} target="_blank" rel="noopener noreferrer">
+              {m.viewProposal}
+            </a>
+          )}
         </p>
       ) : (
         <p class="banner banner-warn" role="status">

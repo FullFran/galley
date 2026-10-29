@@ -22,6 +22,21 @@ Storage and network failures do not block writing. English and Spanish guides
 respect reduced motion; driver.js is loaded on demand with bundled external CSS,
 without relaxing the production CSP.
 
+## Demo mode
+
+Open the app with `?demo` (the landing page and **Help → Try the demo** link to
+it) to try galley on a made-up paper about toast, without signing in. In-memory
+gateways stand in for GitHub and the galley API, so nothing leaves the browser:
+saving creates a commit and a proposal in memory, and a co-author's proposal and
+comment are there from the start. A reload starts over; the banner at the top
+leaves the demo. The flag lives in `sessionStorage` because the app drops the
+query string at boot. The demo code (`web/src/demo/`) loads on demand.
+
+In the demo, the full tour walks the whole flow: it moves between the
+repository list, the paper, the comments panel and the proposals, and Back works
+across screens. Each screen mounts its own shell, so a step that changes screen
+hands the tour over to the next shell. The tour for signed-in users is unchanged.
+
 ## Layout
 
 - `web/`: the frontend (Vite, TypeScript, Preact). Served from GitHub Pages at

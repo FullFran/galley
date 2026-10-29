@@ -59,6 +59,7 @@ export const es: Messages = {
     groupAdmin: 'Administración',
     help: 'Ayuda',
     tour: 'Hacer el recorrido',
+    demo: 'Probar la demo',
     about: 'Acerca de galley',
     proposalsCount: (n: number) => `Propuestas, ${n} ${p(n, 'abierta', 'abiertas')}`,
     comments: 'Comentarios',
@@ -68,6 +69,10 @@ export const es: Messages = {
     mine: (n: number) => `${n} ${p(n, 'tuya', 'tuyas')}`,
     screenGuide: 'Guía de esta pantalla',
     asks: 'Mis peticiones',
+  },
+  demo: {
+    banner: 'Demo: un paper inventado. Nada sale de tu navegador y al recargar empieza de cero.',
+    exit: 'Salir de la demo',
   },
   tour: {
     next: 'Siguiente', back: 'Atrás', done: 'Terminar', skip: 'Saltar recorrido',
@@ -84,6 +89,12 @@ export const es: Messages = {
       proposals: ['Revisa en equipo', 'Las propuestas reúnen cambios para revisarlos antes de incorporarlos al artículo.'],
       comments: ['Comenta el artículo', 'Lee y responde a los comentarios en este panel.'],
       help: ['Vuelve cuando quieras', 'Ayuda ofrece el recorrido completo, una guía de la pantalla actual y los atajos de teclado. También puedes repetir el recorrido desde tu cuenta.'],
+      demoWelcome: ['Te damos la bienvenida a la demo de galley', 'Es un artículo inventado sobre tostadas, así que prueba lo que quieras. El recorrido cambia de pantalla para enseñarte el flujo completo.'],
+      repos: ['Tus artículos', 'Aquí aparece cada repositorio que abres con galley. La demo tiene solo uno.'],
+      demoSave: ['Guarda para revisión', 'Cambia algo y elige Guardar para revisión: galley lo convierte en un commit y una propuesta. Adelante, nada sale de tu navegador.'],
+      demoComments: ['Comenta el artículo', 'Tu coautora Ada dejó aquí una pregunta. Respóndela, o selecciona texto en el editor para abrir un hilo nuevo.'],
+      demoProposals: ['Revisa en equipo', 'Las propuestas reúnen cambios antes de llegar al artículo. Abre la de Ada para ver el diff y comentarlo. Lo que tú guardes también aparece aquí.'],
+      demoDone: ['Este es el flujo completo', 'Sigue usando la demo todo lo que quieras. Al recargar empieza de cero, y el aviso de arriba te lleva al galley de verdad.'],
     },
   },
   shell: {
@@ -190,6 +201,7 @@ export const es: Messages = {
     title: 'Escribe tu artículo en el navegador.',
     lead: 'galley convierte cada guardado en una propuesta que tu equipo puede revisar en GitHub.',
     signIn: 'Entrar con GitHub',
+    tryDemo: 'Probar la demo',
     access:
       'Entras con tu cuenta de GitHub. galley solo ve los artículos donde está instalada su GitHub App, y solo cambia archivos cuando eliges Guardar para revisión.',
     loginFailed: 'No se pudo completar la entrada. Inténtalo de nuevo.',
@@ -305,6 +317,7 @@ export const es: Messages = {
   saveStatus: {
     saved: 'Guardado. Los cambios quedan propuestos para revisión.',
     viewProposal: 'Ver la propuesta en GitHub',
+    viewProposalHere: 'Ver la propuesta',
     savedNoProposal: 'Guardado, pero no se pudo abrir la propuesta. Vuelve a intentarlo más tarde.',
     conflict: 'Otra persona cambió el documento después de que lo abrieras, así que tus cambios no se guardaron.',
     conflictReloaded:
