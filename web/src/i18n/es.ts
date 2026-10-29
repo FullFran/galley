@@ -354,6 +354,10 @@ export const es: Messages = {
   },
   files: {
     edited: '(editado)',
+    viewFigure: 'Ver figura',
+    openPdf: 'Abrir PDF',
+    pdfBlocked: (path: string) => `El navegador no abrió ${path} en una pestaña nueva, así que se ha descargado.`,
+    viewFailed: (path: string) => `No se pudo cargar ${path}.`,
     truncated: 'Algunos archivos no aparecen porque el repositorio es muy grande.',
   },
   authoring: {

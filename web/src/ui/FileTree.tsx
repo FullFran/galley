@@ -1,7 +1,7 @@
 import { useRef, useState } from 'preact/hooks';
 import type { UploadRule } from '../config/schema';
 import { useT } from '../i18n';
-import { buildTree, fileKind, type TreeNode } from '../workspace/tree';
+import { buildTree, fileAction, fileKind, type TreeNode } from '../workspace/tree';
 import { fileIcon, Icon } from './shell/icons';
 
 export interface FileTreeProps {
@@ -16,6 +16,13 @@ export interface FileTreeProps {
   /** New files waiting for the next save (sections, uploads). */
   pending?: Set<string>;
   onUpload?: (folder: string, files: File[]) => void;
+  /**
+   * Shows a file read-only: images in the figure viewer, PDFs in a new tab.
+   * Without it, files in upload folders stay disabled like other binaries.
+   */
+  onView?: (path: string, as: 'image' | 'pdf') => void;
+  /** Admins: any image file opens in the viewer, not only those in upload folders. */
+  viewAnyImage?: boolean;
 }
 
 export function FileTree(props: FileTreeProps) {
@@ -94,36 +101,49 @@ function Folder({ node, ...rest }: { node: Extract<TreeNode, { kind: 'folder' }>
 }
 
 function Children({ nodes, ...rest }: { nodes: TreeNode[] } & FileTreeProps) {
-  const t = useT();
   return (
     <>
       {nodes.map((node) =>
         node.kind === 'folder' ? (
           <Folder key={node.path} node={node} {...rest} />
         ) : (
-          <li key={node.path}>
-            <button
-              type="button"
-              class={`tree-item file file-${fileKind(node.path)}`}
-              disabled={fileKind(node.path) === 'binary'}
-              aria-current={node.path === rest.openPath ? 'true' : undefined}
-              title={rest.labels?.[node.path] ? node.path : undefined}
-              onClick={() => rest.onOpen(node.path)}
-            >
-              <Icon name={fileIcon(node.path)} />
-              <span class="tree-label">{rest.labels?.[node.path] ?? node.name}</span>
-              {rest.pending?.has(node.path) && <span class="muted tree-suffix">{t.authoring.newMark}</span>}
-              {(rest.dirty.has(node.path) || rest.pending?.has(node.path)) && (
-                <>
-                  <span class="edited-dot" aria-hidden="true" />
-                  <span class="visually-hidden">{t.files.edited}</span>
-                </>
-              )}
-            </button>
-          </li>
+          <FileRow key={node.path} path={node.path} name={node.name} {...rest} />
         ),
       )}
     </>
+  );
+}
+
+function FileRow({ path, name, ...rest }: { path: string; name: string } & FileTreeProps) {
+  const t = useT();
+  const action = rest.onView
+    ? fileAction(path, { uploadFolders: (rest.uploads ?? []).map((u) => u.folder), anyImage: rest.viewAnyImage })
+    : fileKind(path) === 'binary'
+      ? { kind: 'none' as const }
+      : { kind: 'open' as const };
+  const view = action.kind === 'view' ? action.as : undefined;
+  return (
+    <li>
+      <button
+        type="button"
+        class={`tree-item file file-${fileKind(path)}`}
+        disabled={action.kind === 'none'}
+        aria-current={path === rest.openPath ? 'true' : undefined}
+        title={rest.labels?.[path] ? path : undefined}
+        onClick={() => (view ? rest.onView?.(path, view) : rest.onOpen(path))}
+      >
+        <Icon name={fileIcon(path)} />
+        {view && <span class="visually-hidden">{view === 'image' ? t.files.viewFigure : t.files.openPdf} </span>}
+        <span class="tree-label">{rest.labels?.[path] ?? name}</span>
+        {rest.pending?.has(path) && <span class="muted tree-suffix">{t.authoring.newMark}</span>}
+        {(rest.dirty.has(path) || rest.pending?.has(path)) && (
+          <>
+            <span class="edited-dot" aria-hidden="true" />
+            <span class="visually-hidden">{t.files.edited}</span>
+          </>
+        )}
+      </button>
+    </li>
   );
 }
 

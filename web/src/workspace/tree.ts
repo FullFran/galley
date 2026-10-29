@@ -60,3 +60,23 @@ export function fileKind(path: string): 'document' | 'text' | 'binary' {
   if (BINARY.has(ext)) return 'binary';
   return 'text';
 }
+
+const IMAGE = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']);
+
+export type FileAction = { kind: 'open' } | { kind: 'view'; as: 'image' | 'pdf' } | { kind: 'none' };
+
+/**
+ * What a click on a file in the tree does. Files in an upload folder are shown
+ * read-only (images in the figure viewer, svg included; PDFs in a new tab), as
+ * are any images when `anyImage` (admins). Other binaries cannot be opened.
+ */
+export function fileAction(path: string, opts: { uploadFolders: readonly string[]; anyImage?: boolean }): FileAction {
+  const ext = /\.([^./]+)$/.exec(path)?.[1]?.toLowerCase() ?? '';
+  const inUpload = opts.uploadFolders.some((f) => {
+    const folder = f.replace(/\/+$/, '');
+    return folder !== '' && path.startsWith(`${folder}/`);
+  });
+  if (IMAGE.has(ext) && (inUpload || opts.anyImage)) return { kind: 'view', as: 'image' };
+  if (ext === 'pdf' && inUpload) return { kind: 'view', as: 'pdf' };
+  return fileKind(path) === 'binary' ? { kind: 'none' } : { kind: 'open' };
+}

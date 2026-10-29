@@ -346,6 +346,10 @@ export const en = {
   },
   files: {
     edited: '(edited)',
+    viewFigure: 'View figure',
+    openPdf: 'Open PDF',
+    pdfBlocked: (path: string) => `The browser did not open ${path} in a new tab, so it was downloaded.`,
+    viewFailed: (path: string) => `Could not load ${path}.`,
     truncated: 'Some files are not listed because the repository is very large.',
   },
   authoring: {
