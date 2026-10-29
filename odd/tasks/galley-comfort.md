@@ -162,7 +162,9 @@ edit it, but anyone with write access could still change it on GitHub).
 - [ ] CX-C Comments UI phase 1, review thread resolve, click-to-jump
   (`feat/comments-ui`; roadmap 2, 3, 5). Route: delegated (2+ non-trivial
   files). Implemented and checked; pending review, commit and PR.
-- [ ] CX3 Guided tour.
+- [x] CX3 Guided tour. Delivered in #36/#37/#38 and deployed at release
+  `13deacc9f0bb5262e47ae9e1c5c953ecbc504a02`; verification and rollback
+  evidence: `odd/tasks/interactive-tour-release.md` (2026-10-29).
 - [ ] CX4 References manager (`feat/references`, with C7). Route: delegated (2+
   non-trivial files). Implemented and checked; pending review, commit and PR.
 - [ ] C4 Drafts. Server API merged. UI (`feat/drafts-chat-ui`, with roadmap
