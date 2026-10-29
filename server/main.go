@@ -237,6 +237,7 @@ func newDeps(app core.App) (httpapi.Deps, *chat.Service, error) {
 		Drafts:         draftSvc,
 		Chat:           httpapi.ChatAdapter(chatSvc),
 		Notify:         notifySvc,
+		Tour:           store,
 		OnAccessChange: access.InvalidateAll,
 		FrontendOrigin: cfg.FrontendOrigin,
 		WebhookSecret:  []byte(cfg.WebhookSecret),
