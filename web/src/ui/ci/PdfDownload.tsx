@@ -6,6 +6,7 @@ import type { Document } from '../../ci/unzip';
 import { useT } from '../../i18n';
 import { githubUrl } from '../../review/status';
 import { Toast } from '../shell/Toasts';
+import { toastOutcome } from './pdfView';
 
 interface Link {
   name: string;
@@ -53,11 +54,11 @@ export function usePdfDownload(ci: CiGateway | undefined, onAuthRequired?: () =>
       ci.documents(repo, target).then(
         (result) => {
           if (mine !== seq.current) return;
-          if (result.kind !== 'ready') return replace({ kind: result.kind, runUrl: result.runUrl });
-          const { pdf, docx, diff } = result.docs;
-          if (!pdf) return replace({ kind: 'empty', runUrl: result.runUrl });
+          const outcome = toastOutcome(result);
+          if (outcome.kind !== 'ready') return replace(outcome);
+          const { pdf, docx, diff } = outcome;
           const link = (doc: Document) => ({ name: doc.name, url: URL.createObjectURL(new Blob([doc.bytes as BlobPart], { type: doc.type })) });
-          replace({ kind: 'ready', pdf: link(pdf), docx: docx && link(docx), diff: diff && link(diff), runUrl: result.runUrl });
+          replace({ kind: 'ready', pdf: link(pdf), docx: docx && link(docx), diff: diff && link(diff), runUrl: outcome.runUrl });
         },
         (err: unknown) => {
           if (mine !== seq.current) return;

@@ -1887,6 +1887,75 @@ input.switch:checked::after {
   background: var(--bg);
 }
 
+/* The live preview, kept mounted (hidden) behind the compiled PDF view. */
+.preview-live {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.preview-live[hidden] {
+  display: none;
+}
+
+/* The compiled PDF of the default branch (layout "Editor + compiled PDF"). */
+.pdf-view {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pdf-view-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  min-height: 2.75rem;
+  margin-bottom: var(--space-2);
+}
+
+.pdf-view-label {
+  flex: 1 1 12rem;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.pdf-view-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.pdf-view-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  background: var(--frame-bg);
+}
+
+.pdf-view-message {
+  margin: var(--space-4) 0;
+  max-width: 40rem;
+}
+
+.pdf-view-message p {
+  margin: 0 0 var(--space-2);
+}
+
+.pdf-view-note {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+}
+
 .preview {
   display: flex;
   flex: 1;
@@ -1973,17 +2042,31 @@ input.switch:checked::after {
   }
 }
 
-/* Editor only, Preview only: one pane at every width. */
-.workspace:not([data-layout='both']) {
+/* Editor only, Preview only: one pane at every width (Editor + compiled PDF is two panes, like both). */
+.workspace:not([data-layout='both']):not([data-layout='pdf']) {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.workspace:not([data-layout='both']) .editor-pane {
+.workspace:not([data-layout='both']):not([data-layout='pdf']) .editor-pane {
   border-right: none;
 }
 
-.workspace:not([data-layout='both'])[data-view='edit'] .preview-pane,
-.workspace:not([data-layout='both'])[data-view='preview'] .editor-pane {
+.workspace:not([data-layout='both']):not([data-layout='pdf'])[data-view='edit'] .preview-pane,
+.workspace:not([data-layout='both']):not([data-layout='pdf'])[data-view='preview'] .editor-pane {
+  display: none;
+}
+
+/* Editor + compiled PDF after choosing Edit or PDF: that pane alone, at every width. */
+.workspace[data-single='true'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.workspace[data-single='true'] .editor-pane {
+  border-right: none;
+}
+
+.workspace[data-single='true'][data-view='edit'] .preview-pane,
+.workspace[data-single='true'][data-view='preview'] .editor-pane {
   display: none;
 }
 

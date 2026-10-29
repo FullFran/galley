@@ -2,7 +2,7 @@ import { defineConfig, type Connect, type Plugin } from 'vite';
 
 // Strict CSPs for the production build only. The Vite dev server injects inline
 // scripts and styles for HMR, which these policies would block.
-const APP_CSP = [
+export const APP_CSP = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self'",
@@ -15,7 +15,10 @@ const APP_CSP = [
   // for the artifact zip endpoint alone.
   // api.crossref.org: DOI to BibTeX in the references manager (CORS `*`, no credentials).
   "connect-src 'self' https://api.github.com https://galley-api.fullfran.com https://*.blob.core.windows.net https://api.crossref.org",
-  "frame-src 'self'",
+  // blob: for the compiled PDF view: the default branch's PDF, fetched from the
+  // CI artifact and shown from a blob: URL (type application/pdf) in an iframe,
+  // in the browser's own PDF viewer. object-src stays 'none'.
+  "frame-src 'self' blob:",
   "worker-src 'self'",
   "object-src 'none'",
   "base-uri 'none'",

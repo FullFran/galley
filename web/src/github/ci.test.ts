@@ -63,8 +63,11 @@ describe('GitHub CI gateway', () => {
       on('GET', `${R}/actions/runs/200/artifacts?per_page=100`, () => json({ artifacts: [{ id: 6, name: 'pdf', expired: false, size_in_bytes: 10 }] })),
       on('GET', `${R}/actions/artifacts/6/zip`, () => new Response(zip)),
     ]);
-    expect((await gw.documents(repo, { branch: 'main' })).kind).toBe('ready');
+    const result = await gw.documents(repo, { branch: 'main' });
+    expect(result.kind).toBe('ready');
     expect(requests.map((r) => r.url)).toHaveLength(3);
+    // Which build it is: the commit, its branch and when the run started (for the PDF view's label).
+    if (result.kind === 'ready') expect(result.build).toEqual({ sha: 'h1', branch: 'main', createdAt: '2026-10-28T10:00:00Z' });
   });
 
   it('says expired when the artifact list or the download says so', async () => {

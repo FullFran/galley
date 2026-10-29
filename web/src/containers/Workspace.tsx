@@ -56,7 +56,8 @@ import { Skeleton } from '../ui/shell/Skeleton';
 import { Toast } from '../ui/shell/Toasts';
 import { ViewSwitch, type PaneView } from '../ui/shell/ViewSwitch';
 import { ViewMenu } from '../ui/shell/ViewMenu';
-import { escapeExitsFocus, layoutOf, overlayOpen, switchPressed, togglePane, chooseFromSwitch, type Layout, type ViewChange } from '../shell/viewOptions';
+import { escapeExitsFocus, layoutOf, overlayOpen, showsPdf, switchPressed, togglePane, chooseFromSwitch, type Layout, type ViewChange } from '../shell/viewOptions';
+import { CompiledPdfView } from '../ui/ci/CompiledPdf';
 import { useFits } from '../shell/useFits';
 import { matchShortcut, typingAt } from '../shell/shortcuts';
 import type { ConfigSaved } from './ProjectSettings';
@@ -177,11 +178,24 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
   // Editor and preview fit side by side from 52rem of width (the same width as styles.css).
   const [fits, measureRef] = useFits(52);
   const layout = layoutOf(prefs);
+  // Editor + compiled PDF: the second pane shows the default branch's PDF from CI.
+  const pdfLayout = showsPdf(layout);
   const focus = !paneless && prefs.focus === true;
   const setLayout = (next: Layout) => writePrefs({ ...readPrefs(), layout: next });
   const setFocus = (on: boolean) => writePrefs({ ...readPrefs(), focus: on });
-  const applyView = (change: ViewChange) => ('layout' in change ? setLayout(change.layout) : setView(change.view));
-  const toggleView = () => applyView(togglePane(layout, fits, view));
+  // PDF layout: Edit | PDF shows one pane alone even while both fit (not stored; choosing a layout resets it).
+  const [single, setSingle] = useState(false);
+  useEffect(() => setSingle(false), [layout]);
+  const applyView = (change: ViewChange) => {
+    if ('layout' in change) return setLayout(change.layout);
+    setView(change.view);
+    if (change.single) setSingle(true);
+  };
+  const chooseLayout = (next: Layout) => {
+    setSingle(false);
+    setLayout(next);
+  };
+  const toggleView = () => applyView(togglePane(layout, fits, view, single));
   const viewKeys = useRef<(e: KeyboardEvent) => void>(undefined);
   viewKeys.current = (e) => {
     if (escapeExitsFocus(e, focus, overlayOpen(document))) {
@@ -573,7 +587,8 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
       return buffersRef.current[path]?.text ?? gateway.readFile(repo, path, working.headSha);
     },
     onOpenAt: (path, line) => void openAt(path, line),
-    onShowPreview: () => (layout === 'editor' ? setLayout('preview') : setView('preview')),
+    // The PDF layout hides the live preview: show it again (side by side) for the jump.
+    onShowPreview: () => (layout === 'editor' ? setLayout('preview') : layout === 'pdf' ? setLayout('both') : setView('preview')),
     onNotice: setNotice,
     onAuthRequired: () => onAuthRequired(unsavedChanges(buffersRef.current)),
   });
@@ -965,8 +980,8 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
           {aids.status}
           {!away && <EditorModeSwitch mode={mode} onMode={changeMode} />}
           {symbols.button}
-          {!away && <ViewSwitch view={switchPressed(layout, fits, view)} onView={(v) => applyView(chooseFromSwitch(layout, fits, v))} />}
-          {!away && <ViewMenu layout={layout} focus={focus} onLayout={setLayout} onFocus={setFocus} onToggle={toggleView} />}
+          {!away && <ViewSwitch view={switchPressed(layout, fits, view, single)} pdf={pdfLayout} onView={(v) => applyView(chooseFromSwitch(layout, fits, v))} />}
+          {!away && <ViewMenu layout={layout} focus={focus} onLayout={chooseLayout} onFocus={setFocus} onToggle={toggleView} />}
           {focus && (
             <button type="button" class="focus-exit" aria-label={t.view.exitFocusLong} title={t.view.exitFocusHint} onClick={() => setFocus(false)}>
               <Icon name="close" />
@@ -1165,6 +1180,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
           class="workspace"
           data-layout={layout}
           data-view={layout === 'editor' ? 'edit' : layout === 'preview' ? 'preview' : view}
+          data-single={pdfLayout && single ? 'true' : undefined}
           data-comments={comments.panel || chat.panel ? 'open' : undefined}>
           <section class="editor-pane" aria-label={t.workspace.editorRegion} data-tour="editor">
             {openPath && open?.merge ? (
@@ -1203,7 +1219,12 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
               {announcement}
             </p>
           </section>
-          <section class="preview-pane" aria-label={t.workspace.previewRegion} data-tour="preview">
+          <section class="preview-pane" aria-label={pdfLayout ? t.ci.pdfView.region : t.workspace.previewRegion} data-tour="preview">
+            {pdfLayout && (
+              <CompiledPdfView ci={shell.ci} repo={repo} onAuthRequired={() => onAuthRequired(unsavedChanges(buffersRef.current))} />
+            )}
+            {/* The live preview stays mounted (and compiled) behind the PDF, so switching back is instant. */}
+            <div class="preview-live" hidden={pdfLayout}>
             <Preview
               gateway={authoring.previewGateway}
               repo={repo}
@@ -1217,6 +1238,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
               {...comments.preview}
             />
             {comments.previewAction}
+            </div>
           </section>
           {comments.panel}
           {chat.panel}

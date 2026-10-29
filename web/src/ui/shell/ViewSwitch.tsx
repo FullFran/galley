@@ -7,9 +7,9 @@ export type { PaneView };
  * Edit | Preview: the one-click switch between the text only and the preview
  * only (also Ctrl+Alt+V). The pressed half is the pane shown; while editor and
  * preview show side by side neither is pressed, and either half shows that
- * pane alone.
+ * pane alone. With the PDF layout the second half is the compiled PDF.
  */
-export function ViewSwitch({ view, onView }: { view: PaneView | undefined; onView: (view: PaneView) => void }) {
+export function ViewSwitch({ view, pdf = false, onView }: { view: PaneView | undefined; pdf?: boolean; onView: (view: PaneView) => void }) {
   const t = useT();
   const m = t.workspace;
   return (
@@ -17,8 +17,12 @@ export function ViewSwitch({ view, onView }: { view: PaneView | undefined; onVie
       <button type="button" aria-pressed={view === 'edit'} title={`${t.view.editorOnly} (Ctrl+Alt+V)`} onClick={() => onView('edit')}>
         {m.edit}
       </button>
-      <button type="button" aria-pressed={view === 'preview'} title={`${t.view.previewOnly} (Ctrl+Alt+V)`} onClick={() => onView('preview')}>
-        {m.preview}
+      <button
+        type="button"
+        aria-pressed={view === 'preview'}
+        title={`${pdf ? t.view.pdfOnly : t.view.previewOnly} (Ctrl+Alt+V)`}
+        onClick={() => onView('preview')}>
+        {pdf ? t.view.pdf : m.preview}
       </button>
     </div>
   );
