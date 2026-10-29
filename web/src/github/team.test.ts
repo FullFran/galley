@@ -36,7 +36,7 @@ describe('GitHub team gateway: asks', () => {
     expect(posts[0]?.body).toMatchObject({ name: 'galley-ask' });
     expect(posts[1]?.body).toEqual({ title: 'Due 2026-10-30', due_on: '2026-10-30T12:00:00Z' });
     expect(posts[2]?.body).toMatchObject({ title: 'Review: Methods', labels: ['galley-ask'], assignees: ['ben'], milestone: 5 });
-    expect(tokens.getAccessToken).toHaveBeenCalledWith(7);
+    expect(tokens.getAccessToken).toHaveBeenCalledWith();
   });
 
   it('reuses an existing label and milestone', async () => {

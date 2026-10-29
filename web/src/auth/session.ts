@@ -3,14 +3,17 @@ import { AuthRequiredError, GatewayError, TransientError } from '../domain';
 /** Default API base for local development (`go run . serve`). */
 export const DEFAULT_API_BASE = 'http://127.0.0.1:8090';
 
-/** Tokens are refreshed this long before `expires_at`. */
+/** Tokens are refreshed this long before `expires_at` (less than the server's 5-minute reuse margin). */
 const REFRESH_MARGIN_MS = 60_000;
 
 export interface Session {
-  /** Returns a GitHub user access token, optionally scoped to one repository. */
-  getAccessToken(repositoryId?: number): Promise<string>;
-  /** Drops the cached token so the next call fetches a new one. */
-  invalidate(): void;
+  /** Returns the user's GitHub access token (one per user, shared by every tab and device). */
+  getAccessToken(): Promise<string>;
+  /**
+   * With `token`: GitHub rejected that token, so the next call asks for a new
+   * one, unless a newer token already replaced it. Without: drops everything.
+   */
+  invalidate(token?: string): void;
   /** URL for a top-level navigation that starts the GitHub sign-in. */
   loginUrl(): string;
   logout(): Promise<void>;
@@ -23,7 +26,6 @@ export interface SessionOptions {
 }
 
 interface CachedToken {
-  key: string;
   token: string;
   expiresAt: number;
 }
@@ -41,13 +43,19 @@ export function createSession(options: SessionOptions = {}): Session {
   const doFetch = options.fetch ?? globalThis.fetch.bind(globalThis);
   const now = options.now ?? Date.now;
   let cached: CachedToken | undefined;
-  const inflight = new Map<string, Promise<string>>();
-  // Bumped by invalidate/logout so a fetch already in flight cannot refill the cache.
+  // One request at a time: every caller, including parallel calls that just
+  // saw GitHub answer 401, shares it.
+  let inflight: Promise<string> | undefined;
+  // The token GitHub refused, reported on the next request so the server
+  // refreshes instead of handing it out again.
+  let rejected: string | undefined;
+  // Bumped by a full invalidate/logout so a fetch already in flight cannot refill the cache.
   let generation = 0;
   const reset = () => {
     generation++;
     cached = undefined;
-    inflight.clear();
+    inflight = undefined;
+    rejected = undefined;
   };
 
   const post = async (path: string, body?: unknown): Promise<Response> => {
@@ -63,9 +71,10 @@ export function createSession(options: SessionOptions = {}): Session {
     }
   };
 
-  const fetchToken = async (key: string, repositoryId?: number): Promise<string> => {
+  const fetchToken = async (): Promise<string> => {
     const started = generation;
-    const res = await post('token', repositoryId === undefined ? undefined : { repository_id: repositoryId });
+    const reported = rejected;
+    const res = await post('token', reported === undefined ? undefined : { rejected: reported });
     if (res.status === 401) throw new AuthRequiredError('sign in required');
     if (res.status >= 500) throw new TransientError(`token request failed (${res.status})`);
     if (!res.ok) throw new GatewayError(`token request rejected (${res.status})`);
@@ -76,28 +85,31 @@ export function createSession(options: SessionOptions = {}): Session {
     if (typeof data.access_token !== 'string' || Number.isNaN(expiresAt)) {
       throw new GatewayError('malformed token response');
     }
-    if (started === generation) cached = { key, token: data.access_token, expiresAt };
+    if (started === generation) {
+      cached = { token: data.access_token, expiresAt };
+      if (rejected === reported) rejected = undefined;
+    }
     return data.access_token;
   };
 
   return {
-    getAccessToken(repositoryId) {
-      const key = repositoryId === undefined ? '*' : String(repositoryId);
-      if (cached?.key === key && cached.expiresAt - REFRESH_MARGIN_MS > now()) {
-        return Promise.resolve(cached.token);
-      }
-      let pending = inflight.get(key);
-      if (!pending) {
-        const request: Promise<string> = fetchToken(key, repositoryId).finally(() => {
-          if (inflight.get(key) === request) inflight.delete(key);
+    getAccessToken() {
+      if (cached && cached.expiresAt - REFRESH_MARGIN_MS > now()) return Promise.resolve(cached.token);
+      if (!inflight) {
+        const request: Promise<string> = fetchToken().finally(() => {
+          if (inflight === request) inflight = undefined;
         });
-        pending = request;
-        inflight.set(key, request);
+        inflight = request;
       }
-      return pending;
+      return inflight;
     },
-    invalidate() {
-      reset();
+    invalidate(token) {
+      if (token === undefined) return reset();
+      // Only the current token can be rejected: a report about an older one
+      // (another call already got a new token) changes nothing.
+      if (cached?.token !== token) return;
+      cached = undefined;
+      rejected = token;
     },
     loginUrl() {
       return `${base}/api/galley/auth/login`;

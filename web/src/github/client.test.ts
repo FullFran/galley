@@ -40,7 +40,7 @@ describe('artifact zip redirect allowance', () => {
     const { gh, requests } = client([
       (req) => (req.url === ZIP ? landedAt(BLOB, new Response(new Uint8Array([80, 75, 3, 4]), { status: 200 })) : undefined),
     ]);
-    const res = await gh.downloadArtifact('/repos/octo/paper/actions/artifacts/42/zip', 7);
+    const res = await gh.downloadArtifact('/repos/octo/paper/actions/artifacts/42/zip');
     expect(res).toEqual({ kind: 'ok', bytes: new Uint8Array([80, 75, 3, 4]) });
     expect(requests[0]?.headers.get('Authorization')).toBe('Bearer tok');
     // No custom header, so the redirected request needs no CORS preflight at the blob host.

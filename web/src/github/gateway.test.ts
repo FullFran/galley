@@ -110,7 +110,7 @@ describe('GitHub gateway', () => {
     });
     expect(calls(requests)).not.toContain(`GET ${R}/git/ref/heads/main`);
     expect(requests.some((r) => r.method === 'PATCH')).toBe(false);
-    expect(source.getAccessToken).toHaveBeenCalledWith(7);
+    expect(source.getAccessToken).toHaveBeenCalledWith();
   });
 
   it('fast-forwards a working branch that is only behind the default branch', async () => {
@@ -396,6 +396,7 @@ describe('GitHub gateway', () => {
 
     await expect(gw.listRepositories()).resolves.toEqual([]);
     expect(source.invalidate).toHaveBeenCalledTimes(1);
+    expect(source.invalidate).toHaveBeenCalledWith('tok');
     await expect(gw.listRepositories()).rejects.toBeInstanceOf(AuthRequiredError);
     expect(source.invalidate).toHaveBeenCalledTimes(2);
     expect(requests).toHaveLength(4);

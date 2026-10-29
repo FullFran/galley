@@ -25,7 +25,7 @@ describe('GitHub GraphQL', () => {
     const req = requests[0] as RecordedRequest;
     expect(req.body).toEqual({ query: 'query { viewer { login } }', variables: { a: 1 } });
     expect(req.headers.get('Authorization')).toBe('Bearer tok');
-    expect(source.getAccessToken).toHaveBeenCalledWith(7);
+    expect(source.getAccessToken).toHaveBeenCalledWith();
   });
 
   it.each([

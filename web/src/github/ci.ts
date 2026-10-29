@@ -109,7 +109,7 @@ export function createGitHubCiGateway(options: GitHubCiGatewayOptions): CiGatewa
         const pick = pickArtifact(res.data.artifacts.map(toArtifact));
         if (pick.kind === 'expired') expired ??= run;
         if (pick.kind !== 'found') continue;
-        const zip = await gh.downloadArtifact(`${base(repo)}/actions/artifacts/${pick.artifact.id}/zip`, repo.id);
+        const zip = await gh.downloadArtifact(`${base(repo)}/actions/artifacts/${pick.artifact.id}/zip`);
         if (zip.kind === 'expired') return { kind: 'expired', runUrl: run.htmlUrl };
         const docs = await extractDocuments(zip.bytes);
         return docs.pdf ? { kind: 'ready', docs, runUrl: run.htmlUrl } : { kind: 'empty', runUrl: run.htmlUrl };

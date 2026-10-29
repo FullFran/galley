@@ -10,8 +10,8 @@ Branch: fix/token-rotation. Delivery: work-unit commits; PR/merge/deploy are the
 - S5. Existing behavior kept: sign-in, logout, webhook revocation (drafts purged), expired/unreadable refresh tokens.
 
 ## Tasks
-- [ ] T1 (S1, S2, S4, S5) server: token reuse in auth.Service, `rejected` request field, revocation logging, drafts only on webhook. Route: inline. Risk: items 1, 2.
-- [ ] T2 (S1, S3) web: single token, shared in-flight request, token-specific invalidate. Route: inline. Risk: item 2.
+- [x] T1 (S1, S2, S4, S5) server: token reuse in auth.Service, `rejected` request field, revocation logging, drafts only on webhook; permission-cache minter passes the rejected token. Route: inline. Risk: items 1, 2. Commit 7c1dfbb.
+- [x] T2 (S1, S3) web: single token, shared in-flight request, token-specific invalidate. Route: inline. Risk: item 2. Commit: see L6.
 - [ ] T3 independent verifier over the whole feature (high-risk items 1, 2).
 
 ## Log
@@ -19,3 +19,5 @@ Branch: fix/token-rotation. Delivery: work-unit commits; PR/merge/deploy are the
 - L2 (2026-10-29) evidence: PocketBase _logs show one headless client made 46 POST /auth/token in ~3 s, serialized on the per-user mutex, then all 401 with no error logged. Every /auth/token rotates the GitHub pair (GitHub: "Once you use a refresh token, that refresh token and the old user access token will no longer work."). Client: per-repository token keys, invalidate() clears the shared in-flight request, one retry then sign-out. Inferred end: bad_refresh_token → refresh token and server drafts deleted.
 - L3 (2026-10-29) user decision on scoped tokens: "hazlo!" (drop per-repo scoping, one token per user).
 - L4 (2026-10-29) Engram mirror pending: mem_save blocked by hook ("host session already ended").
+- L5 (2026-10-29) T1 evidence: auth tests rewritten first (RED: compile), then GREEN; new tests for reuse until near expiry, refresh only for the current rejected token, revocation dropping the cached token, bad_refresh_token not Revoked(); comments access test asserts the retry passes the rejected token. `go test -race ./...`, vet, gofmt clean.
+- L6 (2026-10-29) T2 evidence: new session tests RED (the parallel-401 test reproduced the storm), then GREEN: 5 parallel GitHub calls hitting 401 share one refresh with body {rejected: "t1"}; a late report about an old token keeps the new one. Scoped-token assertions in 6 gateway tests now expect no repository argument. Web: 1045/1045, tsc and eslint clean. RequestOptions.repositoryId kept (35 call sites) but documented as unused.
