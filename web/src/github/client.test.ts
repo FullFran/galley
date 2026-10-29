@@ -20,6 +20,21 @@ function client(routes: Route[]) {
   return { gh: new GitHubClient(tokens, fake.fetch), ...fake };
 }
 
+describe('GitHub responses are never served from the browser cache', () => {
+  // GitHub answers with Cache-Control: private, max-age=60. A cached branch
+  // head turned back-to-back saves into false "someone else changed it" conflicts.
+  it('revalidates every request and artifact download', async () => {
+    const { gh, requests } = client([
+      (req) => (req.url === ZIP ? landedAt(BLOB, new Response(new Uint8Array([1]), { status: 200 })) : undefined),
+      (req) => (req.url.startsWith(GH) ? new Response('{}', { status: 200 }) : undefined),
+    ]);
+    await gh.request('/repos/octo/paper/git/ref/heads/main');
+    await gh.request('/repos/octo/paper/pulls', { method: 'POST', body: {} });
+    await gh.downloadArtifact('/repos/octo/paper/actions/artifacts/42/zip');
+    expect(requests.map((r) => r.cache)).toEqual(['no-cache', 'no-cache', 'no-cache']);
+  });
+});
+
 describe('artifact zip redirect allowance', () => {
   it('recognises only the artifact zip endpoint', () => {
     expect(isArtifactZipPath(new URL(ZIP))).toBe(true);
