@@ -5,6 +5,8 @@ import { RepoList } from './RepoList';
 import { StatusBanner } from './StatusBanner';
 import { FileTree } from './FileTree';
 import { PreviewFrame } from './PreviewFrame';
+import { I18n } from '../i18n';
+import { es } from '../i18n/es';
 
 const noop = () => undefined;
 
@@ -112,6 +114,42 @@ describe('FileTree', () => {
     expect(html).toContain('aria-current="true"');
     expect(html).toContain('(edited)');
     expect(html).toMatch(/<button[^>]*disabled[^>]*>(?:(?!<\/button>).)*plot\.png/);
+  });
+
+  const rules = [{ folder: 'figures/', accept: ['png', 'pdf', 'svg'], maxSizeMb: 10 }];
+  const paths = ['index.qmd', 'figures/fig1_band_scheme.png', 'figures/fig2_closure.pdf', 'figures/scheme.svg', 'figures/raw.zip', 'other/plot.png'];
+  const button = (html: string, name: string) => new RegExp(`<button[^>]*>(?:(?!</button>).)*${name.replace('.', '\\.')}(?:(?!</button>).)*</button>`).exec(html)?.[0] ?? '';
+
+  it('enables upload-folder figures and pdfs with a viewer, and names them for screen readers', () => {
+    const html = render(<FileTree paths={paths} dirty={new Set()} onOpen={noop} uploads={rules} onView={noop} />);
+    expect(button(html, 'fig1_band_scheme.png')).not.toContain('disabled');
+    expect(button(html, 'fig1_band_scheme.png')).toContain('View figure');
+    expect(button(html, 'scheme.svg')).toContain('View figure');
+    expect(button(html, 'fig2_closure.pdf')).not.toContain('disabled');
+    expect(button(html, 'fig2_closure.pdf')).toContain('Open PDF');
+    expect(button(html, 'raw.zip')).toContain('disabled');
+    expect(button(html, 'plot.png')).toContain('disabled');
+    expect(button(html, 'index.qmd')).not.toContain('View figure');
+  });
+
+  it('lets admins view any image', () => {
+    const html = render(<FileTree paths={paths} dirty={new Set()} onOpen={noop} uploads={rules} onView={noop} viewAnyImage />);
+    expect(button(html, 'plot.png')).not.toContain('disabled');
+  });
+
+  it('keeps figures disabled without a viewer', () => {
+    const html = render(<FileTree paths={paths} dirty={new Set()} onOpen={noop} uploads={rules} />);
+    expect(button(html, 'fig1_band_scheme.png')).toContain('disabled');
+  });
+
+  it('names figures in Spanish', () => {
+    const html = render(
+      <I18n.Provider value={es}>
+        <FileTree paths={paths} dirty={new Set()} onOpen={noop} uploads={rules} onView={noop} />
+      </I18n.Provider>,
+    );
+    expect(button(html, 'fig1_band_scheme.png')).toContain('Ver figura');
+    expect(button(html, 'fig2_closure.pdf')).toContain('Abrir PDF');
   });
 });
 

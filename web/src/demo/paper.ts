@@ -10,6 +10,10 @@ editable:
 labels:
   index.qmd: Paper
   references.bib: References
+uploads:
+  - folder: figures/
+    accept: [png, jpg, jpeg, svg, pdf]
+    max_size_mb: 5
 preview:
   auto_compile: true
 `;

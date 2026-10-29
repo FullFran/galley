@@ -477,6 +477,45 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
     announce(line === undefined ? t.editor.opened(path) : t.editor.openedAt(path, line));
   };
 
+  // A figure waiting in an upload is not in the repository yet: use its bytes.
+  const fileBytes = (path: string): Promise<Uint8Array> => {
+    const pending = authoring.uploads.find((u) => u.path === path);
+    if (pending) return Promise.resolve(pending.bytes);
+    if (!working) return Promise.reject(new Error('no working tree'));
+    return gateway.readBytes(repo, path, working.headSha);
+  };
+
+  // A PDF from the file tree opens read-only in a new tab, from a blob: URL
+  // (the CSP has no frame-src for blob:, so it is not embedded). If the
+  // browser blocks the tab, the file is downloaded instead.
+  const openPdf = async (path: string) => {
+    let bytes: Uint8Array;
+    try {
+      bytes = await fileBytes(path);
+    } catch {
+      setNotice(t.files.viewFailed(path));
+      announce(t.files.viewFailed(path));
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'application/pdf' }));
+    const tab = window.open(url, '_blank');
+    if (tab) {
+      tab.opener = null;
+      announce(t.editor.opened(path));
+    } else {
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = path.slice(path.lastIndexOf('/') + 1);
+      link.click();
+      setNotice(t.files.pdfBlocked(path));
+      announce(t.files.pdfBlocked(path));
+    }
+    // The new tab has loaded the document well before this.
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  };
+
+  const viewFile = (path: string, as: 'image' | 'pdf') => void (as === 'pdf' ? openPdf(path) : showFigure(path));
+
   const showFigure = async (path: string) => {
     if (!working) return;
     const pdf = /\.pdf$/i.test(path);
@@ -490,7 +529,7 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
       return;
     }
     try {
-      const bytes = await gateway.readBytes(repo, path, working.headSha);
+      const bytes = await fileBytes(path);
       const url = bytes.length <= MAX_FIGURE_BYTES ? figureDataUrl(bytes, path) : undefined;
       setFigure((f) => (f?.path === path ? { path, state: url ? { kind: 'ready', url } : { kind: 'failed' } } : f));
     } catch {
@@ -998,6 +1037,8 @@ export function Workspace({ gateway, repo, route, onRoute, access, shell, onAuth
                 dirty={new Set(dirty)}
                 labels={labels}
                 onOpen={(p) => void openFile(p)}
+                onView={viewFile}
+                viewAnyImage={admin && viewAs !== 'coauthor'}
                 uploads={authoring.uploadRules}
                 pending={authoring.pendingPaths}
                 onUpload={authoring.onUpload}
