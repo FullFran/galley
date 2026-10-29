@@ -5,6 +5,23 @@ GitHub, open a repository where the galley GitHub App is installed, edit a file,
 and save it. Each save becomes a commit on a branch and an open pull request, so
 GitHub stays the source of truth and nobody needs to use git directly.
 
+## Interactive guide
+
+On your first signed-in visit, galley offers a short tour once the screen has
+loaded. Use **Help → Take the tour** to replay it, or **Guide for this screen**
+for the tools currently visible. The account menu also offers the full tour.
+Missing or hidden tools are omitted; progress counts only the remaining steps.
+The guide never edits text, navigates to another screen, compiles, or saves.
+
+Choose **Done** on the last step to complete it. **Skip tour**, Escape, the close
+button and the overlay dismiss it as skipped. Both outcomes suppress automatic
+replay for this tour version. The authenticated `/api/galley/me/tour` API stores
+`{version: 1, status: 'done' | 'skipped'}` per user; a versioned, per-user
+`sessionStorage` mirror takes effect immediately even when the API is unavailable.
+Storage and network failures do not block writing. English and Spanish guides
+respect reduced motion; driver.js is loaded on demand with bundled external CSS,
+without relaxing the production CSP.
+
 ## Layout
 
 - `web/`: the frontend (Vite, TypeScript, Preact). Served from GitHub Pages at
