@@ -13,7 +13,7 @@ Branch: feat/comfortable-view. Delivery: work-unit commits; PR/merge/deploy are 
 - S8. User: "a y siguen sin verse las figuras como archivo en figures". Co-authors (and admins viewing as co-author) see the files already in an upload folder (e.g. `figures/fig1_band_scheme.png`), of the accepted types, in the file tree; clicking one shows it in the figure viewer (images) or opens it (PDF), never in the text editor (also for `.svg`).
 
 ## Tasks
-- [ ] T1 (S1, S7) responsive header and layout under zoom. Route: delegated writer (context backstop). Risk: none expected.
+- [x] T1 (S1, S7) responsive header and layout under zoom. Route: delegated writer (context backstop). Risk: none (shared shell CSS/menu; 1440 px layout unchanged).
 - [ ] T2 (S2, S3, S4, S5, S7) View control: layout, focus mode, text/preview toggle, shortcut, persistence. Route: delegated writer (context backstop).
 - [ ] T3 (S6, S7) PDF of main as an in-app view, CSP frame-src blob:. Route: delegated writer (context backstop). Risk: item 2 (CSP).
 - [x] T5a (S8) list upload-folder files of accepted types for co-authors (config/project.ts visibleFiles). Route: inline. Risk: none (galley view only; GitHub permissions unchanged).
@@ -27,3 +27,5 @@ Branch: feat/comfortable-view. Delivery: work-unit commits; PR/merge/deploy are 
 - L4 (2026-10-29) Route: parent context is past the long-session backstop, so each task goes to one bounded writer, sequentially (T1-T3 share the header and styles.css).
 - L5 (2026-10-29) S8 cause: visibleFiles (config/project.ts:27) lists only `editable` matches for co-authors; the thesis .galley.yml editable = index.qmd, sections/*.qmd, references.bib, STATE.md, so figures/ (an upload folder) shows empty; FileTree disables binary files (FileTree.tsx:108). svg is not in tree.ts BINARY, so it would open as text.
 - L6 (2026-10-29) T5a: RED (new visibility test) then GREEN; config tests 73/73, tsc clean.
+- L7 (2026-10-29) T1 writer: container queries on the main column; side by side from 52rem; header folds word count, Writing/Code (52rem), Σ and comments (46rem, new ⋯ Comments entry), short save label (44rem); 48 px header on short screens; header menus scroll at 300%. Before/after at 150%: header overflow yes→no, save visible no→yes, panes 904/0→452/452; at 300% save visible no→yes; phone es-ES header overflow fixed. Parent checks: only the 5 authorized files changed; after merging origin/main: tsc/eslint clean, 1048/1048; screenshots 150% and 300% reviewed.
+- L8 (2026-10-29) Deployed S8 listing separately (PR #42 merged with a stale config test failing because the merge was not gated on CI — my mistake; fixed by PR #43, merged only after both checks passed; main a4674bd green, Pages success). Drafts: local IndexedDB store flushed on pagehide/visibilitychange, beforeunload warning, server sync; deploys do not touch open tabs.

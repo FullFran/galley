@@ -4,7 +4,7 @@ import { createRef } from 'preact';
 import { initialSidebar } from '../../shell/sidebar';
 import { AboutDialog } from './AboutDialog';
 import { AdminArea } from './AdminArea';
-import { AppShell, type ShellContext } from './AppShell';
+import { AppShell, MoreMenu, type ShellContext } from './AppShell';
 import { Credit } from './Credit';
 import { SaveControl } from './SaveControl';
 import { RepoList } from '../RepoList';
@@ -207,6 +207,21 @@ describe('AppShell', () => {
   it('offers a More menu with Keyboard shortcuts, and a muted credit line', () => {
     expect(menu(html, 'more-menu')).toContain('Keyboard shortcuts');
     expect(html).toContain('galley · by FullFran');
+  });
+
+  it('marks More menu items that stand in for header controls folded away on narrow widths', () => {
+    const more = render(
+      <MoreMenu
+        items={[
+          { label: 'Recompile', onSelect: noop },
+          { label: 'Switch to Code', fold: 'medium', onSelect: noop },
+          { label: 'Comments', fold: 'small', onSelect: noop },
+        ]}
+      />,
+    );
+    expect(more).toMatch(/class="menu-item"[^>]*>\s*<span class="menu-label">Recompile/);
+    expect(more).toMatch(/class="menu-item fold-medium"[^>]*>\s*<span class="menu-label">Switch to Code/);
+    expect(more).toMatch(/class="menu-item fold-small"[^>]*>\s*<span class="menu-label">Comments/);
   });
 
   it('has no inline style attributes', () => {

@@ -1921,13 +1921,24 @@ input.switch:checked::after {
   font-size: var(--text-xs);
 }
 
-/* Below 1024px: one pane at a time, chosen in the header. */
-@media (max-width: 1023.98px) {
+/*
+ * The header and the panes follow the width of the main column, not the
+ * viewport: browser zoom shrinks the viewport (a 1440px laptop at 200% is 720
+ * CSS px), and the sidebar takes more or less of it. Editor and preview stay
+ * side by side while each gets about 26rem; below that, one pane at a time,
+ * chosen with Edit | Preview in the header.
+ */
+.shell-main {
+  container: main / inline-size;
+}
+
+@container main (width < 52rem) {
   .view-switch {
     display: inline-flex;
   }
 
-  .workspace {
+  .workspace,
+  .workspace[data-comments='open'] {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -1938,6 +1949,93 @@ input.switch:checked::after {
   .workspace[data-view='edit'] .preview-pane,
   .workspace[data-view='preview'] .editor-pane {
     display: none;
+  }
+}
+
+/* Comments open below 1024px are a drawer over the panes, which stay side by side while they fit. */
+@media (max-width: 1023.98px) {
+  @container main (width >= 52rem) {
+    .shell-main .workspace[data-comments='open'] {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+  }
+}
+
+/*
+ * The header folds as it narrows, so the save button always fits: secondary
+ * controls leave it for the ⋯ menu (their menu entries carry fold-medium or
+ * fold-small), the word count stays in the Outline, and the save state stays
+ * readable by screen readers.
+ */
+.menu-item.fold-medium,
+.menu-item.fold-small {
+  display: none;
+}
+
+@container main (width < 52rem) {
+  .header-actions .word-count,
+  .header-actions .mode-switch {
+    display: none;
+  }
+
+  .menu-item.fold-medium {
+    display: flex;
+  }
+}
+
+@container main (width < 46rem) {
+  .shell-header,
+  .header-actions,
+  .save-control {
+    gap: var(--space-2);
+  }
+
+  .header-actions .symbol-button,
+  .header-actions .comments-toggle {
+    display: none;
+  }
+
+  .header-actions .save-state {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .menu-item.fold-small {
+    display: flex;
+  }
+
+  .view-switch button {
+    padding: 0 var(--space-2);
+  }
+}
+
+/* Header menus scroll inside short viewports (high zoom) instead of running off the screen. */
+.shell-header .menu {
+  max-height: calc(100dvh - var(--header-h) - var(--demo-banner-h, 0px) - var(--space-4));
+  overflow-y: auto;
+}
+
+/* Short viewports (a laptop at 200% zoom and more): a lower header leaves the text more room. */
+@media (max-height: 30rem) {
+  :root {
+    --header-h: 3rem;
+  }
+}
+
+@container main (width < 44rem) {
+  .save-long {
+    display: none;
+  }
+
+  .save-short {
+    display: inline;
   }
 }
 
@@ -3600,7 +3698,16 @@ button.refs-danger:hover:not(:disabled) {
   font-size: var(--text-sm);
 }
 
+.demo-banner > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .demo-banner button {
+  flex: none;
+  white-space: nowrap;
   min-height: 0;
   padding: 0 var(--space-2);
   border: 1px solid currentColor;
