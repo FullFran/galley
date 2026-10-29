@@ -339,6 +339,21 @@ func TestIssueTokenRefreshesOnlyTheRejectedToken(t *testing.T) {
 	}
 }
 
+func TestSignInStartsFromTheNewAuthorization(t *testing.T) {
+	h := newHarness(t)
+	token := h.login(t)
+	if got, _ := h.svc.IssueToken(context.Background(), token, ""); got.Token != "ghu_2" {
+		t.Fatalf("first token = %q", got.Token)
+	}
+	// Signing in again (the way out after any auth trouble) must not keep
+	// serving the previous authorization's token.
+	again := h.login(t)
+	got, err := h.svc.IssueToken(context.Background(), again, "")
+	if err != nil || got.Token == "ghu_2" {
+		t.Fatalf("token after a new sign-in = %+v, %v; want a fresh one", got, err)
+	}
+}
+
 func TestRevocationDropsCurrentToken(t *testing.T) {
 	t.Run("webhook", func(t *testing.T) {
 		h := newHarness(t)

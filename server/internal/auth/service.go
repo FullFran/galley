@@ -154,6 +154,9 @@ func (s *Service) Callback(ctx context.Context, cookie, state, code string) (New
 
 	unlock := s.locks.lock(user.ID)
 	err = s.saveRefresh(ctx, user.ID, tokens)
+	// A new authorization starts over: the next request refreshes from it
+	// instead of serving the previous authorization's token.
+	s.current.Delete(user.ID)
 	unlock()
 	if err != nil {
 		return NewSession{}, err

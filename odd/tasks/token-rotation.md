@@ -12,7 +12,7 @@ Branch: fix/token-rotation. Delivery: work-unit commits; PR/merge/deploy are the
 ## Tasks
 - [x] T1 (S1, S2, S4, S5) server: token reuse in auth.Service, `rejected` request field, revocation logging, drafts only on webhook; permission-cache minter passes the rejected token. Route: inline. Risk: items 1, 2. Commit 7c1dfbb.
 - [x] T2 (S1, S3) web: single token, shared in-flight request, token-specific invalidate. Route: inline. Risk: item 2. Commit: see L6.
-- [ ] T3 independent verifier over the whole feature (high-risk items 1, 2).
+- [x] T3 independent verifier over the whole feature (high-risk items 1, 2): no blockers, S1-S5 PASS. Advisory 1 fixed (sign-in clears the cached token).
 
 ## Log
 - L1 (2026-10-29) user: "pues testealo!" then a real-session E2E signed both the user's Firefox and a headless client out.
@@ -21,3 +21,5 @@ Branch: fix/token-rotation. Delivery: work-unit commits; PR/merge/deploy are the
 - L4 (2026-10-29) Engram mirror pending: mem_save blocked by hook ("host session already ended").
 - L5 (2026-10-29) T1 evidence: auth tests rewritten first (RED: compile), then GREEN; new tests for reuse until near expiry, refresh only for the current rejected token, revocation dropping the cached token, bad_refresh_token not Revoked(); comments access test asserts the retry passes the rejected token. `go test -race ./...`, vet, gofmt clean.
 - L6 (2026-10-29) T2 evidence: new session tests RED (the parallel-401 test reproduced the storm), then GREEN: 5 parallel GitHub calls hitting 401 share one refresh with body {rejected: "t1"}; a late report about an old token keeps the new one. Scoped-token assertions in 6 gateway tests now expect no repository argument. Web: 1045/1045, tsc and eslint clean. RequestOptions.repositoryId kept (35 call sites) but documented as unused.
+- L7 (2026-10-29) T3 verifier: S1-S5 PASS, no blockers. Fresh `go test -race -count=1 ./...` clean; web 1045/1045; differential /auth/token status codes identical to b4336f7 except `{"rejected":5}` 200→400 (out of domain). Probes: refreshed token also rejected ends in AuthRequiredError after 2 token requests (no loop); logout during in-flight fetch does not refill; 40 concurrent callers with the same rejected token cause one rotation.
+- L8 (2026-10-29) Fixed advisory 1 (RED then GREEN, TestSignInStartsFromTheNewAuthorization): a new sign-in kept serving the previous authorization's token. Open advisories, not fixed: server-side notify/reanchor never report a rejected token (fail until near expiry); browser clock >4 min ahead makes every call fetch (no rotation); no rate limit on forced refreshes (own tokens only); reuse margin duplicated in auth.tokenReuseMargin and comments.DefaultTokenMargin (must stay equal).
