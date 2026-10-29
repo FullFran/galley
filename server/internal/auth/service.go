@@ -39,17 +39,24 @@ type Config struct {
 	// that only became unusable. It must not block.
 	OnRevoke func(userID string, reason RevokeReason)
 	// OnTokenIssued, when set, is called after every successful refresh with
-	// the new access token and the repository hint it was requested with, so
-	// a server-side token cache can follow rotations made by the browser. It
-	// runs under the user's lock and must not block or call back into the
-	// Service.
-	OnTokenIssued func(userID string, tok AccessToken, repositoryID int64)
+	// the new access token, so a server-side token cache can follow
+	// rotations. It runs under the user's lock and must not block or call
+	// back into the Service.
+	OnTokenIssued func(userID string, tok AccessToken)
 }
+
+// tokenReuseMargin is how long before expiry a current access token stops
+// being handed out. It must exceed the browser's own refresh margin.
+const tokenReuseMargin = 5 * time.Minute
 
 // Service runs the sign-in use cases.
 type Service struct {
 	cfg   Config
 	locks keyedMutex
+	// current holds each user's latest access token (userID → AccessToken).
+	// Every refresh rotates the pair and kills the previous access token at
+	// GitHub, so all tabs, devices and server-side calls share this one.
+	current sync.Map
 }
 
 // NewService validates cfg and returns a Service.
@@ -182,15 +189,14 @@ func (s *Service) openLogin(cookie string) (loginState, error) {
 	return ls, nil
 }
 
-// IssueToken refreshes the user's GitHub token pair and returns the new access
-// token. Refreshes for one user are serialized because each refresh rotates
-// the pair and invalidates the previous refresh token.
-func (s *Service) IssueToken(ctx context.Context, sessionToken string, repositoryID int64) (AccessToken, error) {
+// IssueToken returns the session user's GitHub access token (see
+// UserAccessToken). rejected is a token the browser saw GitHub refuse.
+func (s *Service) IssueToken(ctx context.Context, sessionToken, rejected string) (AccessToken, error) {
 	sess, err := s.session(ctx, sessionToken)
 	if err != nil {
 		return AccessToken{}, err
 	}
-	return s.UserAccessToken(ctx, sess.UserID, repositoryID)
+	return s.UserAccessToken(ctx, sess.UserID, rejected)
 }
 
 // Authenticate resolves a session token to its user without touching GitHub.
@@ -209,16 +215,27 @@ func (s *Service) Authenticate(ctx context.Context, sessionToken string) (User, 
 	return u, nil
 }
 
-// UserAccessToken refreshes the stored token pair of userID and returns a
-// new access token, for server-side calls made on the user's behalf. It
-// shares the per-user lock with IssueToken. ErrUnauthenticated means the user
-// must sign in again.
-func (s *Service) UserAccessToken(ctx context.Context, userID string, repositoryID int64) (AccessToken, error) {
+// UserAccessToken returns the user's current GitHub access token, for the
+// browser and for server-side calls alike. It refreshes the stored pair only
+// when the current token is missing, close to expiry, or is rejected (the
+// token a caller saw GitHub refuse; a stale report changes nothing). Each
+// refresh kills the previous access token, so refreshing on every call made
+// tabs, devices and the server sign each other out. Tokens are not scoped to
+// a repository for the same reason. Refreshes for one user are serialized.
+// ErrUnauthenticated means the user must sign in again.
+func (s *Service) UserAccessToken(ctx context.Context, userID, rejected string) (AccessToken, error) {
 	if userID == "" {
 		return AccessToken{}, ErrUnauthenticated
 	}
 	unlock := s.locks.lock(userID)
 	defer unlock()
+	if v, ok := s.current.Load(userID); ok {
+		tok := v.(AccessToken)
+		if tok.Token != rejected && s.cfg.Now().Add(tokenReuseMargin).Before(tok.ExpiresAt) {
+			return tok, nil
+		}
+		s.current.Delete(userID)
+	}
 
 	stored, err := s.cfg.Users.LoadRefreshToken(ctx, userID)
 	if errors.Is(err, ErrNotFound) {
@@ -247,7 +264,7 @@ func (s *Service) UserAccessToken(ctx context.Context, userID string, repository
 	dctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.cfg.RefreshTimeout)
 	defer cancel()
 
-	tokens, err := s.cfg.Provider.Refresh(dctx, string(refresh), repositoryID)
+	tokens, err := s.cfg.Provider.Refresh(dctx, string(refresh), 0)
 	if errors.Is(err, ErrTokenRevoked) {
 		s.notifyRevoked(userID, RevokeRejected)
 		if delErr := s.cfg.Users.DeleteRefreshToken(dctx, userID); delErr != nil {
@@ -264,8 +281,9 @@ func (s *Service) UserAccessToken(ctx context.Context, userID string, repository
 		}
 	}
 	tok := AccessToken{Token: tokens.AccessToken, ExpiresAt: tokens.AccessExpiresAt}
+	s.current.Store(userID, tok)
 	if s.cfg.OnTokenIssued != nil {
-		s.cfg.OnTokenIssued(userID, tok, repositoryID)
+		s.cfg.OnTokenIssued(userID, tok)
 	}
 	return tok, nil
 }
@@ -311,7 +329,8 @@ type RevokeReason string
 const (
 	// RevokeWebhook: the user revoked the app (github_app_authorization).
 	RevokeWebhook RevokeReason = "webhook"
-	// RevokeRejected: GitHub answered bad_refresh_token.
+	// RevokeRejected: GitHub answered bad_refresh_token. It also follows a
+	// lost rotation, so it is not treated as the user's choice.
 	RevokeRejected RevokeReason = "bad_refresh_token"
 	// RevokeExpired: the stored refresh token passed its expiry.
 	RevokeExpired RevokeReason = "expired"
@@ -319,11 +338,13 @@ const (
 	RevokeUnreadable RevokeReason = "unreadable"
 )
 
-// Revoked reports a real revocation by the user or GitHub, as opposed to a
-// token galley can no longer use (expired, or unreadable after a key change).
-func (r RevokeReason) Revoked() bool { return r == RevokeWebhook || r == RevokeRejected }
+// Revoked reports that the user revoked the app (the webhook), as opposed to
+// a token galley can no longer use: expired, unreadable after a key change,
+// or rejected by GitHub (which a lost rotation also causes).
+func (r RevokeReason) Revoked() bool { return r == RevokeWebhook }
 
 func (s *Service) notifyRevoked(userID string, reason RevokeReason) {
+	s.current.Delete(userID)
 	if s.cfg.OnRevoke != nil {
 		s.cfg.OnRevoke(userID, reason)
 	}

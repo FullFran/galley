@@ -80,14 +80,14 @@ func newDeps(app core.App) (httpapi.Deps, *chat.Service, error) {
 
 	// Permission checks list the repositories of the user's app
 	// installations with the user's own token. The token is minted on the
-	// server from the stored refresh token, never leaves the server, is not
-	// scoped to a repository, and is reused until shortly before it expires;
-	// tokens the browser obtains are shared with the cache through
-	// OnTokenIssued, so neither side keeps rotating the pair.
+	// server from the stored refresh token, is not scoped to a repository,
+	// and is the same token auth.Service hands the browser: one current token
+	// per user, reused until shortly before it expires, so no side rotates
+	// the pair away from the others.
 	var svc *auth.Service
 	access := comments.NewCachedAccess(comments.AccessConfig{
-		Mint: func(ctx context.Context, userID string) (comments.UserToken, error) {
-			tok, err := svc.UserAccessToken(ctx, userID, 0)
+		Mint: func(ctx context.Context, userID, rejected string) (comments.UserToken, error) {
+			tok, err := svc.UserAccessToken(ctx, userID, rejected)
 			if errors.Is(err, auth.ErrUnauthenticated) {
 				return comments.UserToken{}, comments.ErrUnauthenticated
 			}
@@ -137,12 +137,13 @@ func newDeps(app core.App) (httpapi.Deps, *chat.Service, error) {
 	// OnRevoke must not block: the cache and the streams are dropped in
 	// memory, and drafts.Service.Revoke purges in the background.
 	onRevoke := func(userID string, reason auth.RevokeReason) {
+		logger.Warn("auth revoked", "user", userID, "reason", string(reason))
 		access.Invalidate(userID)
 		chatSvc.CloseUser(userID)
-		// Drafts go only on a real revocation (webhook or GitHub's
-		// bad_refresh_token). An expired token or one unreadable after a key
-		// change is galley's problem, not the user's choice: those drafts
-		// stay until the 30-day retention.
+		// Drafts go only when the user revoked the app (webhook). An
+		// expired, unreadable or GitHub-rejected refresh token is not the
+		// user's choice (a lost rotation also ends in bad_refresh_token):
+		// those drafts stay until the 30-day retention.
 		if reason.Revoked() {
 			draftSvc.Revoke(userID)
 		}
@@ -156,8 +157,8 @@ func newDeps(app core.App) (httpapi.Deps, *chat.Service, error) {
 		SessionTTL: sessionTTL,
 		LoginTTL:   loginTTL,
 		OnRevoke:   onRevoke,
-		OnTokenIssued: func(userID string, tok auth.AccessToken, repositoryID int64) {
-			access.TokenIssued(userID, comments.UserToken{Token: tok.Token, ExpiresAt: tok.ExpiresAt}, repositoryID != 0)
+		OnTokenIssued: func(userID string, tok auth.AccessToken) {
+			access.TokenIssued(userID, comments.UserToken{Token: tok.Token, ExpiresAt: tok.ExpiresAt}, false)
 		},
 	})
 	if err != nil {
