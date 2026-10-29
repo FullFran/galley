@@ -3,7 +3,7 @@ import { useT } from '../../i18n';
 import { useLocale } from '../../i18n/LocaleProvider';
 import { ENDONYMS } from '../../i18n/locale';
 import { MENU_LOCALES } from './AccountMenu';
-import { onPrefsChange, readPrefs, writePrefs, type Prefs } from '../../shell/prefs';
+import { LAYOUTS, onPrefsChange, readPrefs, writePrefs, type Prefs } from '../../shell/prefs';
 import type { Theme } from '../../shell/theme';
 import { Modal } from './Modal';
 import { ThemeSwitch } from './ThemeSwitch';
@@ -104,6 +104,37 @@ export function PreferencesDialog({ open, theme, onTheme, onClose }: Preferences
           <span>{m.serverDrafts}</span>
         </label>
         <p class="muted prefs-hint">{m.serverDraftsHint}</p>
+      </section>
+      <section class="prefs-section" aria-labelledby="prefs-view">
+        <h3 id="prefs-view">{t.view.title}</h3>
+        <div class="prefs-row">
+          <span id="prefs-layout">{t.view.layout}</span>
+          <div class="segmented" role="radiogroup" aria-labelledby="prefs-layout">
+            {LAYOUTS.map((choice) => (
+              <button
+                key={choice}
+                type="button"
+                role="radio"
+                aria-checked={(prefs.layout ?? 'both') === choice}
+                onClick={() => update({ layout: choice })}
+              >
+                {t.view.layouts[choice]}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p class="muted prefs-hint">{t.view.layoutHint}</p>
+        <label class="switch-row" title={t.view.focusHint}>
+          <input
+            type="checkbox"
+            role="switch"
+            class="switch"
+            checked={prefs.focus === true}
+            onChange={(e) => update({ focus: e.currentTarget.checked })}
+          />
+          <span>{t.view.focus}</span>
+        </label>
+        <p class="muted prefs-hint">{t.view.focusHint}</p>
       </section>
       <section class="prefs-section" aria-labelledby="prefs-appearance">
         <h3 id="prefs-appearance">{m.appearance}</h3>

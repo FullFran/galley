@@ -104,10 +104,10 @@ export function Menu({ id, label, buttonClass, buttonContent, tooltip, up, start
 
 /**
  * Header controls that fold into the ⋯ menu as the header narrows (browser
- * zoom, small windows): 'medium' below 52rem of content width, 'small' below
- * 46rem. A folded item is shown in the menu only at those widths.
+ * zoom, small windows): 'medium' below 70rem of content width, 'small' below
+ * 54rem, 'tiny' below 26rem (phones; see styles.css). A folded item is shown in the menu only at those widths.
  */
-export type HeaderFold = 'medium' | 'small';
+export type HeaderFold = 'medium' | 'small' | 'tiny';
 
 export interface MenuItemProps {
   onSelect: () => void;

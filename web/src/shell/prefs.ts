@@ -16,9 +16,23 @@ export interface Prefs {
   serverDrafts?: boolean;
   /** The browser's spellcheck in Writing mode; unset means on. */
   spellcheck?: boolean;
+  /** Which panes the workspace shows; unset means side by side. */
+  layout?: Layout;
+  /** Focus mode: no sidebar and a header with the essentials only. */
+  focus?: boolean;
 }
 
 export type EditorMode = 'writing' | 'code';
+
+/**
+ * Workspace layouts, in the order the View menu and Preferences list them.
+ * 'both' is editor and preview side by side while both fit. A new layout
+ * (for example the compiled PDF) is one more entry here.
+ */
+export const LAYOUTS = ['both', 'editor', 'preview'] as const;
+export type Layout = (typeof LAYOUTS)[number];
+
+const isLayout = (value: unknown): value is Layout => (LAYOUTS as readonly unknown[]).includes(value);
 
 type Store = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -70,13 +84,15 @@ export function readPrefs(store: Store | undefined = local()): Prefs {
   try {
     const parsed: unknown = JSON.parse(read(store, PREFS_KEY) ?? '{}');
     if (!parsed || typeof parsed !== 'object') return {};
-    const { autoCompile, editorMode, vim, serverDrafts, spellcheck } = parsed as Record<string, unknown>;
+    const { autoCompile, editorMode, vim, serverDrafts, spellcheck, layout, focus } = parsed as Record<string, unknown>;
     const prefs: Prefs = {};
     if (typeof autoCompile === 'boolean') prefs.autoCompile = autoCompile;
     if (editorMode === 'writing' || editorMode === 'code') prefs.editorMode = editorMode;
     if (typeof vim === 'boolean') prefs.vim = vim;
     if (typeof serverDrafts === 'boolean') prefs.serverDrafts = serverDrafts;
     if (typeof spellcheck === 'boolean') prefs.spellcheck = spellcheck;
+    if (isLayout(layout)) prefs.layout = layout;
+    if (typeof focus === 'boolean') prefs.focus = focus;
     return prefs;
   } catch {
     return {};

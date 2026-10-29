@@ -3,7 +3,7 @@
 
 import type { Messages } from '../i18n';
 
-export type ShortcutAction = 'toggleSidebar' | 'recompile' | 'save' | 'help' | 'symbols' | 'findAll';
+export type ShortcutAction = 'toggleSidebar' | 'recompile' | 'save' | 'help' | 'symbols' | 'findAll' | 'togglePane';
 
 export interface KeyLike {
   key: string;
@@ -11,6 +11,8 @@ export interface KeyLike {
   metaKey: boolean;
   altKey: boolean;
   shiftKey: boolean;
+  /** The physical key (Option+V types √ on a Mac). */
+  code?: string;
 }
 
 export const SHORTCUTS: readonly { action: ShortcutAction; keys: string[] }[] = [
@@ -20,6 +22,7 @@ export const SHORTCUTS: readonly { action: ShortcutAction; keys: string[] }[] = 
   { action: 'help', keys: ['?'] },
   { action: 'symbols', keys: ['Ctrl', 'Shift', 'S'] },
   { action: 'findAll', keys: ['Ctrl', 'Shift', 'F'] },
+  { action: 'togglePane', keys: ['Ctrl', 'Alt', 'V'] },
 ];
 
 export function shortcutLabel(action: ShortcutAction, t: Messages): string {
@@ -46,6 +49,8 @@ export function matchShortcut(e: KeyLike, typing: boolean): ShortcutAction | und
     if (key === 'f') return 'findAll';
     return undefined;
   }
+  // Ctrl/Cmd+Alt+V (text only / preview only) works while typing too.
+  if (mod && e.altKey && !e.shiftKey) return key === 'v' || e.code === 'KeyV' ? 'togglePane' : undefined;
   if (e.key === '?' && !mod && !e.altKey) return typing ? undefined : 'help';
   return undefined;
 }
