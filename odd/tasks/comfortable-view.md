@@ -1,0 +1,29 @@
+# Comfortable view for zoomed screens
+Make galley usable at high browser zoom and add view options so an older co-author can edit comfortably, including the final PDF of main.
+Branch: feat/comfortable-view. Delivery: work-unit commits; PR/merge/deploy are the user's decision. Runner: `npm test` (Vitest) in web/; checks `npx tsc --noEmit`, `npx eslint src`.
+
+## Specs
+- S1. "como es mayor, se pone la pantalla muy ampliada y se distorsiona, tenemos que hacerlo mas responsive". Evidence (1440x900 laptop): at 150% zoom (960 CSS px) the workspace drops the preview pane and the header cuts off "Guardar para revisión"; at 300% (480 CSS px) the header takes a quarter of the height and the save button is cut off. Required: at every zoom from 100% to 300% (CSS widths 1440 → 480) the save control is fully visible and usable, the header never overflows (secondary controls move into the "⋯" menu), the header stays compact, editor and preview stay side by side while both fit (not only above 1440 px), and there is no horizontal page scroll.
+- S2. "hacer opciones de vista de la interfaz y que sea facil de configurar". A visible "View" control in the workspace header (not only in Preferences) opens the view options; choices persist per browser (existing prefs store).
+- S3. "Distribución": choose Editor + preview side by side, editor only, or preview only.
+- S4. "Modo concentración": hides the sidebar and reduces the header to the essentials so the text gets the space; one click (and Escape when no dialog is open) brings everything back.
+- S5. "modo para poder alternar entre ver solo el texto o solo la preview": a one-click toggle (and a keyboard shortcut listed in the shortcuts dialog) between text only and preview only.
+- S6. "a benavente le gusta mucho poder ver como va el pdf final renderizado tras ir a main eso tiene que poder verse bien revisalo". The compiled PDF of the default branch can be shown inside galley as a pane/view (layout option "PDF"), labelled with the commit date it was built from, with download and open-in-new-tab still available; when there is no CI build, a clear message. Requires CSP `frame-src` to allow `blob:`. Today it is only a toast with download/open links.
+- S7. English and Spanish copy; existing behavior on phones (< 768 px) keeps working.
+- S8. User: "a y siguen sin verse las figuras como archivo en figures". Co-authors (and admins viewing as co-author) see the files already in an upload folder (e.g. `figures/fig1_band_scheme.png`), of the accepted types, in the file tree; clicking one shows it in the figure viewer (images) or opens it (PDF), never in the text editor (also for `.svg`).
+
+## Tasks
+- [ ] T1 (S1, S7) responsive header and layout under zoom. Route: delegated writer (context backstop). Risk: none expected.
+- [ ] T2 (S2, S3, S4, S5, S7) View control: layout, focus mode, text/preview toggle, shortcut, persistence. Route: delegated writer (context backstop).
+- [ ] T3 (S6, S7) PDF of main as an in-app view, CSP frame-src blob:. Route: delegated writer (context backstop). Risk: item 2 (CSP).
+- [x] T5a (S8) list upload-folder files of accepted types for co-authors (config/project.ts visibleFiles). Route: inline. Risk: none (galley view only; GitHub permissions unchanged).
+- [ ] T5b (S8) open upload-folder files in the figure viewer / new tab, never in the editor. Route: after T1 (Workspace.tsx, FileTree.tsx).
+- [ ] T4 browser check at 100/150/200/300% in the demo, plus PDF view on the real thesis when a session is available.
+
+## Log
+- L1 (2026-10-29) user: "vale, he estado mostrando galley a benavente!!! le ha gustado mucho jeje peroq quiero arregalr cosas de interfaz. el como es mayor, se pone la pantalla muy ampliada y se distorsiona, tenemos que hacerlo mas responsive y hacer occiones de vista de la interfaz y que sea facil de configurar para que el pueda editar muy comodamente"
+- L2 (2026-10-29) user chose options: "Distribución, Modo concentración, "modo para poder alternar entre ver solo el texto o solo la preview. Ademas, a benavente le gusta mucho poder ver como va el pdf final renderizado tras ir a main eso tiene que poder verse bien revisalo.  "" (text size and high contrast were offered and not chosen).
+- L3 (2026-10-29) evidence: demo screenshots at 1440x900 with zoom 100/150/200/250/300 (CSS widths 1440/960/720/576/480): header overflows at 150% and 300%; preview pane hidden from 150%; sidebar becomes an icon rail at 960; no horizontal scroll. Existing PreferencesDialog (theme, language, auto-compile, editor mode) and ViewSwitch (Edit | Preview below 768 px). PDF today: usePdfDownload (web/src/ui/ci/PdfDownload.tsx) fetches the CI artifact and offers download/open links in a toast. Production CSP: frame-src 'self', object-src 'none'. Thesis CI (compilar-paper.yml) builds an artifact paper-pdf-docx (~712 KB) on every push to main.
+- L4 (2026-10-29) Route: parent context is past the long-session backstop, so each task goes to one bounded writer, sequentially (T1-T3 share the header and styles.css).
+- L5 (2026-10-29) S8 cause: visibleFiles (config/project.ts:27) lists only `editable` matches for co-authors; the thesis .galley.yml editable = index.qmd, sections/*.qmd, references.bib, STATE.md, so figures/ (an upload folder) shows empty; FileTree disables binary files (FileTree.tsx:108). svg is not in tree.ts BINARY, so it would open as text.
+- L6 (2026-10-29) T5a: RED (new visibility test) then GREEN; config tests 73/73, tsc clean.

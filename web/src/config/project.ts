@@ -18,17 +18,23 @@ const FALLBACK = /\.(qmd|md|bib)$/i;
 
 const hidden = (path: string) => path.split('/').some((seg) => seg.startsWith('.'));
 
+const extension = (path: string) => path.slice(path.lastIndexOf('.') + 1).toLowerCase();
+
 /**
- * The files galley lists and opens for editing. Admins see every file. Others
- * see the `editable` matches, or the paper's documents when there is no valid
- * configuration. `.galley.yml` and hidden folders are never shown to them.
- * This only narrows galley's own view: GitHub permissions are unchanged.
+ * The files galley lists for co-authors. Admins see every file. Others see the
+ * `editable` matches plus the files already in an upload folder (for example
+ * the figures in `figures/`) of the types it accepts, or the paper's documents
+ * when there is no valid configuration. `.galley.yml` and hidden folders are
+ * never shown to them. This only narrows galley's own view: GitHub
+ * permissions are unchanged.
  */
 export function visibleFiles(files: readonly string[], project: ProjectConfig, admin: boolean): string[] {
   if (admin) return [...files];
   const shown =
     project.kind === 'valid'
-      ? (path: string) => matchAny(project.config.editable, path)
+      ? (path: string) =>
+          matchAny(project.config.editable, path) ||
+          project.config.uploads.some((u) => path.startsWith(u.folder) && u.accept.includes(extension(path)))
       : (path: string) => FALLBACK.test(path) && !hidden(path);
   return files.filter((path) => path !== CONFIG_PATH && !path.startsWith('.github/') && shown(path));
 }
