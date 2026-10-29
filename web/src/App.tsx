@@ -172,7 +172,9 @@ export function App({ session, gateway, reviews, comments, drafts, chat, ci, sha
     };
   }, [show]);
   useEffect(() => {
-    if (signedIn && !user) reviews.currentUser().then(setUser, () => undefined);
+    let active = true;
+    if (signedIn && !user) reviews.currentUser().then(person => { if (active) setUser(person); }, () => undefined);
+    return () => { active = false; };
   }, [signedIn, user, reviews]);
 
   // One access lookup per repository, shared by the sidebar and the workspace.
@@ -253,8 +255,10 @@ export function App({ session, gateway, reviews, comments, drafts, chat, ci, sha
     const login = userRef.current?.login;
     if (login) await clearUserDrafts(login, draftStore());
     dirty.current = false;
-    await session.logout().catch(() => undefined);
+    // Cancel user-scoped UI work before the session cookie is removed.
     setUser(undefined);
+    setView({ name: 'signedOut', loginFailed: false });
+    await session.logout().catch(() => undefined);
     window.history.replaceState(null, '', '#/');
     shown.current = '#/';
     setView({ name: 'signedOut', loginFailed: false });

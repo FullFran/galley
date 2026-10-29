@@ -16,7 +16,8 @@ import { Menu, MenuItem } from './Menu';
 import { PreferencesDialog } from './PreferencesDialog';
 import { ShortcutsDialog } from './ShortcutsDialog';
 import { useTheme } from './ThemeSwitch';
-import { Toast, Toasts } from './Toasts';
+import { Toasts } from './Toasts';
+import { useTour } from '../../tour/useTour';
 
 /** What every signed-in screen shares, provided by App. */
 export interface ShellContext {
@@ -113,7 +114,7 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
   const t = useT();
   const { state, dispatch, toggleRef, panelRef } = shell.sidebar;
   const [about, setAbout] = useState(false);
-  const [tourNotice, setTourNotice] = useState(false);
+  const startTour = useTour(shell.user?.id);
   const [shortcuts, setShortcuts] = useState(false);
   const [prefs, setPrefs] = useState(false);
   const [theme, setTheme] = useTheme();
@@ -302,7 +303,7 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
                 onTheme={setTheme}
                 onPreferences={() => setPrefs(true)}
                 onShortcuts={() => setShortcuts(true)}
-                onTour={() => setTourNotice(true)}
+                onTour={() => startTour('full')}
                 onAbout={() => setAbout(true)}
                 onSignOut={shell.onSignOut}
               />
@@ -315,7 +316,8 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
                 tour="help"
                 buttonContent={<Icon name="help" />}
               >
-                <MenuItem onSelect={() => setTourNotice(true)}>{t.nav.tour}</MenuItem>
+                <MenuItem onSelect={() => startTour('full')}>{t.nav.tour}</MenuItem>
+                <MenuItem onSelect={() => startTour('screen')}>{t.nav.screenGuide}</MenuItem>
                 <MenuItem onSelect={() => setShortcuts(true)} kbd="?">
                   {t.shell.shortcuts}
                 </MenuItem>
@@ -368,11 +370,6 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
           </main>
         </div>
         <Toasts>
-          {tourNotice && (
-            <Toast onDismiss={() => setTourNotice(false)}>
-              <p role="status">{t.nav.tourSoon}</p>
-            </Toast>
-          )}
           {toasts}
           {latestPdf.toast}
         </Toasts>
