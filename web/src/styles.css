@@ -1832,6 +1832,82 @@ input.switch:checked::after {
   margin-top: var(--space-1);
 }
 
+/* Tickets: the report dialog and the admins' inbox. */
+
+.ticket-field {
+  display: grid;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.ticket-field textarea,
+.ticket-field select {
+  width: 100%;
+}
+
+.ticket-ref {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--text-lg, 1.25rem);
+}
+
+.ticket-technical {
+  margin: var(--space-2) 0;
+  font-size: var(--text-sm);
+}
+
+.ticket-technical pre {
+  max-height: 12rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ticket-inbox {
+  width: min(64rem, calc(100vw - 2rem));
+}
+
+.ticket-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+.ticket-panes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(20rem, 100%), 1fr));
+  gap: var(--space-4);
+}
+
+.ticket-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 60dvh;
+  overflow: auto;
+}
+
+.ticket-list button {
+  width: 100%;
+  height: auto;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.ticket-list button[aria-current='true'] {
+  border-color: var(--accent);
+}
+
+.ticket-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.ticket-link {
+  align-items: end;
+}
+
 /* Workspace: editor and preview scroll on their own. */
 
 .workspace-main {

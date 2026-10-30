@@ -62,6 +62,15 @@ func TestLoadMail(t *testing.T) {
 	if cfg, err = config.Load(func(k string) string { return env[k] }); err != nil || cfg.MailEnabled() {
 		t.Errorf("key without from = %v, %v", cfg.MailEnabled(), err)
 	}
+	env["GALLEY_TICKETS_MAIL_TO"] = "owner@example.com"
+	if cfg, err = config.Load(func(k string) string { return env[k] }); err != nil || cfg.TicketsMailTo != "owner@example.com" {
+		t.Errorf("tickets mail = %q, %v", cfg.TicketsMailTo, err)
+	}
+	env["GALLEY_TICKETS_MAIL_TO"] = "not an address\r\nBcc: x@y.z"
+	if _, err := config.Load(func(k string) string { return env[k] }); err == nil || strings.Contains(err.Error(), "Bcc") {
+		t.Errorf("bad tickets mail err = %v", err)
+	}
+	delete(env, "GALLEY_TICKETS_MAIL_TO")
 }
 
 func TestLoadRejects(t *testing.T) {

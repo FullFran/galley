@@ -41,6 +41,8 @@ type Config struct {
 	// notifications are disabled.
 	ResendAPIKey string
 	MailFrom     string
+	// TicketsMailTo is optional: the address told about each new ticket.
+	TicketsMailTo string
 }
 
 // MailEnabled reports whether email notifications are configured.
@@ -89,6 +91,12 @@ func Load(getenv func(string) string) (Config, error) {
 			return Config{}, fmt.Errorf("config: GALLEY_MAIL_FROM must be an address such as \"galley <notify@example.com>\"")
 		}
 		c.MailFrom = from
+	}
+	if to := strings.TrimSpace(getenv("GALLEY_TICKETS_MAIL_TO")); to != "" {
+		if _, perr := mail.ParseAddress(to); perr != nil || strings.ContainsAny(to, "\r\n") {
+			return Config{}, fmt.Errorf("config: GALLEY_TICKETS_MAIL_TO must be an address such as \"owner@example.com\"")
+		}
+		c.TicketsMailTo = to
 	}
 	if c.FrontendOrigin, err = parseOrigin(origin, false); err != nil {
 		return Config{}, fmt.Errorf("config: GALLEY_FRONTEND_ORIGIN %w", err)
