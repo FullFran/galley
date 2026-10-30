@@ -27,15 +27,15 @@ export interface TicketDialogProps {
   gateway: Pick<TicketsGateway, 'create'>;
 }
 
-/** Sends a draft, with the technical snapshot when there is one. */
-export function submitTicket(gateway: Pick<TicketsGateway, 'create'>, draft: TicketDraft, diagnostics: unknown): Promise<string> {
-  const nav = globalThis.navigator as Navigator | undefined;
-  return gateway.create({
-    ...draft,
-    version: ticketVersion(VERSION, import.meta.env.VITE_GALLEY_BUILD),
-    device: deviceSummary(nav?.userAgent ?? '', nav?.maxTouchPoints ?? 0),
-    diagnostics,
-  });
+export interface TicketTechnical {
+  version: string;
+  device: string;
+  diagnostics: Record<string, unknown>;
+}
+
+/** Sends a draft, with the technical details when there are any. Without them it sends none at all. */
+export function submitTicket(gateway: Pick<TicketsGateway, 'create'>, draft: TicketDraft, technical: TicketTechnical | null): Promise<string> {
+  return gateway.create({ ...draft, version: technical?.version ?? '', device: technical?.device ?? '', diagnostics: technical?.diagnostics ?? null });
 }
 
 export function sendErrorMessage(error: unknown, t: Messages): string {
@@ -44,15 +44,20 @@ export function sendErrorMessage(error: unknown, t: Messages): string {
   return t.tickets.errorRetry;
 }
 
-function currentSnapshot(): Record<string, unknown> {
+function currentTechnical(): TicketTechnical {
   const w = globalThis.window as Window | undefined;
-  return snapshot({
-    hash: w?.location.hash ?? '',
-    locale: globalThis.document?.documentElement.lang ?? '',
-    viewport: { width: w?.innerWidth ?? 0, height: w?.innerHeight ?? 0 },
-    devicePixelRatio: w?.devicePixelRatio ?? 1,
-    errors: errorLog.entries(),
-  });
+  const nav = globalThis.navigator as Navigator | undefined;
+  return {
+    version: ticketVersion(VERSION, import.meta.env.VITE_GALLEY_BUILD),
+    device: deviceSummary(nav?.userAgent ?? '', nav?.maxTouchPoints ?? 0),
+    diagnostics: snapshot({
+      hash: w?.location.hash ?? '',
+      locale: globalThis.document?.documentElement.lang ?? '',
+      viewport: { width: w?.innerWidth ?? 0, height: w?.innerHeight ?? 0 },
+      devicePixelRatio: w?.devicePixelRatio ?? 1,
+      errors: errorLog.entries(),
+    }),
+  };
 }
 
 /** "Report a problem". The server answers a reference to quote; the draft stays until then. */
@@ -65,7 +70,7 @@ export function TicketDialog({ open, onClose, gateway }: TicketDialogProps) {
   const [error, setError] = useState('');
   const [sent, setSent] = useState('');
   const [copied, setCopied] = useState(false);
-  const technical = useMemo(() => (open ? currentSnapshot() : {}), [open]);
+  const technical = useMemo(currentTechnical, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -138,7 +143,7 @@ export function TicketDialog({ open, onClose, gateway }: TicketDialogProps) {
           {attach && (
             <details class="ticket-technical">
               <summary>{m.attachShow}</summary>
-              <pre>{diagnosticsText(technical)}</pre>
+              <pre>{diagnosticsText({ version: technical.version, device: technical.device, ...technical.diagnostics })}</pre>
             </details>
           )}
           {error && <p class="notice notice-danger" role="alert">{error}</p>}

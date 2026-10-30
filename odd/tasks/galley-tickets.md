@@ -6,7 +6,7 @@ Branch: feat/tickets. Delivery: ask-on-risk. Test runners: `go test ./...` in se
 - S1: User request, verbatim: "hemos hecho un sistema de tickets en mazmorra sombria no?! reutilizalo para galley!!!!!"
 - S2: A signed-in user can send a ticket from the Help menu and gets a `GL-XXXXXX` reference. Assumption: signed-out reports stay out, because they would need a public route on an unverified proxy IP.
 - S3: Ticket text and diagnostics are sealed at rest with the data key. Assumption: reports can quote unpublished papers, as comments can.
-- S4: Technical context is an allowlist the user sees and can switch off: version, device summary, locale, viewport, screen kind, recent scrubbed errors. Never repository or file names.
+- S4: Technical context is an allowlist the user sees and can switch off: version, device summary, locale, viewport and pixel ratio, screen kind, recent errors. Never repository or file names, so of galley's own errors only the kind is kept. Switching it off sends none of it.
 - S5: Sending is limited per user and per UTC day; past the cap the server refuses. A draft survives a failed send and a reload.
 - S6: Only accounts in `galley_ticket_admins`, which only superusers edit, can list and triage tickets. Repository admins do not qualify. The server enforces it on every call.
 - S7: Admins see an inbox with a status filter, search, full detail, status changes, a link to a GitHub issue and a copy-as-issue-Markdown action.
@@ -23,3 +23,4 @@ Branch: feat/tickets. Delivery: ask-on-risk. Test runners: `go test ./...` in se
 
 - L1 (2026-10-30): hemos hecho un sistema de tickets en mazmorra sombria no?! reutilizalo para galley!!!!!
 - L2: Source is `release/0.9.3` in the mazmorra-sombria clone. Dropped from it: honeypot and IP hash (sessions identify the sender), expected/observed fields (a simpler form for galley's readers), PB auth guard (galley sessions are not PB auth). No GitHub issue is opened automatically.
+- L3: Verifier found three blockers, fixed in one batch: the switch left version and device on and the preview hid them; the scrub let file names through, so only engine errors keep a message; one ticket that did not open took the inbox down and PATCH saved before failing, so a ticket now answers `unreadable`. Pixel ratio added to S4 on purpose: it shows the zoom that hurt readers. Left as known limits: the daily cap is soft under parallel sends, and the inbox fetches only the newest 200.

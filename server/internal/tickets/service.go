@@ -97,6 +97,9 @@ type Ticket struct {
 	Diagnostics                  json.RawMessage
 	GitHubIssue                  int
 	CreatedAt                    time.Time
+	// Unreadable means a sealed field did not open (a changed key, a moved
+	// value): the text is empty, the rest still reads and triages.
+	Unreadable bool
 }
 
 // List is one page of the inbox, newest first; Total counts past the limit.
@@ -237,11 +240,7 @@ func (s *Service) List(ctx context.Context, a comments.Actor, status string) (Li
 	}
 	out := List{Tickets: make([]Ticket, 0, len(records)), Total: total}
 	for _, r := range records {
-		t, err := s.opened(r)
-		if err != nil {
-			return List{}, err
-		}
-		out.Tickets = append(out.Tickets, t)
+		out.Tickets = append(out.Tickets, s.opened(r))
 	}
 	return out, nil
 }
@@ -272,7 +271,7 @@ func (s *Service) Update(ctx context.Context, a comments.Actor, ref string, c Ch
 	if err != nil {
 		return Ticket{}, err
 	}
-	return s.opened(r)
+	return s.opened(r), nil
 }
 
 // announce tells whoever is told about a new ticket. It runs apart, so sending
@@ -331,7 +330,8 @@ func (s *Service) sealed(ref string, a comments.Actor, in Input) (Record, error)
 	return r, nil
 }
 
-func (s *Service) opened(r Record) (Ticket, error) {
+// opened never fails: one ticket that does not open must not hide the others.
+func (s *Service) opened(r Record) Ticket {
 	t := Ticket{Ref: r.Ref, Login: r.Login, Category: r.Category, Status: r.Status, Version: r.Version, Device: r.Device, GitHubIssue: r.GitHubIssue, CreatedAt: r.CreatedAt}
 	for _, f := range []struct {
 		name   string
@@ -347,11 +347,13 @@ func (s *Service) opened(r Record) (Ticket, error) {
 		}
 		plain, err := s.cfg.Sealer.Open(f.sealed, fieldAAD(r.Ref, f.name))
 		if err != nil {
-			return Ticket{}, errors.New("tickets: a stored value does not authenticate")
+			s.cfg.Logger.Error("tickets: a stored value does not authenticate", "ref", r.Ref, "field", f.name)
+			t.Description, t.Steps, t.Diagnostics, t.Unreadable = "", "", nil, true
+			return t
 		}
 		f.out(string(plain))
 	}
-	return t, nil
+	return t
 }
 
 // fieldAAD binds a sealed value to its ticket and field, so it does not open

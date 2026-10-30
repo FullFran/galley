@@ -42,12 +42,13 @@ type ticketJSON struct {
 	Diagnostics json.RawMessage `json:"diagnostics"`
 	GitHubIssue int             `json:"github_issue"`
 	Created     time.Time       `json:"created"`
+	Unreadable  bool            `json:"unreadable"`
 }
 
 func toTicketJSON(t tickets.Ticket) ticketJSON {
 	out := ticketJSON{
 		Ref: t.Ref, Login: t.Login, Category: t.Category, Status: t.Status, Description: t.Description, Steps: t.Steps,
-		Version: t.Version, Device: t.Device, Diagnostics: t.Diagnostics, GitHubIssue: t.GitHubIssue, Created: t.CreatedAt,
+		Version: t.Version, Device: t.Device, Diagnostics: t.Diagnostics, GitHubIssue: t.GitHubIssue, Created: t.CreatedAt, Unreadable: t.Unreadable,
 	}
 	if len(out.Diagnostics) == 0 {
 		out.Diagnostics = json.RawMessage("null")

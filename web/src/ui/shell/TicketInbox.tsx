@@ -41,6 +41,7 @@ export function TicketDetail({ ticket, busy, error, onChange, onCopy }: TicketDe
           <a href={`${ISSUES_URL}/${ticket.githubIssue}`} target="_blank" rel="noopener noreferrer">#{ticket.githubIssue}</a>
         </p>
       )}
+      {ticket.unreadable && <p class="notice notice-warn" role="status">{m.unreadable}</p>}
       <h4>{m.description}</h4>
       <p class="ticket-text">{ticket.description}</p>
       {ticket.steps && (
@@ -63,7 +64,7 @@ export function TicketDetail({ ticket, busy, error, onChange, onCopy }: TicketDe
             {m.statuses[status]}
           </button>
         ))}
-        <button type="button" disabled={busy} onClick={onCopy}>{m.copyIssue}</button>
+        {!ticket.unreadable && <button type="button" disabled={busy} onClick={onCopy}>{m.copyIssue}</button>}
       </div>
       <div class="actions ticket-link">
         <label>

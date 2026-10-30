@@ -400,3 +400,44 @@ func TestUpdateRules(t *testing.T) {
 		t.Fatalf("back to issue = %+v %v", got, err)
 	}
 }
+
+func TestAnUnreadableTicketDoesNotTakeTheInboxDown(t *testing.T) {
+	store := &fakeStore{}
+	s := newService(t, store)
+	ctx := context.Background()
+	bad, err := s.Create(ctx, reporter, validInput())
+	if err != nil {
+		t.Fatal(err)
+	}
+	good, err := s.Create(ctx, reporter, validInput())
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A value moved from another ticket, as a rotated key would also look.
+	store.records[0].Description = store.records[1].Description
+
+	list, err := s.List(ctx, admin, "")
+	if err != nil {
+		t.Fatalf("list = %v", err)
+	}
+	if list.Total != 2 || len(list.Tickets) != 2 {
+		t.Fatalf("list = %+v", list)
+	}
+	for _, got := range list.Tickets {
+		switch got.Ref {
+		case bad:
+			if !got.Unreadable || got.Description != "" || got.Steps != "" || got.Diagnostics != nil || got.Login != "ana" {
+				t.Fatalf("unreadable ticket = %+v", got)
+			}
+		case good:
+			if got.Unreadable || got.Description != "the preview is blank" {
+				t.Fatalf("readable ticket = %+v", got)
+			}
+		}
+	}
+	// It can still be triaged, and the answer matches what was stored.
+	got, err := s.Update(ctx, admin, bad, tickets.Change{Status: tickets.StatusClosed})
+	if err != nil || got.Status != tickets.StatusClosed || !got.Unreadable {
+		t.Fatalf("update = %+v %v", got, err)
+	}
+}

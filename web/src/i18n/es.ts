@@ -236,6 +236,7 @@ export const es: Messages = {
     empty: 'No hay tickets aquí.',
     newestOnly: (shown: number, total: number) => `Se muestran los ${shown} más recientes de ${total}.`,
     technical: 'Datos técnicos',
+    unreadable: 'Este ticket ya no se puede leer: se cifró con otra clave o su texto guardado ha cambiado.',
     copyIssue: 'Copiar como issue de GitHub',
     issueNumber: 'Número de issue de GitHub',
     linkIssue: 'Enlazar issue',

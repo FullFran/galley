@@ -30,6 +30,8 @@ export interface Ticket {
   diagnostics: unknown;
   githubIssue: number;
   created: string;
+  /** A sealed field did not open: the text is empty, the rest can be triaged. */
+  unreadable: boolean;
 }
 
 export interface TicketInput {
@@ -103,17 +105,33 @@ export function scrub(text: string): string {
 }
 
 export interface ErrorLog {
-  record(error: unknown): void;
+  record(error: unknown, file?: string, line?: number): void;
   entries(): readonly string[];
 }
 
-/** The page's latest errors, scrubbed and kept in memory only. */
+// Messages of the engine's own errors name code. galley's own errors and
+// anything else thrown can quote a file or a title, and no scrubbing catches
+// every name, so of those only the kind is kept.
+const ENGINE_ERRORS: ReadonlySet<string> = new Set(['TypeError', 'RangeError', 'ReferenceError']);
+const SCRIPT_FILE = /^[\w.-]+\.js$/;
+
+function errorText(error: unknown): string {
+  if (!(error instanceof Error)) return 'Error';
+  const name = ['SyntaxError', ...ENGINE_ERRORS].includes(error.name) ? error.name : 'Error';
+  return ENGINE_ERRORS.has(name) ? `${name}: ${scrub(error.message).slice(0, MESSAGE_CHARS)}` : name;
+}
+
+function errorSource(file: string | undefined, line: number | undefined): string {
+  const name = (file ?? '').split(/[?#]/)[0]?.split('/').pop() ?? '';
+  return SCRIPT_FILE.test(name) ? ` @ ${name}${line ? `:${line}` : ''}` : '';
+}
+
+/** The page's latest errors, kept in memory only. */
 export function createErrorLog(size = ERROR_ENTRIES): ErrorLog {
   const entries: string[] = [];
   return {
-    record(error) {
-      const text = error instanceof Error ? error.message : String(error);
-      entries.push(scrub(text).slice(0, MESSAGE_CHARS));
+    record(error, file, line) {
+      entries.push(errorText(error) + errorSource(file, line));
       if (entries.length > size) entries.shift();
     },
     entries: () => entries.slice(),
@@ -125,7 +143,10 @@ export const errorLog = createErrorLog();
 
 /** Starts listening; `main.tsx` calls it once. */
 export function installErrorLog(target: Pick<Window, 'addEventListener'>, log: ErrorLog = errorLog): void {
-  target.addEventListener('error', (e) => log.record((e as ErrorEvent).error ?? (e as ErrorEvent).message));
+  target.addEventListener('error', (e) => {
+    const event = e as ErrorEvent;
+    log.record(event.error ?? event.message, event.filename, event.lineno);
+  });
   target.addEventListener('unhandledrejection', (e) => log.record((e as PromiseRejectionEvent).reason));
 }
 

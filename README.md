@@ -104,7 +104,7 @@ variables are optional). See
 | --- | --- |
 | `GALLEY_GITHUB_CLIENT_ID` | GitHub App client ID. |
 | `GALLEY_GITHUB_CLIENT_SECRET` | GitHub App client secret. |
-| `GALLEY_TOKEN_KEY` | 32 random bytes, standard base64 (`openssl rand -base64 32`). Encrypts stored refresh tokens (AES-256-GCM); a separate key derived from it with HKDF-SHA256 (purpose `galley-data-at-rest-v1`) encrypts comments. Keep it outside `pb_data` and back it up: changing it signs everyone out and makes every stored comment unreadable. |
+| `GALLEY_TOKEN_KEY` | 32 random bytes, standard base64 (`openssl rand -base64 32`). Encrypts stored refresh tokens (AES-256-GCM); a separate key derived from it with HKDF-SHA256 (purpose `galley-data-at-rest-v1`) encrypts comments and tickets. Keep it outside `pb_data` and back it up: changing it signs everyone out and makes every stored comment and ticket text unreadable. |
 | `GALLEY_WEBHOOK_SECRET` | Webhook secret of the GitHub App. |
 | `GALLEY_FRONTEND_ORIGIN` | Exact frontend origin, for example `https://galley.fullfran.com`. |
 | `GALLEY_PUBLIC_URL` | Public API base URL, for example `https://galley-api.fullfran.com`. |
@@ -450,10 +450,13 @@ nothing in them is sealed; the audit `target` is `repo`, `user:<id>`,
 ### Tickets API
 
 Help > Report a problem lets a signed-in person send a ticket with a `GL-XXXXXX`
-reference. The description, the steps and the technical snapshot are sealed at
-rest with the data key, so they read only through these routes, not in the
-PocketBase dashboard. The routes use the credentialed middleware of the comments
-API.
+reference. The description, the steps and the diagnostics are sealed at rest with
+the data key, so they read only through these routes, not in the PocketBase
+dashboard; the category, the sender login, the version and the device are not
+sealed. Switching off the technical details sends no version, device or
+diagnostics. A ticket whose sealed text does not open answers `"unreadable": true`
+with empty text and can still be triaged. The routes use the credentialed
+middleware of the comments API.
 
 | Route | Effect |
 | --- | --- |

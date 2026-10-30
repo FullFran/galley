@@ -43,6 +43,7 @@ function parseTicket(v: unknown): Ticket {
     diagnostics: v.diagnostics ?? null,
     githubIssue: v.github_issue,
     created: v.created,
+    unreadable: v.unreadable === true,
   };
 }
 

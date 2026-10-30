@@ -8,7 +8,7 @@ const json = (status: number, body: unknown, headers: Record<string, string> = {
 
 const apiTicket = {
   ref: 'GL-AAAAAA', login: 'ana', category: 'bug', status: 'new', description: 'd', steps: '', version: 'v', device: 'x',
-  diagnostics: null, github_issue: 0, created: '2026-10-30T10:00:00Z',
+  diagnostics: null, github_issue: 0, created: '2026-10-30T10:00:00Z', unreadable: false,
 };
 
 function firstCall(fetch: { mock: { calls: Parameters<typeof globalThis.fetch>[] } }) {

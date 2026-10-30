@@ -244,7 +244,8 @@ scope is not kept; record the result in `odd/tasks/galley-mvp.md`.
   migration ran. Frontend: re-run the Pages workflow on the previous commit.
 - **`GALLEY_TOKEN_KEY`**: change it in `.env` and `docker compose up -d`.
   Stored refresh tokens can no longer be decrypted and are deleted on use,
-  so everyone signs in again. That is expected.
+  so everyone signs in again. That is expected. The text of existing comments
+  and tickets stops opening too; tickets then show as unreadable in the inbox.
 - **`GALLEY_GITHUB_CLIENT_SECRET`**: generate a new one in the app, update
   `.env`, restart, then delete the old one.
 - **`GALLEY_WEBHOOK_SECRET`**: update the app and `.env` together; deliveries

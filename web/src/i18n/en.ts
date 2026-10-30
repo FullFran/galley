@@ -231,6 +231,7 @@ export const en = {
     empty: 'No tickets here.',
     newestOnly: (shown: number, total: number) => `Showing the newest ${shown} of ${total}.`,
     technical: 'Technical details',
+    unreadable: 'This ticket can no longer be read: it was sealed with another key, or its stored text changed.',
     copyIssue: 'Copy as GitHub issue',
     issueNumber: 'GitHub issue number',
     linkIssue: 'Link issue',
