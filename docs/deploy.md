@@ -187,6 +187,9 @@ checkout; `deploy/compose.yml` and `deploy/.env` (mode 600) live in its
    `GALLEY_ADMIN_ALLOWLIST` in `.env` for admin access without the tunnel.
    With the default `127.0.0.1/32`, Traefik refuses `/_/` and
    `/api/collections/_superusers` to every public client.
+7. Optional: name who triages tickets. In the admin UI, add a row to
+   `galley_ticket_admins` pointing at that person's `galley_users` record (they
+   must have signed in once). See README, "Tickets API".
 
 ## 6. Paper repository settings
 

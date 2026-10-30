@@ -16,6 +16,10 @@ services:
       GALLEY_WEBHOOK_SECRET: ${GALLEY_WEBHOOK_SECRET:?set in .env}
       GALLEY_FRONTEND_ORIGIN: https://galley.fullfran.com
       GALLEY_PUBLIC_URL: https://galley-api.fullfran.com
+      # Optional: without the first two no mail is sent at all.
+      GALLEY_RESEND_API_KEY: ${GALLEY_RESEND_API_KEY:-}
+      GALLEY_MAIL_FROM: ${GALLEY_MAIL_FROM:-}
+      GALLEY_TICKETS_MAIL_TO: ${GALLEY_TICKETS_MAIL_TO:-}
       PB_ENCRYPTION_KEY: ${PB_ENCRYPTION_KEY:?set in .env}
     volumes:
       - pb_data:/pb/pb_data

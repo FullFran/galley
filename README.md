@@ -110,6 +110,7 @@ variables are optional). See
 | `GALLEY_PUBLIC_URL` | Public API base URL, for example `https://galley-api.fullfran.com`. |
 | `GALLEY_RESEND_API_KEY` | Optional. Resend API key for email notifications. Without it (or without `GALLEY_MAIL_FROM`) notifications are disabled and `GET /api/galley/me/notifications` reports `"available": false`. |
 | `GALLEY_MAIL_FROM` | Optional. Sender address, for example `galley <notify@notify.fullfran.com>` (a verified Resend sending domain). |
+| `GALLEY_TICKETS_MAIL_TO` | Optional. Address told about each new ticket; needs the two mail variables above. |
 
 Both URLs must use `https`, except loopback hosts (`localhost`, `127.0.0.1`)
 for local development. The GitHub App's callback URL is
@@ -445,6 +446,32 @@ Storage: `galley_repo_activity`, `galley_repo_allowlist`,
 None holds content or free text (ids, logins, paths, actions and times), so
 nothing in them is sealed; the audit `target` is `repo`, `user:<id>`,
 `allow:<id>` or `share:<id>`.
+
+### Tickets API
+
+Help > Report a problem lets a signed-in person send a ticket with a `GL-XXXXXX`
+reference. The description, the steps and the technical snapshot are sealed at
+rest with the data key, so they read only through these routes, not in the
+PocketBase dashboard. The routes use the credentialed middleware of the comments
+API.
+
+| Route | Effect |
+| --- | --- |
+| `POST /api/galley/me/tickets` | `{"category", "description", "steps"?, "version"?, "device"?, "diagnostics"?}` answers 201 `{"ref"}`. `category` is one of `bug`, `saving`, `preview`, `interface`, `performance`, `suggestion`, `other`. 422 `{"field"}` on invalid input, 429 past 5 at once and one more every 2 minutes per user, 503 past 200 per UTC day across the server. |
+| `GET /api/galley/me/tickets/access` | `{"admin": true\|false}`; a failed lookup answers `false`. |
+| `GET /api/galley/tickets/inbox?status=` | Ticket admins only, otherwise 403. `{"tickets": [...], "total"}`, the newest 200. |
+| `PATCH /api/galley/tickets/inbox/{ref}` | Ticket admins only, otherwise 403. `{"status", "github_issue"?}` with `status` among `new`, `triaged`, `issue`, `closed`. `issue` needs a link, given now or from before; leaving it keeps the link. |
+
+A ticket admin is an account listed in `galley_ticket_admins`, which only a
+superuser edits (dashboard, collection `galley_ticket_admins`, one row per
+`galley_users` record; the person must have signed in once). Being a repository
+admin does not count. Admins get Help > Tickets, and the menu entry appears on
+their next page load. A new ticket mails `GALLEY_TICKETS_MAIL_TO` with its
+reference, category and sender login, never its text, for the first 20 tickets
+of each UTC day; a mail failure never fails the ticket. GitHub issues are opened
+by hand: "Copy as GitHub issue" gives a body that leaves out the sender, then
+"Link issue" records its number. A ticket stays when its author's account goes,
+and no job purges tickets.
 
 ### Notifications API
 

@@ -16,8 +16,8 @@ Branch: feat/tickets. Delivery: ask-on-risk. Test runners: `go test ./...` in se
 ## Tasks
 
 - [x] T1 S2 S3 S5 S6 S8 inline: server service, store, migration, routes, mail, wiring. go test ./... green.
-- [ ] T2 S2 S4 S5 S6 S7 inline: web form, inbox, Help menu entries, i18n, diagnostics.
-- [ ] T3 S9 inline: README, deploy docs, compose.
+- [x] T2 S2 S4 S5 S6 S7 inline: web form, inbox, Help menu entries, i18n, diagnostics. vitest 1126 passed, eslint and tsc clean, browser flow on the production build (en 1440, es 480, non-admin).
+- [x] T3 S9 inline: README, compose, pages build id.
 
 ## Log
 
