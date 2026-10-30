@@ -43,6 +43,9 @@ func main() {
 	// (for example "superuser upsert") work without the galley variables.
 	// "serve" fails fast when any variable is missing or invalid.
 	app.OnServe().BindFunc(func(se *core.ServeEvent) error {
+		// A data dir with no superuser would otherwise open a browser tab on every
+		// start. The first superuser comes from "superuser upsert".
+		se.InstallerFunc = nil
 		deps, chatSvc, err := newDeps(se.App)
 		if err != nil {
 			return err
