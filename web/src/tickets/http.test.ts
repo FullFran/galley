@@ -52,6 +52,12 @@ describe('tickets gateway', () => {
     expect(out.tickets[0]).toMatchObject({ ref: 'GL-AAAAAA', githubIssue: 0, diagnostics: null });
   });
 
+  it('asks for one status and a later page', async () => {
+    const { fetch, tickets } = gateway(json(200, { tickets: [], total: 0 }));
+    await tickets.list({ status: 'new', offset: 200 });
+    expect(firstCall(fetch)[0]).toBe('https://api.test/api/galley/tickets/inbox?status=new&offset=200');
+  });
+
   it('refuses a malformed inbox', async () => {
     await expect(gateway(json(200, { tickets: [{ ref: 1 }], total: 1 })).tickets.list()).rejects.toBeInstanceOf(GatewayError);
   });

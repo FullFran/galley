@@ -462,7 +462,7 @@ middleware of the comments API.
 | --- | --- |
 | `POST /api/galley/me/tickets` | `{"category", "description", "steps"?, "version"?, "device"?, "diagnostics"?}` answers 201 `{"ref"}`. `category` is one of `bug`, `saving`, `preview`, `interface`, `performance`, `suggestion`, `other`. 422 `{"field"}` on invalid input, 429 past 5 at once and one more every 2 minutes per user, 503 past 200 per UTC day across the server. |
 | `GET /api/galley/me/tickets/access` | `{"admin": true\|false}`; a failed lookup answers `false`. |
-| `GET /api/galley/tickets/inbox?status=` | Ticket admins only, otherwise 403. `{"tickets": [...], "total"}`, the newest 200. |
+| `GET /api/galley/tickets/inbox?status=` | Ticket admins only, otherwise 403. `{"tickets": [...], "total"}`, newest first, 200 per page; `offset` reads later pages. |
 | `PATCH /api/galley/tickets/inbox/{ref}` | Ticket admins only, otherwise 403. `{"status", "github_issue"?}` with `status` among `new`, `triaged`, `issue`, `closed`. `issue` needs a link, given now or from before; leaving it keeps the link. |
 
 A ticket admin is an account listed in `galley_ticket_admins`, which only a

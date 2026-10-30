@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'preact/hooks';
 import { useT } from '../../i18n';
-import type { TicketChange, TicketsGateway } from '../../tickets/http';
+import type { TicketChange, TicketQuery, TicketsGateway } from '../../tickets/http';
 import {
   CATEGORIES,
   diagnosticsText,
@@ -79,6 +79,15 @@ export function TicketDetail({ ticket, busy, error, onChange, onCopy }: TicketDe
   );
 }
 
+/** What to ask the server: the status filter runs there, so old tickets stay reachable. */
+export function inboxQuery(filter: TicketFilter, offset: number): TicketQuery {
+  return filter === 'all' ? { offset } : { status: filter, offset };
+}
+
+export function hasMore(loaded: number, total: number): boolean {
+  return loaded < total;
+}
+
 export interface TicketInboxProps {
   open: boolean;
   onClose: () => void;
@@ -103,7 +112,7 @@ export function TicketInbox({ open, onClose, gateway }: TicketInboxProps) {
     let live = true;
     setLoadFailed(false);
     setTickets(undefined);
-    gateway.list().then(
+    gateway.list(inboxQuery(filter, 0)).then(
       (inbox) => {
         if (!live) return;
         setTickets(inbox.tickets);
@@ -116,7 +125,21 @@ export function TicketInbox({ open, onClose, gateway }: TicketInboxProps) {
     return () => {
       live = false;
     };
-  }, [open, gateway]);
+  }, [open, gateway, filter]);
+
+  const loadMore = async () => {
+    setBusy(true);
+    setLoadFailed(false);
+    try {
+      const inbox = await gateway.list(inboxQuery(filter, tickets?.length ?? 0));
+      setTickets((list) => [...(list ?? []), ...inbox.tickets.filter((x) => !list?.some((y) => y.ref === x.ref))]);
+      setTotal(inbox.total);
+    } catch {
+      setLoadFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const shown = visibleTickets(tickets ?? [], filter, query);
   const current = (tickets ?? []).find((x) => x.ref === selected);
@@ -158,7 +181,7 @@ export function TicketInbox({ open, onClose, gateway }: TicketInboxProps) {
       </div>
       {loadFailed && <p class="notice notice-danger" role="alert">{m.errorLoad}</p>}
       {!tickets && !loadFailed && <p class="muted" role="status">{m.loading}</p>}
-      {tickets && total > tickets.length && <p class="muted">{m.newestOnly(tickets.length, total)}</p>}
+      {tickets && hasMore(tickets.length, total) && <p class="muted">{m.newestOnly(tickets.length, total)}</p>}
       {tickets && shown.length === 0 && <p class="muted">{m.empty}</p>}
       <div class="ticket-panes">
         {shown.length > 0 && (
@@ -177,6 +200,9 @@ export function TicketInbox({ open, onClose, gateway }: TicketInboxProps) {
         {current && <TicketDetail key={current.ref} ticket={current} busy={busy} error={error} onChange={(c) => void change(current.ref, c)} onCopy={() => copyIssue(current)} />}
       </div>
       <div class="actions">
+        {tickets && hasMore(tickets.length, total) && (
+          <button type="button" disabled={busy} onClick={() => void loadMore()}>{m.loadMore}</button>
+        )}
         <button type="button" class="primary" onClick={onClose}>{m.close}</button>
       </div>
     </Modal>

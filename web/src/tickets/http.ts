@@ -15,10 +15,15 @@ export interface TicketInbox {
   total: number;
 }
 
+export interface TicketQuery {
+  status?: TicketStatus;
+  offset?: number;
+}
+
 export interface TicketsGateway {
   create(input: TicketInput): Promise<string>;
   access(): Promise<boolean>;
-  list(): Promise<TicketInbox>;
+  list(query?: TicketQuery): Promise<TicketInbox>;
   update(ref: string, change: TicketChange): Promise<Ticket>;
 }
 
@@ -59,8 +64,13 @@ export function createHttpTicketsGateway(options: GalleyApiOptions = {}): Ticket
       const { data } = await api.send('GET', '/me/tickets/access');
       return isRecord(data) && data.admin === true;
     },
-    async list() {
-      const { data } = await api.send('GET', '/tickets/inbox');
+    async list({ status, offset } = {}) {
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      if (offset) params.set('offset', String(offset));
+      const search = params.toString();
+      const query = search ? `?${search}` : '';
+      const { data } = await api.send('GET', `/tickets/inbox${query}`);
       if (!isRecord(data) || !Array.isArray(data.tickets) || typeof data.total !== 'number') throw new GatewayError('malformed ticket inbox');
       return { tickets: data.tickets.map(parseTicket), total: data.total };
     },

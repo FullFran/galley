@@ -88,50 +88,34 @@ export function ticketIssueBody(t: Ticket): string {
   ].join('\n\n');
 }
 
-const MESSAGE_CHARS = 200;
 const ERROR_ENTRIES = 10;
 
-/** Strips what could point at a person or a paper: URL queries, emails, tokens, addresses, paths, file names, long ids. */
-export function scrub(text: string): string {
-  return text
-    .replace(/(\b[a-z][\w+.-]*:\/\/[^\s?#]+)[?#]\S*/gi, '$1')
-    .replace(/[^\s@"'<>()/]+@[^\s@"'<>()]+/g, '[email]')
-    .replace(/\beyJ[\w-]*(?:\.[\w-]*){0,2}/g, '[token]')
-    .replace(/\bgh[a-z]_\w+/gi, '[token]')
-    .replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, '[ip]')
-    .replace(/[^\s"'<>()]*\/[^\s"'<>()]*/g, '[path]')
-    .replace(/[^\s"'<>()]+\.(?:qmd|md|tex|bib|ya?ml|csl|png|jpe?g|svg|pdf)\b/gi, '[file]')
-    .replace(/\b(?=[\w-]*\d)(?=[\w-]*[a-z])[\w-]{12,}\b/gi, '[id]');
-}
-
 export interface ErrorLog {
-  record(error: unknown, file?: string, line?: number): void;
+  record(error: unknown, file?: string, line?: number, column?: number): void;
   entries(): readonly string[];
 }
 
-// Messages of the engine's own errors name code. galley's own errors and
-// anything else thrown can quote a file or a title, and no scrubbing catches
-// every name, so of those only the kind is kept.
-const ENGINE_ERRORS: ReadonlySet<string> = new Set(['TypeError', 'RangeError', 'ReferenceError']);
+// Only the kind and the place are kept. A message can quote a file or a title,
+// and no scrubbing catches every name.
+const KNOWN_ERRORS: ReadonlySet<string> = new Set(['TypeError', 'RangeError', 'ReferenceError', 'SyntaxError']);
 const SCRIPT_FILE = /^[\w.-]+\.js$/;
 
-function errorText(error: unknown): string {
-  if (!(error instanceof Error)) return 'Error';
-  const name = ['SyntaxError', ...ENGINE_ERRORS].includes(error.name) ? error.name : 'Error';
-  return ENGINE_ERRORS.has(name) ? `${name}: ${scrub(error.message).slice(0, MESSAGE_CHARS)}` : name;
+function errorKind(error: unknown): string {
+  return error instanceof Error && KNOWN_ERRORS.has(error.name) ? error.name : 'Error';
 }
 
-function errorSource(file: string | undefined, line: number | undefined): string {
+function errorPlace(file: string | undefined, line: number | undefined, column: number | undefined): string {
   const name = (file ?? '').split(/[?#]/)[0]?.split('/').pop() ?? '';
-  return SCRIPT_FILE.test(name) ? ` @ ${name}${line ? `:${line}` : ''}` : '';
+  if (!SCRIPT_FILE.test(name)) return '';
+  return ` @ ${name}${line ? `:${line}` : ''}${line && column ? `:${column}` : ''}`;
 }
 
 /** The page's latest errors, kept in memory only. */
 export function createErrorLog(size = ERROR_ENTRIES): ErrorLog {
   const entries: string[] = [];
   return {
-    record(error, file, line) {
-      entries.push(errorText(error) + errorSource(file, line));
+    record(error, file, line, column) {
+      entries.push(errorKind(error) + errorPlace(file, line, column));
       if (entries.length > size) entries.shift();
     },
     entries: () => entries.slice(),
@@ -145,7 +129,7 @@ export const errorLog = createErrorLog();
 export function installErrorLog(target: Pick<Window, 'addEventListener'>, log: ErrorLog = errorLog): void {
   target.addEventListener('error', (e) => {
     const event = e as ErrorEvent;
-    log.record(event.error ?? event.message, event.filename, event.lineno);
+    log.record(event.error ?? event.message, event.filename, event.lineno, event.colno);
   });
   target.addEventListener('unhandledrejection', (e) => log.record((e as PromiseRejectionEvent).reason));
 }

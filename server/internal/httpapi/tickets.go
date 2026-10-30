@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/pocketbase/pocketbase/core"
@@ -24,7 +25,7 @@ const maxTicketBody = 32 << 10
 type TicketsService interface {
 	Create(ctx context.Context, a comments.Actor, in tickets.Input) (string, error)
 	Access(ctx context.Context, a comments.Actor) bool
-	List(ctx context.Context, a comments.Actor, status string) (tickets.List, error)
+	List(ctx context.Context, a comments.Actor, status string, offset int) (tickets.List, error)
 	Update(ctx context.Context, a comments.Actor, ref string, c tickets.Change) (tickets.Ticket, error)
 }
 
@@ -86,7 +87,16 @@ func registerTickets(r *router.Router[*core.RequestEvent], me *router.RouterGrou
 
 	inbox := credentialedGroup(r, TicketsPrefix, d.FrontendOrigin, credentialedMethods)
 	inbox.GET("/inbox", withActor(d, func(e *core.RequestEvent, a comments.Actor) error {
-		list, err := d.Tickets.List(e.Request.Context(), a, e.Request.URL.Query().Get("status"))
+		q := e.Request.URL.Query()
+		offset := 0
+		if raw := q.Get("offset"); raw != "" {
+			n, err := strconv.Atoi(raw)
+			if err != nil {
+				return failJSON(d, e, &comments.ValidationError{Field: "offset"}, "tickets")
+			}
+			offset = n
+		}
+		list, err := d.Tickets.List(e.Request.Context(), a, q.Get("status"), offset)
 		if err != nil {
 			return failJSON(d, e, err, "tickets")
 		}

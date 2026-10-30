@@ -6,7 +6,7 @@ import { en } from '../../i18n/en';
 import { es } from '../../i18n/es';
 import { CATEGORIES, STATUSES, type Ticket } from '../../tickets/model';
 import { sendErrorMessage, TicketDialog, submitTicket } from './TicketDialog';
-import { TicketDetail } from './TicketInbox';
+import { hasMore, inboxQuery, TicketDetail } from './TicketInbox';
 
 const noop = () => undefined;
 
@@ -45,6 +45,15 @@ describe('TicketDialog', () => {
     expect(sendErrorMessage(new RateLimitedError('x', 2), en)).toBe(en.tickets.errorRate);
     expect(sendErrorMessage(new TransientError('x'), en)).toBe(en.tickets.errorRetry);
     expect(en.tickets.errorRetry).toMatch(/kept/);
+  });
+});
+
+describe('inbox paging', () => {
+  it('asks for one status unless showing all, and offers more only when there are more', () => {
+    expect(inboxQuery('all', 0)).toEqual({ offset: 0 });
+    expect(inboxQuery('new', 200)).toEqual({ status: 'new', offset: 200 });
+    expect(hasMore(200, 201)).toBe(true);
+    expect(hasMore(201, 201)).toBe(false);
   });
 });
 

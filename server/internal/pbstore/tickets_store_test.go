@@ -3,7 +3,10 @@ package pbstore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -32,26 +35,29 @@ func TestTicketStore(t *testing.T) {
 		Description: "sealed", Version: strings.Repeat("é", tickets.MaxVersion), Device: strings.Repeat("é", tickets.MaxDevice),
 		Diagnostics: strings.Repeat("x", 22<<10),
 	}
-	if err := s.CreateTicket(ctx, longest); err != nil {
+	if err := s.CreateTicket(ctx, longest, time.Now().Add(-time.Hour), 100); err != nil {
 		t.Fatalf("the longest ticket: %v", err)
 	}
-	if err := s.CreateTicket(ctx, longest); !errors.Is(err, comments.ErrConflict) {
+	if err := s.CreateTicket(ctx, longest, time.Now().Add(-time.Hour), 100); !errors.Is(err, comments.ErrConflict) {
 		t.Fatalf("same reference = %v", err)
 	}
 	later := tickets.Record{Ref: "GL-BBBBBB", UserID: u.ID, Login: "ana", Category: "other", Status: tickets.StatusClosed, Description: "sealed"}
-	if err := s.CreateTicket(ctx, later); err != nil {
+	if err := s.CreateTicket(ctx, later, time.Now().Add(-time.Hour), 100); err != nil {
 		t.Fatal(err)
 	}
 
-	list, total, err := s.ListTickets(ctx, "", 1)
+	list, total, err := s.ListTickets(ctx, "", 1, 0)
 	if err != nil || total != 2 || len(list) != 1 {
 		t.Fatalf("limited list = %v %d %v", list, total, err)
 	}
-	if list, total, err = s.ListTickets(ctx, tickets.StatusClosed, 10); err != nil || total != 1 || list[0].Ref != "GL-BBBBBB" {
+	if list, total, err = s.ListTickets(ctx, tickets.StatusClosed, 10, 0); err != nil || total != 1 || list[0].Ref != "GL-BBBBBB" {
 		t.Fatalf("closed = %v %d %v", list, total, err)
 	}
 	if list[0].CreatedAt.IsZero() {
 		t.Fatal("no creation time")
+	}
+	if list, total, err = s.ListTickets(ctx, "", 10, 1); err != nil || total != 2 || len(list) != 1 {
+		t.Fatalf("offset = %v %d %v", list, total, err)
 	}
 	n, err := s.CountTicketsSince(ctx, time.Now().Add(-time.Hour))
 	if err != nil || n != 2 {
@@ -123,5 +129,44 @@ func TestTicketCollectionsAreClosedToTheRecordsAPI(t *testing.T) {
 		if c.ListRule != nil || c.ViewRule != nil || c.CreateRule != nil || c.UpdateRule != nil || c.DeleteRule != nil {
 			t.Errorf("%s has an open API rule", name)
 		}
+	}
+}
+
+func TestDailyCapHoldsUnderParallelSends(t *testing.T) {
+	app, err := tests.NewTestAppWithConfig(core.BaseAppConfig{DataDir: t.TempDir(), EncryptionEnv: "pb_test_env"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(app.Cleanup)
+	ctx := context.Background()
+	u, err := New(app).UpsertUser(ctx, auth.GitHubUser{ID: 42, Login: "ana"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := NewTicketStore(app)
+	since := time.Now().Add(-time.Hour)
+	var wg sync.WaitGroup
+	var stored, refused atomic.Int32
+	for i := range 30 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			r := tickets.Record{Ref: fmt.Sprintf("GL-%06d", i), UserID: u.ID, Login: "ana", Category: "bug", Status: tickets.StatusNew, Description: "sealed"}
+			switch err := s.CreateTicket(ctx, r, since, 10); {
+			case err == nil:
+				stored.Add(1)
+			case errors.Is(err, tickets.ErrDailyCap):
+				refused.Add(1)
+			default:
+				t.Errorf("create: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	if stored.Load() != 10 || refused.Load() != 20 {
+		t.Fatalf("stored %d, refused %d", stored.Load(), refused.Load())
+	}
+	if n, err := s.CountTicketsSince(ctx, since); err != nil || n != 10 {
+		t.Fatalf("count = %d %v", n, err)
 	}
 }

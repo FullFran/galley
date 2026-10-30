@@ -52,7 +52,7 @@ const (
 	// they still wait in the inbox: a flood must not spend the quota that
 	// notification mails share.
 	DefaultMailDailyLimit = 20
-	// DefaultListLimit is the most tickets one list answers.
+	// DefaultListLimit is the most tickets one page answers.
 	DefaultListLimit = 200
 	writeBurst       = 5
 	writeEvery       = 2 * time.Minute
@@ -71,6 +71,10 @@ var (
 	Statuses = []string{StatusNew, StatusTriaged, StatusIssue, StatusClosed}
 
 	validRef = regexp.MustCompile(`^GL-[A-Z0-9]{6}$`)
+
+	// ErrDailyCap means today's tickets reached the cap; it answers as
+	// comments.ErrUnavailable.
+	ErrDailyCap = fmt.Errorf("%w: daily ticket cap reached", comments.ErrUnavailable)
 )
 
 // Input is what a person sends.
@@ -102,7 +106,7 @@ type Ticket struct {
 	Unreadable bool
 }
 
-// List is one page of the inbox, newest first; Total counts past the limit.
+// List is one page of the inbox, newest first; Total counts every match.
 type List struct {
 	Tickets []Ticket
 	Total   int
@@ -116,9 +120,11 @@ type Change struct {
 
 // Store persists tickets and the list of admins (pbstore.TicketStore).
 type Store interface {
-	// CreateTicket returns comments.ErrConflict when the reference is taken.
-	CreateTicket(ctx context.Context, r Record) error
-	ListTickets(ctx context.Context, status string, limit int) ([]Record, int, error)
+	// CreateTicket returns comments.ErrConflict when the reference is taken and
+	// ErrDailyCap when dailyCap tickets exist since the given time, deciding
+	// both atomically with the save.
+	CreateTicket(ctx context.Context, r Record, since time.Time, dailyCap int) error
+	ListTickets(ctx context.Context, status string, limit, offset int) ([]Record, int, error)
 	TicketByRef(ctx context.Context, ref string) (Record, error)
 	// UpdateTicket sets the status, and the link unless issue is zero.
 	UpdateTicket(ctx context.Context, ref, status string, issue int) (Record, error)
@@ -183,14 +189,7 @@ func (s *Service) Create(ctx context.Context, a comments.Actor, in Input) (strin
 	if !s.cfg.Limiter.Allow(a.UserID) {
 		return "", comments.ErrRateLimited
 	}
-	today, err := s.cfg.Store.CountTicketsSince(ctx, startOfDay(s.cfg.Clock.Now()))
-	if err != nil {
-		return "", fmt.Errorf("%w: %v", comments.ErrUnavailable, err)
-	}
-	if today >= s.cfg.DailyCap {
-		s.cfg.Logger.Warn("tickets: daily cap reached", "cap", s.cfg.DailyCap)
-		return "", comments.ErrUnavailable
-	}
+	since := startOfDay(s.cfg.Clock.Now())
 	for range refAttempts {
 		ref, err := newRef()
 		if err != nil {
@@ -200,9 +199,13 @@ func (s *Service) Create(ctx context.Context, a comments.Actor, in Input) (strin
 		if err != nil {
 			return "", err
 		}
-		err = s.cfg.Store.CreateTicket(ctx, rec)
+		err = s.cfg.Store.CreateTicket(ctx, rec, since, s.cfg.DailyCap)
 		if errors.Is(err, comments.ErrConflict) {
 			continue
+		}
+		if errors.Is(err, ErrDailyCap) {
+			s.cfg.Logger.Warn("tickets: daily cap reached", "cap", s.cfg.DailyCap)
+			return "", err
 		}
 		if err != nil {
 			return "", err
@@ -226,15 +229,18 @@ func (s *Service) Access(ctx context.Context, a comments.Actor) bool {
 	return ok
 }
 
-// List returns the inbox, optionally for one status.
-func (s *Service) List(ctx context.Context, a comments.Actor, status string) (List, error) {
+// List returns one page of the inbox, optionally for one status.
+func (s *Service) List(ctx context.Context, a comments.Actor, status string, offset int) (List, error) {
 	if !s.Access(ctx, a) {
 		return List{}, comments.ErrForbidden
 	}
 	if status != "" && !slices.Contains(Statuses, status) {
 		return List{}, &comments.ValidationError{Field: "status"}
 	}
-	records, total, err := s.cfg.Store.ListTickets(ctx, status, s.cfg.ListLimit)
+	if offset < 0 {
+		return List{}, &comments.ValidationError{Field: "offset"}
+	}
+	records, total, err := s.cfg.Store.ListTickets(ctx, status, s.cfg.ListLimit, offset)
 	if err != nil {
 		return List{}, err
 	}

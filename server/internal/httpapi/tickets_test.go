@@ -131,6 +131,11 @@ func TestTicketsThroughTheRoutes(t *testing.T) {
 		t.Fatalf("closed = %v", got)
 	}
 	call(browserReq("GET", httpapi.TicketsPrefix+"/inbox?status=lost", ""), 422)
+	call(browserReq("GET", httpapi.TicketsPrefix+"/inbox?offset=-1", ""), 422)
+	call(browserReq("GET", httpapi.TicketsPrefix+"/inbox?offset=x", ""), 422)
+	if got := call(browserReq("GET", httpapi.TicketsPrefix+"/inbox?offset=1", ""), 200); got["total"] != float64(1) || len(got["tickets"].([]any)) != 0 {
+		t.Fatalf("past the end = %v", got)
+	}
 
 	linked := call(browserReq("PATCH", httpapi.TicketsPrefix+"/inbox/"+ref, `{"status":"issue","github_issue":12}`), 200)
 	if linked["status"] != "issue" || linked["github_issue"] != float64(12) || linked["description"] == "" {

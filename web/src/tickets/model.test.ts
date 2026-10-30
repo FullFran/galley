@@ -6,7 +6,6 @@ import {
   EMPTY_DRAFT,
   loadDraft,
   saveDraft,
-  scrub,
   snapshot,
   ticketIssueBody,
   ticketSummary,
@@ -75,38 +74,33 @@ describe('the inbox', () => {
 });
 
 describe('the technical snapshot', () => {
-  it('scrubs what could point at a person or a paper', () => {
-    const out = scrub('failed https://x.io/a?token=1 for me@uni.es at 10.0.0.1 in chapters/two.qmd and thesis.tex');
-    expect(out).not.toMatch(/token=1|me@uni|10\.0\.0\.1|chapters|two\.qmd|thesis\.tex/);
-  });
-
   it('keeps a short list of the latest errors', () => {
     const log = createErrorLog(2);
     log.record(new TypeError('one'));
-    log.record(new TypeError('two me@uni.es'));
-    log.record(new TypeError('three'));
-    expect(log.entries()).toEqual(['TypeError: two [email]', 'TypeError: three']);
-    log.record(new TypeError('x'.repeat(500)));
-    expect(log.entries()[1]?.length).toBeLessThanOrEqual(240);
+    log.record(new RangeError('two'));
+    log.record(new ReferenceError('three'));
+    expect(log.entries()).toEqual(['RangeError', 'ReferenceError']);
   });
 
-  it('keeps the message only of errors the engine writes, because galley errors quote file names', () => {
-    const log = createErrorLog();
+  it('keeps the kind of an error and never its message, which could quote a file or a title', () => {
+    const log = createErrorLog(20);
     for (const leak of ['analysis.Rmd is too large to open', 'thesis draft.qmd is too large', 'README is not a file', 'C:\\Users\\ana\\thesis']) {
       log.record(new Error(leak));
+      log.record(new TypeError(leak));
       log.record(leak);
     }
-    log.record(new SyntaxError('Unexpected token, "my secret title" is not valid JSON'));
-    expect(log.entries().join(' ')).not.toMatch(/analysis|thesis|README|ana|secret/);
-    expect(log.entries().at(-1)).toBe('SyntaxError');
-    expect(log.entries()[0]).toBe('Error');
+    const renamed = new Error('thesis');
+    renamed.name = 'thesis';
+    log.record(renamed);
+    expect(log.entries().join(' ')).not.toMatch(/analysis|thesis|README|ana\b/);
+    expect(log.entries().slice(0, 3)).toEqual(['Error', 'TypeError', 'Error']);
   });
 
   it('names where an error happened by the script file only', () => {
     const log = createErrorLog();
-    log.record(new TypeError('x is not a function'), 'https://galley.example/assets/index-AbC123.js?v=1', 88);
-    log.record(new Error('no'), 'https://galley.example/#/r/acme/thesis.qmd', 3);
-    expect(log.entries()).toEqual(['TypeError: x is not a function @ index-AbC123.js:88', 'Error']);
+    log.record(new TypeError('x'), 'https://galley.example/assets/index-AbC123.js?v=1', 88, 12);
+    log.record(new Error('no'), 'https://galley.example/#/r/acme/thesis.qmd', 3, 1);
+    expect(log.entries()).toEqual(['TypeError @ index-AbC123.js:88:12', 'Error']);
   });
 
   it('holds an allowlist of fields and only the kind of screen', () => {

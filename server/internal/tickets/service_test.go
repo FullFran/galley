@@ -24,9 +24,12 @@ type fakeStore struct {
 	collide  int
 }
 
-func (f *fakeStore) CreateTicket(_ context.Context, r tickets.Record) error {
+func (f *fakeStore) CreateTicket(_ context.Context, r tickets.Record, _ time.Time, dailyCap int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if len(f.records) >= dailyCap {
+		return tickets.ErrDailyCap
+	}
 	if f.collide > 0 {
 		f.collide--
 		return comments.ErrConflict
@@ -35,7 +38,7 @@ func (f *fakeStore) CreateTicket(_ context.Context, r tickets.Record) error {
 	return nil
 }
 
-func (f *fakeStore) ListTickets(_ context.Context, status string, limit int) ([]tickets.Record, int, error) {
+func (f *fakeStore) ListTickets(_ context.Context, status string, limit, offset int) ([]tickets.Record, int, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := []tickets.Record{}
@@ -45,6 +48,7 @@ func (f *fakeStore) ListTickets(_ context.Context, status string, limit int) ([]
 		}
 	}
 	total := len(out)
+	out = out[min(offset, total):]
 	if len(out) > limit {
 		out = out[:limit]
 	}
@@ -314,7 +318,7 @@ func TestOnlyListedAdminsReachTheInbox(t *testing.T) {
 	if ok := s.Access(ctx, admin); !ok {
 		t.Fatal("admin has no access")
 	}
-	if _, err := s.List(ctx, reporter, ""); !errors.Is(err, comments.ErrForbidden) {
+	if _, err := s.List(ctx, reporter, "", 0); !errors.Is(err, comments.ErrForbidden) {
 		t.Fatalf("list = %v", err)
 	}
 	if _, err := s.Update(ctx, reporter, ref, tickets.Change{Status: "closed"}); !errors.Is(err, comments.ErrForbidden) {
@@ -329,7 +333,7 @@ func TestOnlyListedAdminsReachTheInbox(t *testing.T) {
 	if s.Access(ctx, admin) {
 		t.Fatal("a failed lookup granted access")
 	}
-	if _, err := s.List(ctx, admin, ""); !errors.Is(err, comments.ErrForbidden) {
+	if _, err := s.List(ctx, admin, "", 0); !errors.Is(err, comments.ErrForbidden) {
 		t.Fatalf("list with a failed lookup = %v", err)
 	}
 }
@@ -344,7 +348,7 @@ func TestInboxOpensTheText(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	list, err := s.List(ctx, admin, "")
+	list, err := s.List(ctx, admin, "", 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,10 +359,10 @@ func TestInboxOpensTheText(t *testing.T) {
 	if got.Ref != ref || got.Description != in.Description || got.Steps != in.Steps || string(got.Diagnostics) != `{"locale":"es"}` || got.Login != "ana" || got.Status != tickets.StatusNew {
 		t.Fatalf("ticket = %+v", got)
 	}
-	if _, err := s.List(ctx, admin, "nope"); fieldOf(err) != "status" {
+	if _, err := s.List(ctx, admin, "nope", 0); fieldOf(err) != "status" {
 		t.Fatalf("unknown status = %v", err)
 	}
-	if list, err = s.List(ctx, admin, "closed"); err != nil || list.Total != 0 {
+	if list, err = s.List(ctx, admin, "closed", 0); err != nil || list.Total != 0 {
 		t.Fatalf("closed = %+v %v", list, err)
 	}
 }
@@ -416,7 +420,7 @@ func TestAnUnreadableTicketDoesNotTakeTheInboxDown(t *testing.T) {
 	// A value moved from another ticket, as a rotated key would also look.
 	store.records[0].Description = store.records[1].Description
 
-	list, err := s.List(ctx, admin, "")
+	list, err := s.List(ctx, admin, "", 0)
 	if err != nil {
 		t.Fatalf("list = %v", err)
 	}
@@ -439,5 +443,27 @@ func TestAnUnreadableTicketDoesNotTakeTheInboxDown(t *testing.T) {
 	got, err := s.Update(ctx, admin, bad, tickets.Change{Status: tickets.StatusClosed})
 	if err != nil || got.Status != tickets.StatusClosed || !got.Unreadable {
 		t.Fatalf("update = %+v %v", got, err)
+	}
+}
+
+func TestInboxPagesPastTheLimit(t *testing.T) {
+	store := &fakeStore{}
+	s := newService(t, store, func(c *tickets.Config) { c.ListLimit = 2 })
+	ctx := context.Background()
+	for range 3 {
+		if _, err := s.Create(ctx, reporter, validInput()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, err := s.List(ctx, admin, "", 0)
+	if err != nil || first.Total != 3 || len(first.Tickets) != 2 {
+		t.Fatalf("first page = %+v %v", first, err)
+	}
+	second, err := s.List(ctx, admin, "", 2)
+	if err != nil || second.Total != 3 || len(second.Tickets) != 1 || second.Tickets[0].Ref == first.Tickets[0].Ref || second.Tickets[0].Ref == first.Tickets[1].Ref {
+		t.Fatalf("second page = %+v %v", second, err)
+	}
+	if _, err := s.List(ctx, admin, "", -1); fieldOf(err) != "offset" {
+		t.Fatalf("negative offset = %v", err)
 	}
 }

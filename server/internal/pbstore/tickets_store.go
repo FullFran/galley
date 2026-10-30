@@ -78,14 +78,24 @@ var _ tickets.Store = (*TicketStore)(nil)
 // NewTicketStore returns the store.
 func NewTicketStore(app core.App) *TicketStore { return &TicketStore{app: app} }
 
-// CreateTicket saves r, or returns comments.ErrConflict when its reference is taken.
-func (s *TicketStore) CreateTicket(_ context.Context, r tickets.Record) error {
+// CreateTicket saves r, or returns comments.ErrConflict when its reference is
+// taken and tickets.ErrDailyCap when dailyCap tickets exist since the given
+// time. The transaction runs on PocketBase's single writer connection, so
+// parallel sends cannot overshoot the cap.
+func (s *TicketStore) CreateTicket(_ context.Context, r tickets.Record, since time.Time, dailyCap int) error {
 	col, err := s.app.FindCollectionByNameOrId(TicketsCollection)
 	if err != nil {
 		return err
 	}
 	return s.app.RunInTransaction(func(tx core.App) error {
-		_, err := tx.FindFirstRecordByData(TicketsCollection, "ref", r.Ref)
+		today, err := countSince(tx, since)
+		if err != nil {
+			return err
+		}
+		if today >= dailyCap {
+			return tickets.ErrDailyCap
+		}
+		_, err = tx.FindFirstRecordByData(TicketsCollection, "ref", r.Ref)
 		if err == nil {
 			return comments.ErrConflict
 		}
@@ -109,14 +119,14 @@ func (s *TicketStore) CreateTicket(_ context.Context, r tickets.Record) error {
 	})
 }
 
-// ListTickets returns the newest tickets, and how many match in all.
-func (s *TicketStore) ListTickets(_ context.Context, status string, limit int) ([]tickets.Record, int, error) {
+// ListTickets returns one page of the newest tickets, and how many match in all.
+func (s *TicketStore) ListTickets(_ context.Context, status string, limit, offset int) ([]tickets.Record, int, error) {
 	filter, params, conditions := "", dbx.Params{}, []dbx.Expression{}
 	if status != "" {
 		filter, params["status"] = "status = {:status}", status
 		conditions = append(conditions, dbx.HashExp{"status": status})
 	}
-	records, err := s.app.FindRecordsByFilter(TicketsCollection, filter, "-created", limit, 0, params)
+	records, err := s.app.FindRecordsByFilter(TicketsCollection, filter, "-created,-id", limit, offset, params)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -163,7 +173,11 @@ func (s *TicketStore) UpdateTicket(_ context.Context, ref, status string, issue 
 
 // CountTicketsSince counts the tickets created from t on.
 func (s *TicketStore) CountTicketsSince(_ context.Context, t time.Time) (int, error) {
-	n, err := s.app.CountRecords(TicketsCollection, dbx.NewExp("created >= {:start}", dbx.Params{"start": t.UTC().Format(types.DefaultDateLayout)}))
+	return countSince(s.app, t)
+}
+
+func countSince(app core.App, t time.Time) (int, error) {
+	n, err := app.CountRecords(TicketsCollection, dbx.NewExp("created >= {:start}", dbx.Params{"start": t.UTC().Format(types.DefaultDateLayout)}))
 	return int(n), err
 }
 
