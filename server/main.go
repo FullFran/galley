@@ -26,6 +26,7 @@ import (
 	"github.com/FullFran/galley/server/internal/pbstore"
 	"github.com/FullFran/galley/server/internal/reanchor"
 	"github.com/FullFran/galley/server/internal/secret"
+	"github.com/FullFran/galley/server/internal/tickets"
 )
 
 const (
@@ -231,6 +232,16 @@ func newDeps(app core.App) (httpapi.Deps, *chat.Service, error) {
 	if err != nil {
 		return httpapi.Deps{}, nil, err
 	}
+	ticketSvc, err := tickets.NewService(tickets.Config{
+		Store:  pbstore.NewTicketStore(app),
+		Sealer: dataSealer,
+		Mailer: mailer,
+		MailTo: cfg.TicketsMailTo,
+		Logger: logger,
+	})
+	if err != nil {
+		return httpapi.Deps{}, nil, err
+	}
 	return httpapi.Deps{
 		Auth:           svc,
 		Admin:          adminSvc,
@@ -239,6 +250,7 @@ func newDeps(app core.App) (httpapi.Deps, *chat.Service, error) {
 		Chat:           httpapi.ChatAdapter(chatSvc),
 		Notify:         notifySvc,
 		Tour:           store,
+		Tickets:        ticketSvc,
 		OnAccessChange: access.InvalidateAll,
 		FrontendOrigin: cfg.FrontendOrigin,
 		WebhookSecret:  []byte(cfg.WebhookSecret),
