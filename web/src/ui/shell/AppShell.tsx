@@ -1,4 +1,4 @@
-import { createContext, type ComponentChildren } from 'preact';
+import { createContext, type ComponentChildren, type ComponentType } from 'preact';
 import { useContext, useEffect, useState } from 'preact/hooks';
 import type { Person, Repository } from '../../domain';
 import type { CiGateway } from '../../github/ci';
@@ -15,10 +15,17 @@ import type { TeamGateway } from '../../github/team';
 import { Menu, MenuItem, type HeaderFold } from './Menu';
 import { PreferencesDialog } from './PreferencesDialog';
 import { ShortcutsDialog } from './ShortcutsDialog';
+import { TicketDialog } from './TicketDialog';
+import type { TicketInboxProps } from './TicketInbox';
 import { useTheme } from './ThemeSwitch';
 import { Toasts } from './Toasts';
 import { useTour } from '../../tour/useTour';
 import { DEMO_HREF, inDemo } from '../../demo/mode';
+import { createHttpTicketsGateway } from '../../tickets/http';
+
+const tickets = createHttpTicketsGateway();
+/** Accounts the server has confirmed as ticket admins. Only a yes is kept: a no may be a failed request. */
+const ticketAdmins = new Set<number>();
 
 /** What every signed-in screen shares, provided by App. */
 export interface ShellContext {
@@ -122,7 +129,38 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
   const startTour = useTour(shell.user?.id);
   const [shortcuts, setShortcuts] = useState(false);
   const [prefs, setPrefs] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [ticketAdmin, setTicketAdmin] = useState(false);
+  const [inboxOpen, setInboxOpen] = useState(false);
+  const [Inbox, setInbox] = useState<ComponentType<TicketInboxProps> | undefined>();
   const [theme, setTheme] = useTheme();
+  const userId = shell.user?.id;
+  const canReport = userId !== undefined && !inDemo();
+  useEffect(() => {
+    if (!canReport) return;
+    if (ticketAdmins.has(userId)) {
+      setTicketAdmin(true);
+      return;
+    }
+    let live = true;
+    tickets.access().then(
+      (admin) => {
+        if (admin) ticketAdmins.add(userId);
+        if (live) setTicketAdmin(admin);
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [canReport, userId]);
+  // The inbox is its own chunk: only ticket admins download it.
+  const openInbox = () => {
+    void import('./TicketInbox').then((m) => {
+      setInbox(() => m.TicketInbox);
+      setInboxOpen(true);
+    });
+  };
   // The default branch's latest compiled PDF, from the ⋯ menu of every repository screen.
   const latestPdf = usePdfDownload(shell.ci);
   const repo = shell.repo;
@@ -332,6 +370,8 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
                 <MenuItem onSelect={() => setShortcuts(true)} kbd="?">
                   {t.shell.shortcuts}
                 </MenuItem>
+                {canReport && <MenuItem onSelect={() => setReporting(true)}>{t.tickets.report}</MenuItem>}
+                {ticketAdmin && <MenuItem onSelect={openInbox}>{t.tickets.inbox}</MenuItem>}
                 <MenuItem onSelect={() => setAbout(true)}>{t.nav.about}</MenuItem>
               </Menu>
             </div>
@@ -385,6 +425,8 @@ export function AppShell({ shell, active, crumbs, actions, contents, banner, toa
           {latestPdf.toast}
         </Toasts>
         <AboutDialog open={about} onClose={() => setAbout(false)} />
+        {canReport && <TicketDialog open={reporting} onClose={() => setReporting(false)} gateway={tickets} />}
+        {Inbox && <Inbox open={inboxOpen} onClose={() => setInboxOpen(false)} gateway={tickets} />}
         <ShortcutsDialog open={shortcuts} onClose={() => setShortcuts(false)} />
         <PreferencesDialog open={prefs} theme={theme} onTheme={setTheme} onClose={() => setPrefs(false)} />
       </div>

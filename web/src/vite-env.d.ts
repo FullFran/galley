@@ -3,6 +3,7 @@
 interface ImportMetaEnv {
   /** Base URL of the galley API. Defaults to http://127.0.0.1:8090. */
   readonly VITE_API_BASE?: string;
+  readonly VITE_GALLEY_BUILD?: string;
 }
 
 interface ImportMeta {

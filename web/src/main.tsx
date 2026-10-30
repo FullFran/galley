@@ -12,7 +12,10 @@ import { createHttpDraftsGateway } from './drafts/http';
 import { createHttpChatGateway } from './chat/http';
 import { LocaleProvider } from './i18n/LocaleProvider';
 import { demoRequested } from './demo/mode';
+import { installErrorLog } from './tickets/model';
 import './styles.css';
+
+installErrorLog(window);
 
 const root = document.getElementById('app');
 if (!root) {
