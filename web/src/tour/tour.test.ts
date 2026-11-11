@@ -84,11 +84,11 @@ describe('plain-data guides', () => {
       expect(config.smoothScroll).toBe(false);
       expect(config.progressText).toBe(copy.progress(1, 1));
       const driver = { isLastStep: () => true, destroy: vi.fn(), moveNext: vi.fn() } as unknown as Driver;
-      config.onDestroyStarted?.(undefined, {}, { driver, config, state: {} });
+      config.onDestroyStarted?.(undefined, {}, { driver, config, state: {}, index: undefined });
       expect(finish).toHaveBeenLastCalledWith('skipped');
-      config.onNextClick?.(undefined, {}, { driver, config, state: {} });
+      config.onNextClick?.(undefined, {}, { driver, config, state: {}, index: undefined });
       expect(finish).toHaveBeenLastCalledWith('done');
-      config.onDestroyStarted?.(undefined, {}, { driver, config, state: {} });
+      config.onDestroyStarted?.(undefined, {}, { driver, config, state: {}, index: undefined });
       expect(finish).toHaveBeenLastCalledWith('done');
       expect(finish).toHaveBeenCalledTimes(2);
       expect(driver.destroy).toHaveBeenCalledTimes(3);
@@ -130,7 +130,7 @@ describe('demo guide', () => {
     const go = vi.fn(() => new Promise<boolean>(r => { release = r; }));
     const config = tourConfig(en.tour, demoSteps(en.tour, () => undefined), true, finish, go);
     const driver = { isLastStep: () => false, getActiveIndex: () => 2, moveTo: vi.fn(), moveNext: vi.fn(), movePrevious: vi.fn() } as unknown as Driver;
-    const opts = { driver, config, state: {} };
+    const opts = { driver, config, state: {}, index: undefined };
     config.onNextClick?.(undefined, {}, opts);
     config.onNextClick?.(undefined, {}, opts);
     expect(go).toHaveBeenCalledOnce();
@@ -150,7 +150,7 @@ describe('demo guide', () => {
     const config = tourConfig(en.tour, guideSteps(en.tour, 'full', () => undefined), true, vi.fn());
     expect(config.onPrevClick).toBeUndefined();
     const driver = { isLastStep: () => false, moveNext: vi.fn() } as unknown as Driver;
-    config.onNextClick?.(undefined, {}, { driver, config, state: {} });
+    config.onNextClick?.(undefined, {}, { driver, config, state: {}, index: undefined });
     expect(driver.moveNext).toHaveBeenCalledOnce();
   });
 });
