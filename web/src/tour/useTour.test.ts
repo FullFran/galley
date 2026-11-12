@@ -92,7 +92,7 @@ describe('demo tour', () => {
     const prepare = vi.fn(() => new Promise<void>(r => { arrive = r; }));
     setup(false, true, prepare); await settle();
     const driver = driverOf(0);
-    harness.configs[0]?.onNextClick?.(undefined, {}, { driver, config: {}, state: {} });
+    harness.configs[0]?.onNextClick?.(undefined, {}, { driver, config: {}, state: {}, index: undefined });
     expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ anchor: 'repos' }));
     // The route change unmounts this shell; the new one picks the tour up at step 2.
     harness.cleanups.splice(0).forEach(cleanup => cleanup());
@@ -104,7 +104,7 @@ describe('demo tour', () => {
   it('moves in place when the step stays on the same screen', async () => {
     setup(false, true, async () => undefined); await settle();
     const driver = driverOf(3);
-    harness.configs[0]?.onNextClick?.(undefined, {}, { driver, config: {}, state: {} });
+    harness.configs[0]?.onNextClick?.(undefined, {}, { driver, config: {}, state: {}, index: undefined });
     await settle(); await Promise.resolve();
     expect(driver.moveTo).toHaveBeenCalledWith(4);
   });
