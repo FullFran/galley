@@ -37,6 +37,9 @@ export interface PreviewAsset {
   bytes: Uint8Array;
 }
 
+export type { LatexFile, LatexResult } from './latex';
+export { renderLatex } from './latex';
+
 export interface RenderResult {
   /**
    * Body HTML for the preview frame. Markup from the source is always escaped.
@@ -48,7 +51,7 @@ export interface RenderResult {
   diagnostics: Diagnostic[];
 }
 
-type Meta = Record<string, unknown>;
+export type Meta = Record<string, unknown>;
 
 const IMAGE_TYPES: Record<string, PreviewAsset['type']> = {
   png: 'image/png',
@@ -58,17 +61,21 @@ const IMAGE_TYPES: Record<string, PreviewAsset['type']> = {
   webp: 'image/webp',
   svg: 'image/svg+xml',
 };
-const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
-const MAX_TOTAL_BYTES = 40 * 1024 * 1024;
+export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_TOTAL_BYTES = 40 * 1024 * 1024;
+
+/** Preview-only notes added by `number()`; the LaTeX backend replaces them with its own. */
+export const RAW_HTML_NOTE = 'Raw HTML blocks are not shown in the preview.';
+export const CODE_CELL_NOTE = 'Code cells are not run in the preview; their source is shown.';
 
 let markdown: ReturnType<typeof createMarkdown> | undefined;
 const md = () => (markdown ??= createMarkdown());
 
-function isRecord(v: unknown): v is Meta {
+export function isRecord(v: unknown): v is Meta {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
-function parseYaml(text: string, where: string, diagnostics: Diagnostic[]): Meta {
+export function parseYaml(text: string, where: string, diagnostics: Diagnostic[]): Meta {
   try {
     const value = load(text);
     return isRecord(value) ? value : {};
@@ -79,8 +86,8 @@ function parseYaml(text: string, where: string, diagnostics: Diagnostic[]): Meta
   }
 }
 
-const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : undefined);
-const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : v === undefined || v === null ? [] : [v]);
+export const str = (v: unknown): string | undefined => (typeof v === 'string' ? v : typeof v === 'number' ? String(v) : undefined);
+export const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : v === undefined || v === null ? [] : [v]);
 
 function findEntry(files: readonly string[], config: Meta): string | undefined {
   const project = isRecord(config.project) ? config.project : {};
@@ -132,10 +139,10 @@ function number(tokens: Token[], ctx: RenderContext) {
       counters.fill(0);
       items.fig = items.tbl = items.eq = 0;
     } else if (t.type === 'fence' && t.info.trim() === '{=html}') {
-      ctx.diagnostics.push({ severity: 'info', message: 'Raw HTML blocks are not shown in the preview.' });
+      ctx.diagnostics.push({ severity: 'info', message: RAW_HTML_NOTE });
     } else if (t.type === 'fence' && /^\{(?!=)/.test(t.info.trim())) {
       if (!ctx.diagnostics.some((d) => d.message.startsWith('Code cells')))
-        ctx.diagnostics.push({ severity: 'info', message: 'Code cells are not run in the preview; their source is shown.' });
+        ctx.diagnostics.push({ severity: 'info', message: CODE_CELL_NOTE });
     } else if (t.type === 'heading_open' || t.type === 'heading_close') {
       const level = Number(t.tag.slice(1));
       t.tag = `h${Math.min(6, level + 1)}`;
@@ -163,13 +170,14 @@ function number(tokens: Token[], ctx: RenderContext) {
   });
 }
 
-async function loadBibliography(
+export async function loadBibliography(
   meta: Meta,
   entryDir: string,
   project: ProjectSource,
   diagnostics: Diagnostic[],
-): Promise<{ items: Record<string, CslItem>; signature: string }> {
+): Promise<{ items: Record<string, CslItem>; signature: string; paths: string[] }> {
   const items: Record<string, CslItem> = {};
+  const paths: string[] = [];
   let signature = '';
   for (const raw of list(meta.bibliography).map(str)) {
     if (!raw) continue;
@@ -186,6 +194,7 @@ async function loadBibliography(
       continue;
     }
     signature += `${path}\n${text}\n`;
+    paths.push(path);
     if (/\.json$/i.test(path)) {
       try {
         for (const item of list(JSON.parse(text))) {
@@ -204,7 +213,7 @@ async function loadBibliography(
     Object.assign(items, parsed.items);
     for (const error of parsed.errors.slice(0, 3)) diagnostics.push({ severity: 'warning', path, message: `${path}: ${error}` });
   }
-  return { items, signature };
+  return { items, signature, paths };
 }
 
 function citations(tokens: Token[][], items: Record<string, CslItem>, signature: string, ctx: RenderContext): string {
@@ -328,21 +337,51 @@ export async function render(project: ProjectSource): Promise<RenderResult> {
   }
 }
 
-async function renderProject(project: ProjectSource, diagnostics: Diagnostic[]): Promise<RenderResult> {
+/** Everything the HTML and LaTeX backends share: configuration, parsed tokens and numbering. */
+export interface Prepared {
+  entry: string;
+  entryDir: string;
+  config: Meta;
+  front: Meta;
+  meta: Meta;
+  ctx: RenderContext;
+  env: Env;
+  abstractEnv: Env;
+  tokens: Token[];
+  abstractTokens: Token[];
+  /** The markdown-it instance that parsed `tokens`; reusable for front matter strings. */
+  md: ReturnType<typeof createMarkdown>;
+}
+
+/** The `format.html` options, merged under the front matter for the preview. */
+function htmlMeta(config: Meta, front: Meta): Meta {
+  const format = isRecord(config.format) && isRecord(config.format.html) ? config.format.html : {};
+  return { ...config, ...format, ...front };
+}
+
+/**
+ * Format-neutral preparation: project configuration, entry file, includes,
+ * front matter, markdown-it parsing and numbering. `mergeMeta` decides which
+ * format section of `_quarto.yml` joins the project options.
+ */
+export async function prepare(
+  project: ProjectSource,
+  diagnostics: Diagnostic[],
+  mergeMeta: (config: Meta, front: Meta) => Meta = htmlMeta,
+): Promise<Prepared | undefined> {
   const configPath = ['_quarto.yml', '_quarto.yaml'].find((p) => project.files.includes(p));
   const config = configPath ? parseYaml(await project.readText(configPath), configPath, diagnostics) : {};
   const chosen = project.entry && /\.(qmd|md)$/.test(project.entry) && project.files.includes(project.entry) ? project.entry : undefined;
   const entry = chosen ?? findEntry(project.files, config);
   if (!entry) {
     diagnostics.push({ severity: 'info', message: 'Nothing to preview: add an index.qmd or list the entry file in _quarto.yml.' });
-    return { html: '', assets: [], diagnostics };
+    return undefined;
   }
 
   const entryText = await project.readText(entry);
   const { yaml, body } = splitFrontMatter(entryText);
   const front = yaml ? parseYaml(yaml, entry, diagnostics) : {};
-  const format = isRecord(config.format) && isRecord(config.format.html) ? config.format.html : {};
-  const meta: Meta = { ...config, ...format, ...front };
+  const meta = mergeMeta(config, front);
   const entryDir = dirname(entry);
 
   const mapped = removeShortcodesMapped(
@@ -368,6 +407,14 @@ async function renderProject(project: ProjectSource, diagnostics: Diagnostic[]):
   const abstractTokens = abstractSource ? md().parse(abstractSource, abstractEnv) : [];
 
   number(tokens, ctx);
+  return { entry, entryDir, config, front, meta, ctx, env, abstractEnv, tokens, abstractTokens, md: md() };
+}
+
+async function renderProject(project: ProjectSource, diagnostics: Diagnostic[]): Promise<RenderResult> {
+  const prepared = await prepare(project, diagnostics);
+  if (!prepared) return { html: '', assets: [], diagnostics };
+  const { entryDir, front, meta, ctx, env, abstractEnv, tokens, abstractTokens } = prepared;
+
   const bib = await loadBibliography(meta, entryDir, project, diagnostics);
   ctx.references = citations([abstractTokens, tokens], bib.items, bib.signature, ctx);
   const assets = await images([abstractTokens, tokens], meta, entryDir, project, ctx);

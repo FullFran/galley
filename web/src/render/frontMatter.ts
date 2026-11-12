@@ -7,9 +7,19 @@ import { escapeHtml } from './markdown';
 
 type Meta = Record<string, unknown>;
 
-interface Affiliation {
+export interface Affiliation {
   id?: string;
   text: string;
+  /** The structured fields (`name`, `city`, ...) when the affiliation was a mapping. */
+  fields?: Meta;
+}
+
+export interface Author {
+  name: string;
+  /** Indices into the affiliation list. */
+  marks: number[];
+  email?: string;
+  corresponding?: boolean;
 }
 
 const isRecord = (v: unknown): v is Meta => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -30,24 +40,26 @@ function affiliationText(v: Meta): string {
     .join(', ');
 }
 
-function collect(front: Meta) {
+export function collect(front: Meta): { authors: Author[]; affiliations: Affiliation[] } {
   const affiliations: Affiliation[] = [];
   const find = (ref: unknown): number => {
     if (isRecord(ref) && str(ref.ref)) return affiliations.findIndex((a) => a.id === str(ref.ref));
     const text = isRecord(ref) ? affiliationText(ref) : (str(ref) ?? '');
     const id = isRecord(ref) ? str(ref.id) : undefined;
     let i = affiliations.findIndex((a) => (id && a.id === id) || a.text === text);
-    if (i < 0 && text) i = affiliations.push({ id, text }) - 1;
+    if (i < 0 && text) i = affiliations.push({ id, text, fields: isRecord(ref) ? ref : undefined }) - 1;
     return i;
   };
   for (const a of list(front.affiliations)) {
-    if (isRecord(a)) affiliations.push({ id: str(a.id), text: affiliationText(a) });
+    if (isRecord(a)) affiliations.push({ id: str(a.id), text: affiliationText(a), fields: a });
     else if (str(a)) affiliations.push({ text: str(a) ?? '' });
   }
-  const authors = list(front.author ?? front.authors).map((a) => {
-    if (!isRecord(a)) return { name: str(a) ?? '', marks: [] as number[] };
+  const authors = list(front.author ?? front.authors).map((a): Author => {
+    if (!isRecord(a)) return { name: str(a) ?? '', marks: [] };
     const refs = list(a.affiliations ?? a.affiliation);
-    return { name: personName(a.name ?? a), marks: refs.map(find).filter((i) => i >= 0) };
+    const attributes = isRecord(a.attributes) ? a.attributes : {};
+    const corresponding = attributes.corresponding === true || a.corresponding === true;
+    return { name: personName(a.name ?? a), marks: refs.map(find).filter((i) => i >= 0), email: str(a.email), corresponding };
   });
   return { authors, affiliations };
 }
