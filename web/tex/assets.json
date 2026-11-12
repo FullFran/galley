@@ -1,0 +1,31 @@
+{
+  "repo": "busytex/busytex",
+  "tag": "build_wasm_4499aa69fd3cf77ad86a47287d9a5193cf5ad993_7936974349_1",
+  "texlive": "2023",
+  "files": {
+    "busytex.js": "f381d9ba816d9a4389d429f54fe85f13396aa2f822973d9b66e1f527ced3434b",
+    "busytex.wasm": "a7785b59bfddb8667e7738443f111430e3ee2bd3ec0c1c26629267849e091415",
+    "texmf.cnf": "271578349b62a41077a28b2eb9be1f16d782590825a6acc8ee8cc979dbde37a8",
+    "texlive-basic.js": "23cc4ce427d27d555fe2a050b97ff8c95bb331425018e9159130e74b62373ff1",
+    "texlive-basic.data": "c955651ca293f09b2e57d6360fa2cb61ad710b4ae51e9fbc04b049477a8aeb71",
+    "ubuntu-texlive-latex-recommended.js": "bbd975921a74adae9119988ae8a740ca9f4837db772061d313c67729fba1d9ee",
+    "ubuntu-texlive-latex-recommended.data": "fa9a03f928a0af0e9c5a24e2ce2956e64db9d580dd2c3a7517176aac16dc9006",
+    "ubuntu-texlive-fonts-recommended.js": "708f60e5fc46b64204e8361a0d0939b3f8f0713f9b7fae379baa67e5dbe0c37a",
+    "ubuntu-texlive-fonts-recommended.data": "3154397a58db2ac62d6bcf99e44786c6ea62cc31c2343adc42d51f2088b6a3f1",
+    "ubuntu-texlive-latex-extra.js": "a99a68b79e6a93f3ca9d94f46afe8a62e7e06b6d4c5e90a705ec15fc42d8ecda",
+    "ubuntu-texlive-latex-extra.data": "fb4dc0440f4b2bd2d5138dbb5689e6a33cd20c9704934422436cb97af5d623c4",
+    "ubuntu-texlive-science.js": "cf6ddcc894f0b8a5a9493286edc8abba67280041c21cdfa51d7dadffea85c19a",
+    "ubuntu-texlive-science.data": "23c5decd471c214f1a4d16eabe02f2fe1a0b5aee94a8708713d03c4616cd5d61"
+  },
+  "packages": [
+    "texlive-basic",
+    "ubuntu-texlive-latex-recommended",
+    "ubuntu-texlive-fonts-recommended",
+    "ubuntu-texlive-latex-extra",
+    "ubuntu-texlive-science"
+  ],
+  "vendoredUpstream": {
+    "busytex_pipeline.js": "f8741cfd1fb0ac3c11daeee8386bc024f59d8b14c3000ad64b9c00dce7d61265",
+    "busytex_worker.js": "623136034d61d52be43df97bbe320612f0cca139b955431fb168c529531d21c4"
+  }
+}

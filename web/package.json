@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "lint": "eslint .",
     "test": "vitest run",
+    "tex:build": "node scripts/build-tex.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
