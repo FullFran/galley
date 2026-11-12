@@ -1,0 +1,152 @@
+# Files of the upstream busytex data packages that go into the galley-tex data package.
+#
+# Syntax (see scripts/build-tex.mjs):
+#   pattern     include; relative to /texlive/texmf-dist unless it starts with a slash
+#   !pattern    exclude (wins over every include)
+#   dir/        a trailing slash means the whole directory tree
+#   *  within a path segment, ** across segments
+# Every include rule must match at least one file, so an upstream layout change fails the build.
+#
+# The Ubuntu packages (/texmf/texmf-dist) are merged onto /texlive/texmf-dist; where both provide
+# a file, the /texlive copy is used. The elsarticle class and bst files come from tex/extra.
+# The file list was derived from the files the engine opened while compiling the Quarto elsevier
+# reference and the package test documents, widened to whole package directories.
+
+# --- Engine support files (outside texmf-dist) ---
+/bin/busytex
+/etc/fonts/fonts.conf
+/etc/passwd
+/texlive/texmf.cnf
+/texlive/texmfcnf.lua
+/texlive/LICENSE.CTAN
+/texlive/LICENSE.TL
+/texlive/README
+/texlive/release-texlive.txt
+/texlive/tex/
+
+# --- Configuration, precompiled pdflatex format and font maps ---
+web2c/
+texmf-var/web2c/pdftex/pdflatex.fmt
+texmf-var/fonts/map/pdftex/
+texmf-var/tex/generic/config/
+texmf-var/fonts/conf/
+
+# --- LaTeX kernel and the packages every document pulls in ---
+tex/latex/base/
+tex/latex/l3kernel/
+tex/latex/l3backend/
+tex/latex/l3packages/
+tex/latex/latex-lab/
+tex/latex/latexconfig/
+tex/latex/firstaid/
+tex/latex/tools/
+tex/latex/graphics/
+tex/latex/graphics-cfg/
+tex/latex/graphics-def/
+tex/latex/amsfonts/
+tex/latex/amsmath/
+tex/latex/amscls/
+tex/latex/lm/
+tex/latex/psnfss/
+tex/latex/times/
+tex/latex/txfonts/
+tex/context/base/
+tex/generic/babel/
+tex/generic/babel-english/
+tex/generic/hyphen/
+tex/generic/hyph-utf8/
+tex/generic/unicode-data/
+tex/generic/iftex/
+tex/generic/bigintcalc/
+tex/generic/bitset/
+tex/generic/etexcmds/
+tex/generic/gettitlestring/
+tex/generic/infwarerr/
+tex/generic/intcalc/
+tex/generic/kvdefinekeys/
+tex/generic/ltxcmds/
+tex/generic/pdfescape/
+tex/generic/pdftexcmds/
+tex/generic/uniquecounter/
+tex/generic/atbegshi/
+
+# --- Curated packages ---
+tex/latex/mathtools/
+tex/latex/booktabs/
+tex/latex/multirow/
+tex/latex/hyperref/
+tex/latex/bookmark/
+tex/latex/natbib/
+tex/latex/xcolor/
+tex/latex/colortbl/
+tex/latex/geometry/
+tex/latex/caption/
+tex/latex/float/
+tex/latex/microtype/
+tex/latex/url/
+tex/latex/xurl/
+tex/latex/footnotehyper/
+tex/latex/upquote/
+tex/latex/parskip/
+tex/latex/etoolbox/
+tex/latex/enumitem/
+tex/latex/siunitx/
+tex/latex/setspace/
+tex/latex/lineno/
+tex/latex/translations/
+# hyperref and friends
+tex/latex/auxhook/
+tex/latex/hycolor/
+tex/latex/kvoptions/
+tex/latex/kvsetkeys/
+tex/latex/letltxmacro/
+tex/latex/refcount/
+tex/latex/rerunfilecheck/
+tex/generic/stringenc/
+tex/latex/pdflscape/
+tex/latex/epstopdf-pkg/
+
+# --- BibTeX styles (elsarticle-*.bst are added from tex/extra) ---
+bibtex/bst/natbib/
+bibtex/bst/base/
+
+# --- Fonts: Latin Modern (T1/OT1/TS1), Computer Modern, AMS symbols, Times ---
+fonts/enc/dvips/base/
+fonts/enc/dvips/lm/
+fonts/enc/dvips/txfonts/
+fonts/tfm/public/cm/
+fonts/tfm/public/amsfonts/
+fonts/tfm/jknappen/ec/
+fonts/tfm/public/lm/
+!fonts/tfm/public/lm/cs-*
+!fonts/tfm/public/lm/l7x-*
+!fonts/tfm/public/lm/qx-*
+!fonts/tfm/public/lm/t5-*
+!fonts/tfm/public/lm/texnansi-*
+!fonts/tfm/public/lm/*lmdun*
+!fonts/tfm/public/lm/*lmvt*
+!fonts/tfm/public/lm/*lmtk*
+!fonts/tfm/public/lm/*lmtl*
+!fonts/tfm/public/lm/*lmtc*
+!fonts/tfm/public/lm/*lmssq*
+!fonts/tfm/public/lm/*lmssdc*
+!fonts/tfm/public/lm/*lmssdo*
+fonts/type1/public/lm/
+!fonts/type1/public/lm/*.pfm
+!fonts/type1/public/lm/lmdun*
+!fonts/type1/public/lm/lmvt*
+!fonts/type1/public/lm/lmtk*
+!fonts/type1/public/lm/lmtl*
+!fonts/type1/public/lm/lmtc*
+!fonts/type1/public/lm/lmssq*
+!fonts/type1/public/lm/lmssdc*
+!fonts/type1/public/lm/lmssdo*
+fonts/type1/public/amsfonts/cm/
+fonts/type1/public/amsfonts/symbols/
+fonts/type1/public/amsfonts/euler/
+fonts/tfm/adobe/times/
+fonts/vf/adobe/times/
+fonts/type1/urw/times/
+fonts/tfm/public/txfonts/
+fonts/vf/public/txfonts/
+fonts/type1/public/txfonts/

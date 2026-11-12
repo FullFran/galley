@@ -8,7 +8,8 @@ confirmed during the first deployment (2026-10-28); items still marked
 
 Artifacts in this repository:
 
-- `.github/workflows/pages.yml`: builds `web/` and deploys it to Pages on every
+- `.github/workflows/pages.yml`: builds `web/` (including running `npm run tex:build`
+  to produce the in-browser TeX engine assets) and deploys it to Pages on every
   push to `main` that touches `web/`, or on manual dispatch.
 - `server/Dockerfile`: static binary on `distroless/static` (non-root, uid
   65532), data in the `/pb/pb_data` volume.

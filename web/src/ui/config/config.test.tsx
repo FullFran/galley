@@ -82,6 +82,14 @@ describe('CompileBar', () => {
   it('shows auto-compile as a switch', () => {
     expect(render(<CompileBar {...bar} />)).toMatch(/type="checkbox"[^>]*role="switch"/);
   });
+
+  it('shows HTML and Draft PDF tabs when onMode is provided', () => {
+    const html = render(<CompileBar {...bar} mode="pdf" onMode={noop} />);
+    expect(html).toContain('compile-modes');
+    expect(html).toContain('>HTML<');
+    expect(html).toContain('>Draft PDF<');
+    expect(html).toMatch(/role="tab"[^>]*aria-selected="true"[^>]*>Draft PDF/);
+  });
 });
 
 describe('ConfigForm', () => {

@@ -72,6 +72,14 @@ describe('preferences', () => {
     expect(readPrefs(store)).toEqual({ autoCompile: true });
   });
 
+  it('stores the preview mode preference and drops unknown modes', () => {
+    const store = memory();
+    writePrefs({ previewMode: 'pdf' }, store);
+    expect(readPrefs(store)).toEqual({ previewMode: 'pdf' });
+    store.setItem('galley:prefs', '{"previewMode":"latex"}');
+    expect(readPrefs(store)).toEqual({});
+  });
+
   it('drops values of the wrong type and survives corrupt or blocked storage', () => {
     const store = memory();
     store.setItem('galley:prefs', '{"autoCompile":"yes"}');

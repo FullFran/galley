@@ -1,5 +1,6 @@
 import { useT } from '../i18n';
 import { formatClock } from '../i18n/format';
+import type { PreviewMode } from '../shell/prefs';
 import './editing/toolbar.css';
 
 export interface CompileBarProps {
@@ -12,6 +13,8 @@ export interface CompileBarProps {
   onAuto: (auto: boolean) => void;
   /** Print / save as PDF (an unofficial copy); not offered without it. */
   onPrint?: () => void;
+  mode?: PreviewMode;
+  onMode?: (mode: PreviewMode) => void;
 }
 
 /**
@@ -19,7 +22,7 @@ export interface CompileBarProps {
  * only while the preview is behind the editor, an "Out of date" badge. The
  * last compile time sits in the button's tooltip.
  */
-export function CompileBar({ compiling, stale, lastCompiledAt, auto, onRecompile, onAuto, onPrint }: CompileBarProps) {
+export function CompileBar({ compiling, stale, lastCompiledAt, auto, onRecompile, onAuto, onPrint, mode = 'html', onMode }: CompileBarProps) {
   const t = useT();
   const m = t.compile;
   const tooltip = lastCompiledAt !== undefined ? `${m.shortcut} · ${m.compiledAt(formatClock(lastCompiledAt, t.meta.lang))}` : m.shortcut;
@@ -46,6 +49,30 @@ export function CompileBar({ compiling, stale, lastCompiledAt, auto, onRecompile
           </span>
         )}
       </span>
+      {onMode && (
+        <div class="compile-modes" role="tablist" aria-label={t.preview.frameTitle}>
+          <button
+            type="button"
+            role="tab"
+            class={mode === 'html' ? 'chip chip-active' : 'chip'}
+            aria-selected={mode === 'html'}
+            onClick={() => onMode('html')}
+            title={t.draftPdf.htmlTab}
+          >
+            {t.draftPdf.htmlTab}
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class={mode === 'pdf' ? 'chip chip-active' : 'chip'}
+            aria-selected={mode === 'pdf'}
+            onClick={() => onMode('pdf')}
+            title={t.draftPdf.tab}
+          >
+            {t.draftPdf.tab}
+          </button>
+        </div>
+      )}
       {onPrint && (
         <button type="button" class="secondary compile-print" onClick={onPrint} disabled={compiling} title={t.print.hint}>
           {t.print.action}

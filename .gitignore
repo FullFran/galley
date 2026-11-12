@@ -1,5 +1,7 @@
 node_modules/
 dist/
+web/public/tex/
+web/.tex-cache/
 pb_data/
 .env*
 !.env.example

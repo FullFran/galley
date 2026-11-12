@@ -48,10 +48,10 @@ export interface RenderContext {
 /** markdown-it's env; the footnote plugin keeps its own state in it too. */
 export type Env = Record<PropertyKey, unknown> & { galley: RenderContext };
 
-const CROSSREF_KEY = /^(fig|tbl|eq|sec)-/;
+export const CROSSREF_KEY = /^(fig|tbl|eq|sec)-/;
 const KEY = /^[A-Za-z0-9_](?:[\w-]|[:.#$%&+?<>~/](?=[\w-]))*/;
 const SIZE = /^\d+(?:\.\d+)?(?:%|px|cm|mm|in|em|pt)?$/;
-const CALLOUT_TITLES: Record<string, string> = {
+export const CALLOUT_TITLES: Record<string, string> = {
   note: 'Note',
   tip: 'Tip',
   warning: 'Warning',
@@ -218,7 +218,7 @@ function mathInline(state: StateInline, silent: boolean): boolean {
   return true;
 }
 
-interface CiteToken {
+export interface CiteToken {
   key: string;
   prefix: string;
   suffix: string;

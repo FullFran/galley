@@ -51,6 +51,7 @@ Web (Node 24):
 ```sh
 cd web
 npm ci
+npm run tex:build  # build in-browser TeX engine assets into web/public/tex
 npm run dev        # dev server
 npm test           # unit tests
 npm run lint
@@ -869,6 +870,36 @@ Remaining risk: while the dev server runs, any website can read those files
 through a sandboxed frame. They hold no secrets (galley's own public frame code
 and published npm packages), but do not keep private code under
 `web/src/preview/`.
+
+### Draft PDF (in-browser)
+
+In the preview pane, authors can switch from the instant HTML preview to
+**Draft PDF** (or **PDF borrador** in Spanish) to inspect line breaks, page breaks,
+and float positions rendered by a real TeX engine in the browser.
+
+- **Engine and environment**: BusyTeX WebAssembly (TeX Live 2023 subset, MIT
+  licensed), executing in a dedicated long-lived Web Worker with `--no-shell-escape`
+  inside the browser WASM sandbox.
+- **Templates**: Elsevier preprint (`elsarticle`) format through galley's LaTeX
+  renderer, falling back to a standard `article` class when no Elsevier format is
+  configured in `_quarto.yml`.
+- **First download and caching**: The engine assets (~32 MB uncompressed / 20 MB gzip
+  data package, ~12 MB gzip WASM) download lazily only when the user first switches
+  to Draft PDF, and are cached by the browser for subsequent visits. Warm compiles
+  complete in ~1.4 s.
+- **Limits**:
+  - Curated TeX Live 2023 package subset (`elsarticle` cls/bst, `natbib`, `amsmath`,
+    `hyperref`, `booktabs`, `graphicx`, `lmodern`). Arbitrary external CTAN packages
+    are not bundled.
+  - No code execution (`--no-shell-escape`, no Lua/Python or external shell hooks).
+  - Draft only: the in-browser PDF gives author layout feedback; the official
+    publication artifact remains the one built by CI (GitHub Actions).
+- **Building engine assets**: The engine files in `web/public/tex/` are generated with:
+  ```sh
+  cd web && npm run tex:build
+  ```
+  The builder downloads the pinned BusyTeX upstream release, repacks the LZ4 data
+  package, updates the `ls-R` file database, and vendors the licenses.
 
 ## Review
 

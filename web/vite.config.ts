@@ -4,7 +4,7 @@ import { defineConfig, type Connect, type Plugin } from 'vite';
 // scripts and styles for HMR, which these policies would block.
 export const APP_CSP = [
   "default-src 'self'",
-  "script-src 'self'",
+  "script-src 'self' 'wasm-unsafe-eval'",
   "style-src 'self'",
   // blob: for the upload preview (an <img> of the chosen file, created in this page).
   "img-src 'self' data: blob:",

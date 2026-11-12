@@ -590,6 +590,15 @@ export const es: Messages = {
     outOfDate: 'Desactualizada · Ctrl+Intro',
     compiledAt: (time: string) => `Compilado a las ${time}`,
   },
+  draftPdf: {
+    tab: 'PDF borrador',
+    htmlTab: 'HTML',
+    downloadingEngine: 'Descargando el motor de PDF (~32 MB, solo una vez)',
+    compiling: 'Compilando…',
+    officialNotice: 'PDF borrador compilado en el navegador · El PDF de CI es la copia oficial',
+    frameTitle: 'PDF borrador del artículo',
+    failed: 'No se pudo compilar el PDF borrador. Revisa las notas siguientes.',
+  },
   errors: {
     network: 'No se pudo conectar con GitHub ni con el servidor de galley. Revisa tu conexión y vuelve a intentarlo.',
     notText: 'Este archivo no es texto plano, así que no se puede editar aquí.',
