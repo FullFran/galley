@@ -4,6 +4,36 @@
   margin-left: auto;
 }
 
+.compile-modes {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.compile-modes .chip {
+  cursor: pointer;
+  background: var(--surface);
+  border-color: var(--border);
+  color: var(--fg-muted);
+}
+
+.compile-modes .chip:hover {
+  border-color: var(--fg-muted);
+  color: var(--fg);
+}
+
+.compile-modes .chip.chip-active {
+  background: var(--border);
+  border-color: var(--fg-muted);
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.pdf-draft-notice {
+  font-size: var(--text-xs);
+  font-weight: normal;
+  margin-left: var(--space-2);
+}
+
 .symbol-button {
   font-family: var(--font-serif, Georgia, serif);
   font-size: 1.1rem;

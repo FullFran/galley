@@ -69,7 +69,7 @@ export function useCompiledPdf(
 }
 
 /** An object URL for `blob`, revoked when the blob changes or the view unmounts. */
-function useObjectUrl(blob: Blob | undefined): string | undefined {
+export function useObjectUrl(blob: Blob | undefined): string | undefined {
   const [url, setUrl] = useState<string>();
   useEffect(() => {
     if (!blob) return setUrl(undefined);

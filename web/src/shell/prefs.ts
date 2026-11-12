@@ -4,6 +4,7 @@
 // the default.
 
 export type ContentsTab = 'outline' | 'files';
+export type PreviewMode = 'html' | 'pdf';
 
 export interface Prefs {
   /** Auto-compile for repositories where the user has not chosen yet. */
@@ -20,6 +21,8 @@ export interface Prefs {
   layout?: Layout;
   /** Focus mode: no sidebar and a header with the essentials only. */
   focus?: boolean;
+  /** Whether the preview pane shows the instant HTML preview or the browser Draft PDF. */
+  previewMode?: PreviewMode;
 }
 
 export type EditorMode = 'writing' | 'code';
@@ -85,7 +88,7 @@ export function readPrefs(store: Store | undefined = local()): Prefs {
   try {
     const parsed: unknown = JSON.parse(read(store, PREFS_KEY) ?? '{}');
     if (!parsed || typeof parsed !== 'object') return {};
-    const { autoCompile, editorMode, vim, serverDrafts, spellcheck, layout, focus } = parsed as Record<string, unknown>;
+    const { autoCompile, editorMode, vim, serverDrafts, spellcheck, layout, focus, previewMode } = parsed as Record<string, unknown>;
     const prefs: Prefs = {};
     if (typeof autoCompile === 'boolean') prefs.autoCompile = autoCompile;
     if (editorMode === 'writing' || editorMode === 'code') prefs.editorMode = editorMode;
@@ -94,6 +97,7 @@ export function readPrefs(store: Store | undefined = local()): Prefs {
     if (typeof spellcheck === 'boolean') prefs.spellcheck = spellcheck;
     if (isLayout(layout)) prefs.layout = layout;
     if (typeof focus === 'boolean') prefs.focus = focus;
+    if (previewMode === 'html' || previewMode === 'pdf') prefs.previewMode = previewMode;
     return prefs;
   } catch {
     return {};

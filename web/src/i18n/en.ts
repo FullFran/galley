@@ -581,6 +581,15 @@ export const en = {
     outOfDate: 'Out of date · Ctrl+Enter',
     compiledAt: (time: string) => `Compiled at ${time}`,
   },
+  draftPdf: {
+    tab: 'Draft PDF',
+    htmlTab: 'HTML',
+    downloadingEngine: 'Downloading the PDF engine (~32 MB, once)',
+    compiling: 'Compiling…',
+    officialNotice: 'Draft PDF compiled in the browser · The CI PDF is the official copy',
+    frameTitle: 'Draft PDF of the paper',
+    failed: 'The draft PDF could not be compiled. Check the notes below.',
+  },
   errors: {
     network: 'GitHub or the galley server could not be reached. Check your connection and try again.',
     notText: 'This file is not plain text, so it cannot be edited here.',
